@@ -1,0 +1,68 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ============================
+    // Helper Functions
+    // ============================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // Security constraints: Only image content types allowed, max 5MB
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*')
+        && request.resource.size < 5 * 1024 * 1024;
+    }
+
+    // ============================
+    // Committee Member Profile Photos
+    // Admin-only upload/delete. All signed-in users can read.
+    // ============================
+
+    match /committeeMembers/{memberId}/profilePhoto {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidImage();
+      allow delete: if isAdmin();
+    }
+
+    match /committee/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidImage();
+      allow delete: if isAdmin();
+    }
+
+    // ============================
+    // Profiles folder (general user profiles)
+    // Admin can upload for any user.
+    // Users can upload only their own profile photo (max 5MB, images only).
+    // ============================
+
+    match /profiles/{userId}.{ext} {
+      allow read: if isSignedIn();
+      allow write: if (isAdmin() || (isSignedIn() && request.auth.uid == userId)) && isValidImage();
+      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+    }
+
+    match /profiles/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidImage();
+      allow delete: if isAdmin();
+    }
+
+    // ============================
+    // Default Deny
+    // ============================
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,111 +1,217 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
-
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 body {
   margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: #f5f7fb;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
+/* ================================
+   DARK MODE — Global Overrides
+   ================================
+   Uses the .dark class on <html> to style the entire app.
+   This approach avoids editing every component file.
+*/
+
+/* Body */
+.dark body,
+html.dark body {
+  background: #0f172a;
+  color: #e2e8f0;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+/* White cards, panels, drawers */
+html.dark .bg-white {
+  background-color: #1e293b !important;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
+/* Slate background */
+html.dark .bg-slate-100 {
+  background-color: #0f172a !important;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
+/* Light gray backgrounds */
+html.dark .bg-gray-50 {
+  background-color: #1e293b !important;
+}
+
+html.dark .bg-gray-100 {
+  background-color: #334155 !important;
+}
+
+html.dark .bg-gray-200 {
+  background-color: #475569 !important;
+}
+
+/* Text colors */
+html.dark .text-gray-800,
+html.dark .text-gray-700 {
+  color: #e2e8f0 !important;
+}
+
+html.dark .text-gray-600 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .text-gray-500 {
+  color: #94a3b8 !important;
+}
+
+html.dark .text-gray-400 {
+  color: #64748b !important;
+}
+
+/* Borders */
+html.dark .border,
+html.dark .border-t,
+html.dark .border-b,
+html.dark .border-gray-200,
+html.dark .border-gray-300 {
+  border-color: #334155 !important;
+}
+
+/* Inputs, selects, textareas */
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #0f172a !important;
+  color: #e2e8f0 !important;
+  border-color: #475569 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  border-color: #10b981 !important;
+}
+
+/* Tables */
+html.dark table {
+  color: #e2e8f0;
+}
+
+html.dark thead {
+  background-color: #334155 !important;
+}
+
+html.dark thead th {
+  color: #94a3b8 !important;
+}
+
+html.dark tbody tr {
+  border-color: #334155 !important;
+}
+
+html.dark tbody tr:hover {
+  background-color: #1e3a5f !important;
+}
+
+/* Shadow adjustments */
+html.dark .shadow-sm,
+html.dark .shadow,
+html.dark .shadow-md,
+html.dark .shadow-lg,
+html.dark .shadow-xl,
+html.dark .shadow-2xl {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Hover on gray backgrounds */
+html.dark .hover\:bg-gray-50:hover {
+  background-color: #1e3a5f !important;
+}
+
+html.dark .hover\:bg-gray-200:hover {
+  background-color: #475569 !important;
+}
+
+/* Labels */
+html.dark label {
+  color: #cbd5e1 !important;
+}
+
+/* Headings */
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4 {
+  color: #f1f5f9;
+}
+
+/* Stat card color overrides — keep the original color intent but darken backgrounds */
+html.dark .bg-emerald-50 { background-color: #064e3b !important; }
+html.dark .bg-emerald-100 { background-color: #065f46 !important; }
+html.dark .bg-green-50 { background-color: #14532d !important; }
+html.dark .bg-green-100 { background-color: #166534 !important; }
+html.dark .bg-blue-50 { background-color: #1e3a5f !important; }
+html.dark .bg-blue-100 { background-color: #1e40af30 !important; }
+html.dark .bg-purple-50 { background-color: #3b0764 !important; }
+html.dark .bg-purple-100 { background-color: #581c8730 !important; }
+html.dark .bg-red-50 { background-color: #450a0a !important; }
+html.dark .bg-red-100 { background-color: #7f1d1d !important; }
+html.dark .bg-yellow-50 { background-color: #422006 !important; }
+html.dark .bg-yellow-100 { background-color: #713f12 !important; }
+html.dark .bg-indigo-50 { background-color: #1e1b4b !important; }
+
+/* Border color overrides for stat cards */
+html.dark .border-emerald-200 { border-color: #065f46 !important; }
+html.dark .border-green-200 { border-color: #166534 !important; }
+html.dark .border-blue-200 { border-color: #1e40af !important; }
+html.dark .border-purple-200 { border-color: #581c87 !important; }
+html.dark .border-red-200 { border-color: #991b1b !important; }
+html.dark .border-yellow-200 { border-color: #854d0e !important; }
+
+/* Border-left accent colors stay visible */
+html.dark .border-l-4 {
+  border-left-width: 4px;
+}
+
+/* Rounded badges with light backgrounds */
+html.dark .bg-green-100.text-green-700 { background-color: #16653440 !important; color: #4ade80 !important; }
+html.dark .bg-red-100.text-red-700 { background-color: #7f1d1d40 !important; color: #f87171 !important; }
+html.dark .bg-yellow-100.text-yellow-700 { background-color: #713f1240 !important; color: #facc15 !important; }
+html.dark .bg-purple-100.text-purple-700 { background-color: #581c8740 !important; color: #c084fc !important; }
+html.dark .bg-blue-100.text-blue-700 { background-color: #1e40af40 !important; color: #60a5fa !important; }
+html.dark .bg-blue-50.text-blue-700 { background-color: #1e40af30 !important; color: #60a5fa !important; }
+
+/* Modal overlays */
+html.dark .bg-black\/40 {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Dialogs, modals, drawers */
+html.dark .bg-white.rounded-2xl,
+html.dark .bg-white.rounded-3xl {
+  background-color: #1e293b !important;
+}
+
+/* Scrollbar */
+html.dark ::-webkit-scrollbar {
+  width: 8px;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
   border-radius: 4px;
-  color: var(--text-h);
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+/* Charts — canvas stays as-is (Chart.js handles its own colors) */
+
+/* Dropdown/select option backgrounds */
+html.dark option {
+  background-color: #1e293b;
+  color: #e2e8f0;
 }

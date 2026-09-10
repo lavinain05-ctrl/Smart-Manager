@@ -1,0 +1,469 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================
+    // Helper Functions
+    // ============================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Safe role lookup — returns "" if user doc doesn't exist.
+    function getUserRole() {
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(userPath)
+        ? get(userPath).data.role
+        : "";
+    }
+
+    function isAdmin() {
+      return isSignedIn() && getUserRole() == "admin";
+    }
+
+    function isCollector() {
+      return isSignedIn() && getUserRole() == "collector";
+    }
+
+    function isResident() {
+      return isSignedIn() && getUserRole() == "resident";
+    }
+
+    function isCommittee() {
+      return isSignedIn() && getUserRole() == "committee";
+    }
+
+    // Protected Master Admin account UID
+    function isMasterAdmin(uid) {
+      return uid == "92jYvGPlKMexX37WEzs7MaDuc7U2";
+    }
+
+    // ============================
+    // Registration Requests
+    // Authenticated user can create their own request.
+    // Admin has full control. User can read their own request.
+    // ============================
+
+    match /registrationRequests/{reqId} {
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow read: if isSignedIn() && (isAdmin() || isCommittee() || request.auth.uid == reqId);
+      allow update, delete: if isAdmin() || isCommittee();
+    }
+
+    // ============================
+    // Users (role & profile docs)
+    // SECURITY HARDENING:
+    // 1. Regular users CANNOT self-promote to admin.
+    // 2. Regular users CANNOT change their own role or status.
+    // 3. Master admin UID cannot be deleted by anyone.
+    // ============================
+
+    match /users/{uid} {
+      allow read: if isSignedIn() && (isAdmin() || isCommittee() || request.auth.uid == uid);
+      
+      // Admin or Committee can create user doc.
+      // New user self-registering can only create their own doc with role="resident".
+      allow create: if isAdmin() || isCommittee()
+        || (isSignedIn() && request.auth.uid == uid && request.resource.data.role == "resident");
+      
+      // Admin or Committee can update users. Regular users can update non-critical profile fields
+      // but CANNOT change their own role or account status.
+      allow update: if isAdmin() || isCommittee()
+        || (isSignedIn() && request.auth.uid == uid
+            && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)
+            && (!('status' in request.resource.data) || request.resource.data.status == resource.data.status)
+           );
+      
+      // Only admin can delete. Master Admin is protected from deletion.
+      allow delete: if isAdmin() && !isMasterAdmin(uid);
+    }
+
+    // ============================
+    // Auth Lookup (mobile → email mapping)
+    // Prevents phone hijacking:
+    // Non-admins can only link their OWN UID.
+    // List is blocked to prevent scraping user phone numbers.
+    // ============================
+
+    match /authLookup/{mobile} {
+      allow get: if true;
+      allow list: if isAdmin() || isCommittee();
+      allow create: if isAdmin() || isCommittee()
+        || (isSignedIn() && request.resource.data.uid == request.auth.uid);
+      allow update: if isAdmin() || isCommittee()
+        || (isSignedIn() && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid);
+      allow delete: if isAdmin() || isCommittee();
+    }
+
+    // ============================
+    // Collectors
+    // ============================
+
+    match /collectors/{id} {
+      allow read: if isSignedIn() && (isAdmin() || isCollector() || isCommittee());
+      allow write: if isAdmin() || isCommittee();
+    }
+
+    // ============================
+    // Residents
+    // Residents cannot alter charges, flats, or status
+    // ============================
+
+    match /residents/{id} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() || isCollector() || isCommittee();
+      allow update: if isAdmin() || isCollector() || isCommittee()
+        || (isResident() && request.auth.uid == id
+            && request.resource.data.charge == resource.data.charge
+            && request.resource.data.status == resource.data.status
+            && request.resource.data.flat == resource.data.flat
+            && request.resource.data.block == resource.data.block
+           );
+      allow delete: if isAdmin() || isCommittee();
+    }
+
+    // ============================
+    // Bills
+    // ============================
+
+    match /bills/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() || isCollector() || isCommittee();
+      allow delete: if isAdmin();
+    }
+
+    // ============================
+    // Payments
+    // ============================
+
+    match /payments/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() || isCollector() || isCommittee();
+      allow delete: if isAdmin();
+    }
+
+    // ============================
+    // Payment Audit
+    // Immutable financial log — no updates or deletes allowed
+    // ============================
+
+    match /paymentAudit/{id} {
+      allow read: if isAdmin() || isCommittee();
+      allow create: if isAdmin() || isCollector() || isCommittee();
+      allow update, delete: if false;
+    }
+
+    // ============================
+    // Settings
+    // Society settings cannot be deleted by anyone (anti-destroy)
+    // ============================
+
+    match /settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ============================
+    // Notices — audience-aware read
+    // ============================
+
+    match /notices/{id} {
+      allow read: if resource.data.audience is list
+        && "public" in resource.data.audience;
+      allow read: if isSignedIn() && (
+        isAdmin()
+        || !resource.data.keys().hasAll(['audience'])
+        || "all_residents" in resource.data.audience
+        || ("committee_only" in resource.data.audience && isCommittee())
+      );
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ============================
+    // Complaints
+    // ============================
+
+    match /complaints/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isAdmin() || isCommittee() || (isSignedIn() && request.auth.uid == resource.data.residentId);
+      allow delete: if isAdmin();
+    }
+
+    // ============================
+    // Events — audience-aware read
+    // ============================
+
+    match /events/{id} {
+      allow read: if resource.data.audience is list
+        && "public" in resource.data.audience;
+      allow read: if isSignedIn() && (
+        isAdmin()
+        || !resource.data.keys().hasAll(['audience'])
+        || "all_residents" in resource.data.audience
+        || ("committee_only" in resource.data.audience && isCommittee())
+      );
+      allow create, delete: if isAdmin();
+      allow update: if isSignedIn();
+    }
+
+    // ============================
+    // Committee
+    // ============================
+
+    match /committee/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ============================
+    // Notifications (Single Unified Block)
+    // ============================
+
+    match /notifications/{id} {
+      allow read: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    // ============================
+    // Profile Update Requests (Single Unified Block)
+    // ============================
+
+    match /profileUpdateRequests/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.residentId == request.auth.uid;
+      allow update, delete: if isAdmin() || isCommittee();
+    }
+
+    // ============================
+    // Blocks & Flats
+    // ============================
+
+    match /blocks/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /flats/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ============================
+    // Activities
+    // ============================
+
+    match /activities/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ============================
+    // Activity Logs
+    // Immutable audit logs — cannot be tampered with or erased
+    // ============================
+
+    match /activityLogs/{id} {
+      allow read: if isAdmin() || isCommittee();
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // ============================
+    // Portal Logins & Sessions
+    // Login logs cannot be modified once recorded
+    // ============================
+
+    match /portalLogins/{id} {
+      allow read: if isAdmin();
+      allow create: if true;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // ============================
+    // Blocked Accounts & Suspensions
+    // ============================
+
+    match /blockedAccounts/{mobile} {
+      allow read: if true;
+      allow write: if isAdmin() || isCommittee();
+    }
+
+    // ============================
+    // Emergency Contacts
+    // ============================
+
+    match /emergencyContacts/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ============================
+    // Deleted Accounts Archive
+    // Immutable read-only archive
+    // ============================
+
+    match /deletedAccounts/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // ============================
+    // Garbage Accounts
+    // ============================
+
+    match /garbageAccounts/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() || isCollector() || isCommittee();
+      allow delete: if isAdmin();
+    }
+
+    // ============================
+    // Garbage Bills
+    // ============================
+
+    match /garbageBills/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() || isCollector() || isCommittee();
+      allow delete: if isAdmin();
+    }
+
+    // ============================
+    // Garbage Collections (daily logs)
+    // ============================
+
+    match /garbageCollections/{id} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() || isCollector() || isCommittee();
+      allow update, delete: if isAdmin();
+    }
+
+    // ============================
+    // Garbage Collectors & Routes
+    // ============================
+
+    match /garbageCollectors/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /garbageRoutes/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ============================
+    // Garbage Settings
+    // Anti-destroy: Settings cannot be deleted
+    // ============================
+
+    match /garbageSettings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ============================
+    // Garbage Requests (opt-in/opt-out)
+    // ============================
+
+    match /garbageRequests/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // ============================
+    // Garbage Collection Logs & Reports
+    // ============================
+
+    match /garbageCollectionLogs/{id} {
+      allow read: if isAdmin() || isCommittee();
+      allow create: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    match /garbageReports/{id} {
+      allow read: if isAdmin() || isCommittee();
+      allow write: if isAdmin();
+    }
+
+    // ============================
+    // Account Recovery Requests
+    // ============================
+
+    match /recoveryRequests/{id} {
+      allow create: if true;
+      allow read: if isAdmin() || isCommittee()
+        || (isSignedIn() && resource.data.residentId == request.auth.uid);
+      allow update, delete: if isAdmin() || isCommittee();
+    }
+
+    // ============================
+    // Special Collections (Campaigns)
+    // ============================
+
+    match /specialCollections/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ============================
+    // Special Collection Payments
+    // ============================
+
+    match /specialCollectionPayments/{id} {
+      allow create: if true;
+      allow read: if isSignedIn();
+      allow update: if isAdmin() || isCollector() || isCommittee();
+      allow delete: if isAdmin();
+    }
+
+    // ============================
+    // Receipts
+    // ============================
+
+    match /receipts/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || isCollector() || isCommittee();
+    }
+
+    // ============================
+    // UTR Lookup (Atomic Duplicate Prevention)
+    // ============================
+
+    match /utrLookup/{utr} {
+      allow get: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    // ============================
+    // Special Collection Audit Logs
+    // Immutable audit logs
+    // ============================
+
+    match /specialCollectionAudit/{id} {
+      allow read: if isAdmin();
+      allow create: if true;
+      allow update, delete: if false;
+    }
+
+    // ============================
+    // Default Deny
+    // Blocks all undocumented paths
+    // ============================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

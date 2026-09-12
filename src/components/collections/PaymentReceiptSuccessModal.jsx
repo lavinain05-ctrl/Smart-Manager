@@ -19,24 +19,21 @@ export default function PaymentReceiptSuccessModal({
     receipt.collectionType === "special"
   );
 
-  const receiptNo = receipt.receiptNumber || receipt.receiptNo || "REC-" + Date.now();
+  const receiptNo = receipt.receiptNumber || receipt.receiptNo || "REC-PENDING";
   const residentName = receipt.residentName || receipt.contributorName || "Resident";
   const flat = receipt.flat || receipt.flatNumber || "—";
   const block = receipt.block || "";
   const amount = Number(receipt.totalPaidAmount || receipt.amount || 0).toLocaleString("en-IN");
   const mode = receipt.paymentMethod || receipt.paymentMode || receipt.method || "Cash";
-  const date = receipt.paymentDate || receipt.date || new Date().toLocaleDateString("en-IN");
+  const date = receipt.paymentDate || receipt.date || "";
   const collector = receipt.collectorName || receipt.collector || "Authorized Collector";
   const designation = receipt.collectorDesignation ? `(${receipt.collectorDesignation})` : (receipt.collectorRole ? `(${receipt.collectorRole})` : "");
   
-  let periodLabel = "";
-  if (isSpecial) {
-    periodLabel = receipt.collectionName || receipt.specialCampaignName || "Special Campaign";
-  } else if (receipt.isAdvance && receipt.periodLabel) {
-    periodLabel = `${receipt.periodLabel} (${receipt.advanceDuration || 1} Mos Advance)`;
-  } else {
-    periodLabel = `${receipt.month || ""} ${receipt.year || ""}`.trim() || "Garbage Maintenance";
-  }
+  const periodLabel = isSpecial
+    ? receipt.collectionName || receipt.specialCampaignName || "Special Campaign"
+    : receipt.isAdvance && receipt.periodLabel
+    ? `${receipt.periodLabel} (${receipt.advanceDuration || 1} Mos Advance)`
+    : `${receipt.month || ""} ${receipt.year || ""}`.trim() || "Garbage Maintenance";
 
   function handlePrint() {
     printPaymentReceipt(receipt);

@@ -105,7 +105,7 @@ export function NotificationProvider({ children }) {
         console.error("Failed to mark personal notification read:", err);
       }
     }
-  }, [rawNotifications, user?.uid]);
+  }, [rawNotifications, user]);
 
   const markAllRead = useCallback(async () => {
     if (!user?.uid) return;
@@ -128,7 +128,7 @@ export function NotificationProvider({ children }) {
     } catch (err) {
       console.error("Failed to mark all personal notifications read:", err);
     }
-  }, [rawNotifications, user?.uid]);
+  }, [rawNotifications, user]);
 
   return (
     <NotificationContext.Provider

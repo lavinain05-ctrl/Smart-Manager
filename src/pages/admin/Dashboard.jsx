@@ -139,7 +139,7 @@ export default function Dashboard() {
           <SummaryCard
             title="Paid Residents"
             value={paymentStats.paidCount}
-            subtitle={`of ${residentStats.active} Active`}
+            subtitle={`of ${paymentStats.totalEligible} Active`}
             color="bg-gradient-to-r from-green-600 to-emerald-500"
             icon={<FaCheckCircle />}
           />

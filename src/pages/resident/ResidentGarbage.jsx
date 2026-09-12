@@ -26,6 +26,9 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+export const DEFAULT_JOIN_GC_MESSAGE = "I would like to enroll in the Society Door-to-Door Garbage Collection service. Please activate garbage collection for my flat.";
+export const DEFAULT_LEAVE_GC_MESSAGE = "I would like to request pausing/stopping garbage collection for my flat.";
+
 export default function ResidentGarbage() {
   const { user } = useAuth();
   const {
@@ -104,9 +107,10 @@ export default function ResidentGarbage() {
           const pClean = String(p.mobile).replace(/\D/g, "").slice(-10);
           if (pClean === cleanPhone) return true;
         }
+        const residentOwnerName = (canonicalResident?.owner || user?.name || "").trim().toLowerCase();
         if (
-          (canonicalResident?.owner || user?.name) &&
-          p.residentName?.trim().toLowerCase() === (canonicalResident?.owner || user?.name).trim().toLowerCase() &&
+          residentOwnerName &&
+          p.residentName?.trim().toLowerCase() === residentOwnerName &&
           (!p.flat || p.flat === (canonicalResident?.flat || user?.flat))
         ) {
           return true;
@@ -217,11 +221,12 @@ export default function ResidentGarbage() {
 
   async function handleSubmitRequest() {
     const requestType = isEnrolled ? "opt_out" : "opt_in";
+    const defaultMsg = isEnrolled ? DEFAULT_LEAVE_GC_MESSAGE : DEFAULT_JOIN_GC_MESSAGE;
 
     await submitRequest({
       residentId: canonicalResidentId || user?.uid || "",
       requestType,
-      reason: requestReason,
+      reason: requestReason.trim() || defaultMsg,
     });
 
     setShowRequestForm(false);
@@ -343,7 +348,10 @@ export default function ResidentGarbage() {
             </span>
           ) : (
             <button
-              onClick={() => setShowRequestForm(true)}
+              onClick={() => {
+                setRequestReason(isEnrolled ? DEFAULT_LEAVE_GC_MESSAGE : DEFAULT_JOIN_GC_MESSAGE);
+                setShowRequestForm(true);
+              }}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm transition shadow-sm"
             >
               <FaPaperPlane /> {isEnrolled ? "Opt-Out" : "Opt-In"}
@@ -425,15 +433,20 @@ export default function ResidentGarbage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Reason (optional)
+                  {isEnrolled ? "Reason for Opt-Out" : "Request Message to Admin"}
                 </label>
                 <textarea
                   value={requestReason}
                   onChange={(e) => setRequestReason(e.target.value)}
-                  rows={3}
-                  className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none resize-none text-sm"
-                  placeholder="Reason for your request..."
+                  rows={4}
+                  className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none resize-none text-sm text-gray-800 leading-relaxed"
+                  placeholder={isEnrolled ? DEFAULT_LEAVE_GC_MESSAGE : DEFAULT_JOIN_GC_MESSAGE}
                 />
+                <p className="text-xs text-gray-400 mt-1.5">
+                  {isEnrolled
+                    ? "Explain why you wish to pause or discontinue garbage collection."
+                    : "Default message is pre-filled above. You can customize it or click Submit Request directly."}
+                </p>
               </div>
             </div>
 

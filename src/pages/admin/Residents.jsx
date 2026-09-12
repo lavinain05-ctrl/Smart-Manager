@@ -87,6 +87,7 @@ export default function Residents() {
   const [blockModalType, setBlockModalType] = useState("temporary");
   const [blockModalDays, setBlockModalDays] = useState(3);
   const [blockModalReason, setBlockModalReason] = useState("Maintenance / Garbage Dues Pending");
+  const [blockModalDetails, setBlockModalDetails] = useState("");
   const [blockLoading, setBlockLoading] = useState(false);
 
   // Pending Dues & Direct Collection State

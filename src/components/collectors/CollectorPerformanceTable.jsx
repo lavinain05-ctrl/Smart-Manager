@@ -74,12 +74,12 @@ export default function CollectorPerformanceTable({
       const scCount = scPayments.length;
 
       // Combined or Scoped values
-      let displayTotal = 0;
-      let displayToday = 0;
-      let displayCash = 0;
-      let displayUPI = 0;
-      let displayBank = 0;
-      let displayCount = 0;
+      let displayTotal;
+      let displayToday;
+      let displayCash;
+      let displayUPI;
+      let displayBank;
+      let displayCount;
 
       if (collectionScope === "garbage") {
         displayTotal = gcTotal;

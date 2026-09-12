@@ -117,24 +117,32 @@ export function calcCommitteeStats(committee = []) {
 }
 
 // ─── Financial / Maintenance Stats ───────────
-// Uses the `payments` collection — maintenance billing for ALL active residents.
+// Uses the `payments` collection — collection for active participating residents.
 
 export function calcPaymentStats(payments = [], residents = [], month, year) {
-  const monthlyPayments = payments.filter(
-    (p) => p.month === month && Number(p.year) === Number(year)
+  // Only active residents who are participating in collection are eligible
+  const activeResidents = (residents || []).filter(
+    (r) => r.status !== "Inactive" && r.status !== "inactive"
+  );
+  const participatingResidents = activeResidents.filter(
+    (r) => isGcParticipating(r)
+  );
+  const participatingIds = new Set(participatingResidents.map((r) => r.id));
+
+  // Only payments belonging to participating active residents are counted in collection stats
+  const monthlyPayments = (payments || []).filter(
+    (p) =>
+      p.month === month &&
+      Number(p.year) === Number(year) &&
+      participatingIds.has(p.residentId)
   );
 
   const collectedAmount = monthlyPayments.reduce(
     (sum, p) => sum + Number(p.amount || 0), 0
   );
 
-  // Expected amount: ALL active residents × their charge
-  // This is maintenance billing — NOT garbage-specific
-  const activeResidents = residents.filter(
-    (r) => r.status !== "Inactive" && r.status !== "inactive"
-  );
-
-  const expectedAmount = activeResidents.reduce(
+  // Expected amount: participating active residents × their configured charge
+  const expectedAmount = participatingResidents.reduce(
     (sum, r) => sum + Number(r.charge || 0), 0
   );
 
@@ -145,10 +153,10 @@ export function calcPaymentStats(payments = [], residents = [], month, year) {
     : Math.round((collectedAmount / expectedAmount) * 100);
 
   const paidResidentIds = new Set(monthlyPayments.map((p) => p.residentId));
-  const paidCount = activeResidents.filter((r) => paidResidentIds.has(r.id)).length;
-  const pendingCount = Math.max(0, activeResidents.length - paidCount);
+  const paidCount = participatingResidents.filter((r) => paidResidentIds.has(r.id)).length;
+  const pendingCount = Math.max(0, participatingResidents.length - paidCount);
 
-  // Today's breakdown
+  // Today's breakdown for valid participating payments
   const today = new Date().toLocaleDateString("en-IN");
   const todayPayments = monthlyPayments.filter((p) => p.paymentDate === today);
   const todayTotal = todayPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
@@ -169,6 +177,7 @@ export function calcPaymentStats(payments = [], residents = [], month, year) {
     collectionRate,
     paidCount,
     pendingCount,
+    totalEligible: participatingResidents.length,
     todayTotal,
     todayCash,
     todayUPI,
@@ -176,6 +185,7 @@ export function calcPaymentStats(payments = [], residents = [], month, year) {
     todayCount: todayPayments.length,
     totalReceipts: monthlyPayments.length,
     monthlyPayments,
+    participatingResidentIds: participatingIds,
   };
 }
 

@@ -2,7 +2,6 @@ import {
   collection,
   doc,
   setDoc,
-  updateDoc,
   onSnapshot,
   serverTimestamp,
   query,
@@ -38,7 +37,7 @@ const requestsRef = collection(db, "registrationRequests");
 // e.g. A101, B-201, D 571, 101, 12A, B/202
 // Rejects: empty string, only spaces, special-only strings
 
-const FLAT_NUMBER_REGEX = /^[A-Za-z0-9][A-Za-z0-9\s\-\.\/]*$/;
+const FLAT_NUMBER_REGEX = /^[A-Za-z0-9][A-Za-z0-9\s\-./]*$/;
 
 /**
  * Validate flat number format.

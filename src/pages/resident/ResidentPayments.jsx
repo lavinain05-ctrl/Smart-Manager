@@ -58,9 +58,10 @@ export default function ResidentPayments() {
         const pClean = String(p.mobile).replace(/\D/g, "").slice(-10);
         if (pClean === cleanPhone) return true;
       }
+      const residentOwnerName = (canonicalResident?.owner || user?.name || "").trim().toLowerCase();
       if (
-        (canonicalResident?.owner || user?.name) &&
-        p.residentName?.trim().toLowerCase() === (canonicalResident?.owner || user?.name).trim().toLowerCase() &&
+        residentOwnerName &&
+        p.residentName?.trim().toLowerCase() === residentOwnerName &&
         (!p.flat || p.flat === (canonicalResident?.flat || user?.flat))
       ) {
         return true;

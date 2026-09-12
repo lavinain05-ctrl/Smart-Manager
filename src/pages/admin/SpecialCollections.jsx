@@ -99,8 +99,8 @@ export function getPaymentChannelMeta(payment) {
     payment.referenceNumber?.startsWith("EXT-SC-");
 
   // Determine channel key & label
-  let channel = "resident_portal";
-  let channelName = "Resident Portal (Online)";
+  let channel;
+  let channelName;
   let collectorName = null;
 
   if (hasCollector) {

@@ -272,11 +272,20 @@ export async function deleteResidentFromFirestore(id) {
 ================================ */
 
 export async function updateGarbageStatus(residentId, status) {
-  // 1. Update canonical resident doc
-  await updateDoc(doc(db, "residents", residentId), {
+  const isNotParticipating =
+    status === "not_participating" ||
+    status === "inactive" ||
+    status === "opted_out";
+
+  // 1. Update canonical resident doc (charge is reset to 0 if not participating)
+  const updatePayload = {
     garbageStatus: status,
     updatedAt: serverTimestamp(),
-  });
+  };
+  if (isNotParticipating) {
+    updatePayload.charge = 0;
+  }
+  await updateDoc(doc(db, "residents", residentId), updatePayload);
 
   // 2. Synchronize garbageAccounts collection
   try {
@@ -297,7 +306,7 @@ export async function updateGarbageStatus(residentId, status) {
       const resData = resSnap.exists() ? resSnap.data() : {};
       await addDoc(collection(db, "garbageAccounts"), {
         residentId,
-        monthlyCharge: Number(resData.charge || 0),
+        monthlyCharge: Number(resData.charge || 80),
         collectorId: "",
         status: "active",
         joinedDate: new Date().toISOString().split("T")[0],
@@ -305,6 +314,31 @@ export async function updateGarbageStatus(residentId, status) {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+    }
+
+    // 3. If turning off participation, purge orphan payments and bills for this resident
+    if (isNotParticipating) {
+      try {
+        const payQ = query(collection(db, "payments"), where("residentId", "==", residentId));
+        const paySnap = await getDocs(payQ);
+        for (const pd of paySnap.docs) {
+          await deleteDoc(doc(db, "payments", pd.id));
+        }
+
+        const gbQ = query(collection(db, "garbageBills"), where("residentId", "==", residentId));
+        const gbSnap = await getDocs(gbQ);
+        for (const gd of gbSnap.docs) {
+          await deleteDoc(doc(db, "garbageBills", gd.id));
+        }
+
+        const bQ = query(collection(db, "bills"), where("residentId", "==", residentId));
+        const bSnap = await getDocs(bQ);
+        for (const bd of bSnap.docs) {
+          await deleteDoc(doc(db, "bills", bd.id));
+        }
+      } catch (cleanErr) {
+        console.warn("[updateGarbageStatus] Could not clean orphan bills/payments:", cleanErr.message);
+      }
     }
   } catch (err) {
     console.error("[updateGarbageStatus] Failed to sync garbageAccounts:", err);

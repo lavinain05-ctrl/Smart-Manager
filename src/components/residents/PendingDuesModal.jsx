@@ -435,14 +435,12 @@ export default function PendingDuesModal({
     const phoneWithCountry =
       cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
 
-    let periodText = "";
-    if (scope === "month") {
-      periodText = `${activeMonth} ${activeYear}`;
-    } else if (scope === "year") {
-      periodText = `the year ${activeYear} (${item.pendingMonths.length} months)`;
-    } else {
-      periodText = `all past pending dues (${item.pendingMonths.length} billing periods)`;
-    }
+    const periodText =
+      scope === "month"
+        ? `${activeMonth} ${activeYear}`
+        : scope === "year"
+        ? `the year ${activeYear} (${item.pendingMonths.length} months)`
+        : `all past pending dues (${item.pendingMonths.length} billing periods)`;
 
     const message = `Dear ${r.owner || "Resident"} (Flat: ${r.flat || "—"}, Block: ${r.block || "—"}),
 

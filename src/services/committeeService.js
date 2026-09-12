@@ -16,7 +16,7 @@ import {
   signOut,
 } from "firebase/auth";
 
-import { db, secondaryAuth, storage } from "../firebase/firebase";
+import { db, secondaryAuth, storage, adminResetPasswordFn } from "../firebase/firebase";
 import {
   mobileToAuthEmail,
   writeAuthLookup,

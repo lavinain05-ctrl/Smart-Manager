@@ -17,6 +17,7 @@ import {
   FaRecycle,
   FaHandHoldingHeart,
   FaUserTie,
+  FaQuestionCircle,
   FaChevronDown,
   FaChevronRight,
   FaBars,
@@ -55,6 +56,7 @@ export default function ResidentLayout() {
     { name: "Events", icon: <FaCalendarAlt />, path: "/resident/events" },
     { name: "Activities", icon: <FaLeaf />, path: "/resident/activities" },
     { name: "Emergency", icon: <FaPhone />, path: "/resident/emergency" },
+    { name: "Help & Support", icon: <FaQuestionCircle />, path: "/resident/support" },
   ];
 
   return (

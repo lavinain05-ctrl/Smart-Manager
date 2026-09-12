@@ -22,10 +22,15 @@ import {
   FaWhatsapp,
   FaBell,
   FaExclamationTriangle,
+  FaPaperPlane,
+  FaTimes,
+  FaQuestionCircle,
+  FaHandHoldingHeart,
 } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
 import { useResidents } from "../../context/ResidentContext";
+import { useGarbage } from "../../context/GarbageContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useBills } from "../../context/BillContext";
 import { useBilling } from "../../context/BillingContext";
@@ -38,6 +43,7 @@ import { useNotifications } from "../../context/NotificationContext";
 import { createNotification } from "../../services/notificationService";
 import { getDisplayStatus } from "../../utils/billStatus";
 import { isGcParticipating } from "../../services/statisticsService";
+import { DEFAULT_JOIN_GC_MESSAGE } from "./ResidentGarbage";
 import RecentUpdatesCard from "../../components/notifications/RecentUpdatesCard";
 
 const GC_CONFIG = {
@@ -74,6 +80,11 @@ export default function ResidentDashboard() {
   const { events } = useEvents();
   const { committee } = useCommittee();
   const { activities } = useActivities();
+  const { garbageRequests = [], submitRequest } = useGarbage();
+
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinReason, setJoinReason] = useState(DEFAULT_JOIN_GC_MESSAGE);
+  const [submittingJoin, setSubmittingJoin] = useState(false);
 
   const cleanPhone = useMemo(() => {
     const raw = user?.phone || user?.mobile || (user?.email?.includes("@") ? user.email.split("@")[0] : "");
@@ -108,9 +119,10 @@ export default function ResidentDashboard() {
         const pClean = String(p.mobile).replace(/\D/g, "").slice(-10);
         if (pClean === cleanPhone) return true;
       }
+      const residentOwnerName = (resident?.owner || user?.name || "").trim().toLowerCase();
       if (
-        (resident?.owner || user?.name) &&
-        p.residentName?.trim().toLowerCase() === (resident?.owner || user?.name).trim().toLowerCase() &&
+        residentOwnerName &&
+        p.residentName?.trim().toLowerCase() === residentOwnerName &&
         (!p.flat || p.flat === (resident?.flat || user?.flat))
       ) {
         return true;
@@ -122,6 +134,17 @@ export default function ResidentDashboard() {
   const isParticipating = isGcParticipating(resident) || myPayments.length > 0;
   const gcStatus = resident?.garbageStatus || (myPayments.length > 0 ? "participating" : "not_participating");
   const gcCfg = GC_CONFIG[gcStatus] || GC_CONFIG.not_participating;
+
+  // Pending GC requests
+  const myPendingRequest = useMemo(
+    () =>
+      garbageRequests.find(
+        (r) =>
+          (r.residentId === canonicalResidentId || r.residentId === user?.uid) &&
+          r.status === "pending"
+      ),
+    [garbageRequests, canonicalResidentId, user]
+  );
 
   const myBills = useMemo(() => {
     if (!isParticipating) return [];
@@ -528,30 +551,53 @@ export default function ResidentDashboard() {
           gcStatus === "inactive" ? "bg-red-50 border-red-200" :
           "bg-gray-50 border-gray-200"
         }`}>
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-2xl shrink-0">
-              {gcCfg.icon}
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-gray-800">
-                {gcStatus === "temporary_stopped"
-                  ? "Garbage Collection Service Paused"
-                  : gcStatus === "inactive"
-                  ? "Garbage Collection Service Inactive"
-                  : "Not Enrolled in Garbage Collection"}
-              </h2>
-              <p className="text-gray-600 text-sm mt-1">
-                {gcStatus === "temporary_stopped"
-                  ? "Your garbage collection service is temporarily paused. Payment and collection features are unavailable until the service is reactivated by the admin."
-                  : gcStatus === "inactive"
-                  ? "Your garbage collection service is currently inactive. No collection or payment features are available."
-                  : "You are currently not participating in the Society Garbage Collection Program. No charges, bills, or payment records will be generated for your account."}
-              </p>
-              {gcStatus === "not_participating" && (
-                <p className="text-gray-500 text-xs mt-3 flex items-center gap-1">
-                  <FaInfoCircle className="text-blue-400" />
-                  If you would like to join this service, please contact the RWA Office.
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-2xl shrink-0">
+                {gcCfg.icon}
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-800">
+                  {gcStatus === "temporary_stopped"
+                    ? "Garbage Collection Service Paused"
+                    : gcStatus === "inactive"
+                    ? "Garbage Collection Service Inactive"
+                    : "Not Enrolled in Garbage Collection"}
+                </h2>
+                <p className="text-gray-600 text-sm mt-1 leading-relaxed">
+                  {gcStatus === "temporary_stopped"
+                    ? "Your garbage collection service is temporarily paused. Payment and collection features are unavailable until the service is reactivated by the admin."
+                    : gcStatus === "inactive"
+                    ? "Your garbage collection service is currently inactive. No collection or payment features are available."
+                    : "You are currently not participating in the Society Garbage Collection Program. No charges, bills, or payment records will be generated for your account."}
                 </p>
+                {gcStatus === "not_participating" && (
+                  <p className="text-gray-500 text-xs mt-2.5 flex items-center gap-1.5">
+                    <FaInfoCircle className="text-blue-500 shrink-0" />
+                    Want doorstep waste pickup? Send an enrollment request to the admin below.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Option to send request to admin to join GC */}
+            <div className="md:shrink-0 flex items-center self-start md:self-center">
+              {myPendingRequest ? (
+                <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold shadow-xs">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  Request Sent to Admin (Pending Approval)
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setJoinReason(DEFAULT_JOIN_GC_MESSAGE);
+                    setShowJoinModal(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs transition shadow-sm"
+                >
+                  <FaPaperPlane className="text-xs" />
+                  Send Request to Admin to Join GC
+                </button>
               )}
             </div>
           </div>
@@ -573,6 +619,8 @@ export default function ResidentDashboard() {
           <QuickAction to={`${basePath}/events`} icon={<FaCalendarAlt />} label="Events" color="indigo" />
           <QuickAction to={`${basePath}/activities`} icon={<FaLeaf />} label="Activities" color="green" />
           <QuickAction to={`${basePath}/committee`} icon={<FaUserTie />} label="Committee" color="amber" />
+          <QuickAction to={`${basePath}/special-collections`} icon={<FaHandHoldingHeart />} label="Special Drives" color="rose" />
+          <QuickAction to={`${basePath}/support`} icon={<FaQuestionCircle />} label="Help & FAQs" color="teal" />
           <QuickAction to={`${basePath}/profile`} icon={<FaUser />} label="Profile" color="sky" />
         </div>
       </div>
@@ -798,6 +846,86 @@ export default function ResidentDashboard() {
           </div>
         )}
       </div>
+
+      {/* Join GC Request Modal */}
+      {showJoinModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2.5 text-emerald-700">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
+                  <FaRecycle className="text-lg" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-gray-800">
+                    Request to Join Garbage Collection
+                  </h3>
+                  <p className="text-xs text-gray-400">Door-to-door society service</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowJoinModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Request Message to Admin (Pre-filled default message)
+                </label>
+                <textarea
+                  value={joinReason}
+                  onChange={(e) => setJoinReason(e.target.value)}
+                  rows={4}
+                  className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none resize-none text-sm text-gray-800 leading-relaxed"
+                  placeholder="Reason / message for joining..."
+                />
+                <p className="text-xs text-gray-400 mt-1.5">
+                  The standard message is pre-filled above. You can customize it or send directly.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowJoinModal(false)}
+                className="px-5 py-2.5 rounded-xl border hover:bg-gray-50 text-sm font-medium transition text-gray-600"
+                disabled={submittingJoin}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={submittingJoin}
+                onClick={async () => {
+                  setSubmittingJoin(true);
+                  try {
+                    const success = await submitRequest({
+                      residentId: canonicalResidentId || user?.uid || "",
+                      requestType: "opt_in",
+                      reason: joinReason.trim() || DEFAULT_JOIN_GC_MESSAGE,
+                    });
+                    if (success) {
+                      setShowJoinModal(false);
+                      setJoinReason(DEFAULT_JOIN_GC_MESSAGE);
+                    }
+                  } finally {
+                    setSubmittingJoin(false);
+                  }
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition shadow-sm disabled:opacity-50"
+              >
+                <FaPaperPlane className="text-xs" />
+                {submittingJoin ? "Sending..." : "Submit Request to Admin"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -836,6 +964,8 @@ function QuickAction({ to, icon, label, color }) {
     green: "bg-green-50 text-green-600 hover:bg-green-100",
     sky: "bg-sky-50 text-sky-600 hover:bg-sky-100",
     amber: "bg-amber-50 text-amber-700 hover:bg-amber-100",
+    teal: "bg-teal-50 text-teal-700 hover:bg-teal-100",
+    rose: "bg-rose-50 text-rose-600 hover:bg-rose-100",
   };
 
   return (

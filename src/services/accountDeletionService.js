@@ -10,7 +10,6 @@ import {
   where,
   writeBatch,
   serverTimestamp,
-  arrayRemove,
 } from "firebase/firestore";
 
 import { db, deleteAuthAccountFn } from "../firebase/firebase";

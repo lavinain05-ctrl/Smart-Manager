@@ -116,6 +116,7 @@ export default function ResidentForm({
 
       const payload = {
         ...form,
+        charge: garbageEnrolled ? (Number(form.charge) || 0) : 0,
         mobile: cleanMainMobile,
         enablePortalLogin,
         portalMobile: cleanPortalMobile,
@@ -251,7 +252,15 @@ export default function ResidentForm({
           type="checkbox"
           id="garbageEnrolled"
           checked={garbageEnrolled}
-          onChange={(e) => setGarbageEnrolled(e.target.checked)}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            setGarbageEnrolled(checked);
+            if (!checked) {
+              setForm((prev) => ({ ...prev, charge: 0 }));
+            } else if (!form.charge || Number(form.charge) === 0) {
+              setForm((prev) => ({ ...prev, charge: defaultCharge || 80 }));
+            }
+          }}
           className="w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer"
         />
         <label htmlFor="garbageEnrolled" className="text-xs font-bold text-emerald-950 cursor-pointer select-none">

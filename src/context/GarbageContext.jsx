@@ -13,6 +13,9 @@ import {
   query,
   where,
   collection,
+  doc,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 
 import toast from "react-hot-toast";
@@ -296,19 +299,30 @@ export function GarbageProvider({ children }) {
         const resident = residents.find((r) => r.id === acc.residentId);
         if (!resident) continue;
 
-        // Account is active, but resident doc in Firestore has garbageStatus not set to participating
-        if (acc.status === "active") {
-          const current = resident.garbageStatus ?? resident.gcStatus;
-          if (current !== "participating" && current !== "temporary_stopped") {
-            try {
-              console.log(`[AutoSync] Harmonizing resident ${resident.owner || resident.id} (${resident.flat || "—"}) -> participating`);
-              await updateDoc(doc(db, "residents", resident.id), {
-                garbageStatus: "participating",
-                updatedAt: serverTimestamp(),
-              });
-            } catch (e) {
-              console.warn("[AutoSync] Error:", e.message);
-            }
+        const shouldBeActive =
+          isGcParticipating(resident) &&
+          resident.status !== "Inactive" &&
+          resident.status !== "inactive";
+
+        if (acc.status === "active" && !shouldBeActive) {
+          try {
+            console.log(`[AutoSync] Harmonizing account for resident ${resident.owner || resident.id} (${resident.flat || "—"}) -> inactive`);
+            await updateDoc(doc(db, "garbageAccounts", acc.id), {
+              status: "inactive",
+              updatedAt: serverTimestamp(),
+            });
+          } catch (e) {
+            console.warn("[AutoSync] Error:", e.message);
+          }
+        } else if (acc.status === "inactive" && shouldBeActive) {
+          try {
+            console.log(`[AutoSync] Harmonizing account for resident ${resident.owner || resident.id} (${resident.flat || "—"}) -> active`);
+            await updateDoc(doc(db, "garbageAccounts", acc.id), {
+              status: "active",
+              updatedAt: serverTimestamp(),
+            });
+          } catch (e) {
+            console.warn("[AutoSync] Error:", e.message);
           }
         }
       }
@@ -938,29 +952,25 @@ export function GarbageProvider({ children }) {
       const resident = residentMapById[acc.residentId];
 
       if (resident) {
-        // Two-way synchronization: ensure both garbageAccount and resident docs agree
-        if (acc.status === "active") {
-          const rStatus = resident.garbageStatus ?? resident.gcStatus;
-          if (rStatus !== "participating" && rStatus !== "temporary_stopped") {
-            try {
-              await updateDoc(doc(db, "residents", resident.id), {
-                garbageStatus: "participating",
-                updatedAt: serverTimestamp(),
-              });
-              statusSynced++;
-            } catch (err) {
-              console.warn("Could not sync resident garbageStatus:", err.message);
-            }
-          }
-        } else if (acc.status === "inactive") {
-          const shouldBeActive =
-            isGcParticipating(resident) &&
-            resident.status !== "Inactive" &&
-            resident.status !== "inactive";
+        // Master resident data is the single source of truth
+        const shouldBeActive =
+          isGcParticipating(resident) &&
+          resident.status !== "Inactive" &&
+          resident.status !== "inactive";
 
-          if (shouldBeActive) {
+        if (acc.status === "active" && !shouldBeActive) {
+          try {
+            await updateAccountSvc(acc.id, { status: "inactive" });
+            statusSynced++;
+          } catch (err) {
+            console.warn("Could not sync garbageAccount status:", err.message);
+          }
+        } else if (acc.status === "inactive" && shouldBeActive) {
+          try {
             await updateAccountSvc(acc.id, { status: "active" });
             statusSynced++;
+          } catch (err) {
+            console.warn("Could not sync garbageAccount status:", err.message);
           }
         }
       } else {

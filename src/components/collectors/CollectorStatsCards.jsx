@@ -65,17 +65,17 @@ export default function CollectorStatsCards({
     ).size;
 
     // 3. Combine or pick by collectionScope
-    let totalAmount = 0;
-    let totalCash = 0;
-    let totalUPI = 0;
-    let totalBank = 0;
-    let totalReceipts = 0;
-    let activeCollectors = 0;
-    let collectionSub = "";
-    let cashSub = "";
-    let upiSub = "";
-    let bankSub = "";
-    let receiptSub = "";
+    let totalAmount;
+    let totalCash;
+    let totalUPI;
+    let totalBank;
+    let totalReceipts;
+    let activeCollectors;
+    let collectionSub;
+    let cashSub;
+    let upiSub;
+    let bankSub;
+    let receiptSub;
 
     // Field vs Admin / Office split
     let fieldCollectorsTotal = 0;

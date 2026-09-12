@@ -20,8 +20,9 @@ import {
 } from "../services/paymentService";
 
 import { updateBill } from "../services/billService";
-import { doc, getDoc, getDocs, query, where, collection, addDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, getDocs, query, where, collection, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase/firebase";
+import { isGcParticipating } from "../services/statisticsService";
 
 import { useBilling } from "./BillingContext";
 import { useAuth } from "./AuthContext";
@@ -79,6 +80,55 @@ export function PaymentProvider({ children }) {
       try {
         for (const p of payments) {
           if (cancelled) break;
+
+          // 0. Verify resident exists and is participating in garbage/maintenance collection
+          let isParticipating = true;
+          let residentExists = true;
+          try {
+            if (p.residentId) {
+              const resDocRef = doc(db, "residents", p.residentId);
+              const resSnap = await getDoc(resDocRef);
+              if (!resSnap.exists()) {
+                residentExists = false;
+              } else {
+                const resData = resSnap.data();
+                isParticipating = isGcParticipating(resData);
+              }
+            } else {
+              residentExists = false;
+            }
+          } catch (rCheckErr) {
+            // Ignore fetch error
+          }
+
+          // If resident is deleted or NOT participating, clean up orphan payment & bills!
+          if (!residentExists || !isParticipating) {
+            try {
+              console.log(`[PaymentSync] Removing orphan payment ${p.id} for non-participating resident ${p.residentId}`);
+              await deleteDoc(doc(db, "payments", p.id));
+              // Also clean up any orphan garbageBills
+              const gDelQ = query(
+                collection(db, "garbageBills"),
+                where("residentId", "==", p.residentId)
+              );
+              const gDelSnap = await getDocs(gDelQ);
+              for (const gd of gDelSnap.docs) {
+                await deleteDoc(doc(db, "garbageBills", gd.id));
+              }
+              // Also clean up any orphan bills
+              const bDelQ = query(
+                collection(db, "bills"),
+                where("residentId", "==", p.residentId)
+              );
+              const bDelSnap = await getDocs(bDelQ);
+              for (const bd of bDelSnap.docs) {
+                await deleteDoc(doc(db, "bills", bd.id));
+              }
+            } catch (delErr) {
+              console.warn("[PaymentSync] Error cleaning orphan payment/bills:", delErr.message);
+            }
+            continue;
+          }
 
           const isExempted = p.paymentMethod === "Exempted";
           const newStatus = isExempted ? "Exempted" : "Paid";
@@ -219,14 +269,14 @@ export function PaymentProvider({ children }) {
             // Ignore single doc err
           }
 
-          // 3. Sync resident charge if 0 or missing
-          if (p.residentId && finalAmount > 0) {
+          // 3. Sync resident charge if 0 or missing (ONLY for participating residents)
+          if (p.residentId && finalAmount > 0 && isParticipating) {
             try {
               const resDocRef = doc(db, "residents", p.residentId);
               const resSnap = await getDoc(resDocRef);
               if (resSnap.exists()) {
                 const resData = resSnap.data();
-                if (!resData.charge || Number(resData.charge) === 0) {
+                if (isGcParticipating(resData) && (!resData.charge || Number(resData.charge) === 0)) {
                   await updateDoc(resDocRef, {
                     charge: finalAmount,
                     updatedAt: serverTimestamp(),

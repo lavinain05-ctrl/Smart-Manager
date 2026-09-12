@@ -22,7 +22,6 @@ import Residents from "../pages/admin/Residents";
 import SpecialCollections from "../pages/admin/SpecialCollections";
 import Collections from "../pages/admin/Collections";
 import Collectors from "../pages/admin/Collectors";
-import Reports from "../pages/admin/Reports";
 import Settings from "../pages/admin/Settings";
 import PaymentHistory from "../pages/admin/PaymentHistory";
 import Receipts from "../pages/admin/Receipts";
@@ -44,10 +43,10 @@ import DeletedAccounts from "../pages/admin/DeletedAccounts";
 import BlockedAccounts from "../pages/admin/BlockedAccounts";
 import ResetData from "../pages/admin/ResetData";
 import AccountRecovery from "../pages/admin/AccountRecovery";
+import ManageSupport from "../pages/admin/ManageSupport";
 
 import GarbageDashboard from "../pages/admin/GarbageDashboard";
 import GarbageAccounts from "../pages/admin/GarbageAccounts";
-import GarbageBills from "../pages/admin/GarbageBills";
 import GarbageCollectors from "../pages/admin/GarbageCollectors";
 import GarbageReports from "../pages/admin/GarbageReports";
 import GarbageRequests from "../pages/admin/GarbageRequests";
@@ -76,6 +75,7 @@ import ResidentEmergency from "../pages/resident/ResidentEmergency";
 import ResidentGarbage from "../pages/resident/ResidentGarbage";
 import ResidentCommittee from "../pages/resident/ResidentCommittee";
 import ResidentSpecialCollections from "../pages/resident/ResidentSpecialCollections";
+import ResidentSupport from "../pages/resident/ResidentSupport";
 
 import ProtectedRoute from "../pages/auth/ProtectedRoute";
 import AdminRoute from "../pages/auth/AdminRoute";
@@ -286,6 +286,11 @@ export default function AppRoutes() {
           />
 
           <Route
+            path="support"
+            element={<ManageSupport />}
+          />
+
+          <Route
             path="deleted-accounts"
             element={<DeletedAccounts />}
           />
@@ -490,6 +495,11 @@ export default function AppRoutes() {
             path="profile"
             element={<ResidentProfile />}
           />
+
+          <Route
+            path="support"
+            element={<ResidentSupport />}
+          />
         </Route>
 
         {/* Family Routes */}
@@ -567,6 +577,11 @@ export default function AppRoutes() {
           <Route
             path="profile"
             element={<ResidentProfile />}
+          />
+
+          <Route
+            path="support"
+            element={<ResidentSupport />}
           />
         </Route>
 
@@ -670,6 +685,11 @@ export default function AppRoutes() {
           <Route
             path="profile"
             element={<ResidentProfile />}
+          />
+
+          <Route
+            path="support"
+            element={<ResidentSupport />}
           />
         </Route>
 

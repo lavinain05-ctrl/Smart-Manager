@@ -317,7 +317,7 @@ async function fetchUserProfile(firebaseUser) {
         role: "collector",
         name: cData.name || "",
         phone: cData.mobile || possibleMobile,
-        email: firebaseUser.email || colData.email || "",
+        email: firebaseUser.email || cData.email || "",
         area: cData.area || "",
         status: "active",
         createdAt: serverTimestamp(),

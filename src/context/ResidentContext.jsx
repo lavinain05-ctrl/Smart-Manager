@@ -9,10 +9,13 @@ import toast from "react-hot-toast";
 import {
   doc,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   collection,
   addDoc,
+  query,
+  where,
   serverTimestamp,
 } from "firebase/firestore";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";

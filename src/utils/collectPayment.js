@@ -26,7 +26,7 @@ export async function collectResidentPayment({
   year,
   paymentData,
   bills,
-  addPayment,
+  addPayment: _addPayment,
   collector,
   collectorId,
 }) {

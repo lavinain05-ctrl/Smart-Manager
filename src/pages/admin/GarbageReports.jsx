@@ -113,8 +113,8 @@ export default function GarbageReports() {
   // ========================
 
   function exportExcel() {
-    let data = [];
-    let sheetName = "Report";
+    let data;
+    let sheetName;
 
     if (reportType === "monthly") {
       sheetName = "Monthly";
@@ -161,8 +161,8 @@ export default function GarbageReports() {
     pdf.setFontSize(10);
     pdf.text(`${selectedMonth} ${selectedYear}`, 14, 28);
 
-    let head = [];
-    let body = [];
+    let head;
+    let body;
 
     if (reportType === "monthly") {
       head = [["Resident", "Flat", "Block", "Amount", "Status", "Paid", "Method"]];

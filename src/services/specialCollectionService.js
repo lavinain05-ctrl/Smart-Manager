@@ -19,7 +19,6 @@ import { createNotification } from "./notificationService";
 
 const collectionsRef = collection(db, "specialCollections");
 const paymentsRef = collection(db, "specialCollectionPayments");
-const utrRef = collection(db, "utrLookup");
 const receiptsRef = collection(db, "receipts");
 
 // ====================================================
@@ -175,6 +174,15 @@ export async function archiveSpecialCollection(id, adminUser) {
   await updateDoc(doc(db, "specialCollections", id), {
     status: "archived",
     updatedAt: serverTimestamp(),
+  });
+
+  await logSpecialCollectionAction({
+    action: "COLLECTION_ARCHIVED",
+    collectionId: id,
+    actorUid: adminUser?.uid || "admin",
+    actorRole: "admin",
+    actorName: adminUser?.name || "Admin",
+    remarks: "Archived collection campaign",
   });
 }
 

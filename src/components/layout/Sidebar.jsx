@@ -27,6 +27,7 @@ import {
   FaTachometerAlt,
   FaKey,
   FaHandHoldingHeart,
+  FaHeadset,
 } from "react-icons/fa";
 
 // =============================================
@@ -82,6 +83,7 @@ const navSections = [
       { name: "Events", icon: <FaCalendarAlt />, path: "/admin/events" },
       { name: "Activities", icon: <FaLeaf />, path: "/admin/activities" },
       { name: "Emergency Contacts", icon: <FaPhone />, path: "/admin/emergency-contacts" },
+      { name: "Support & FAQs", icon: <FaHeadset />, path: "/admin/support" },
     ],
   },
   {

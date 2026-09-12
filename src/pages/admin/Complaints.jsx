@@ -27,6 +27,7 @@ const CATEGORIES = [
   "Electricity",
   "Road",
   "Cleaning",
+  "Helpdesk Inquiry",
   "Other",
 ];
 
@@ -62,6 +63,7 @@ const categoryIcons = {
   Electricity: "⚡",
   Road: "🛣️",
   Cleaning: "🧹",
+  "Helpdesk Inquiry": "💬",
   Other: "📋",
 };
 

@@ -24,14 +24,11 @@ export function printPaymentReceipt(receipt) {
   const designation = receipt.collectorDesignation ? `(${receipt.collectorDesignation})` : (receipt.collectorRole ? `(${receipt.collectorRole})` : "");
   const remarks = receipt.remarks && receipt.remarks !== "-" ? receipt.remarks : "";
 
-  let periodOrCampaign = "";
-  if (isSpecial) {
-    periodOrCampaign = receipt.collectionName || receipt.specialCampaignName || "Special Society Campaign";
-  } else if (receipt.isAdvance && receipt.periodLabel) {
-    periodOrCampaign = `${receipt.periodLabel} (${receipt.advanceDuration || 1} Months Advance)`;
-  } else {
-    periodOrCampaign = `${receipt.month || ""} ${receipt.year || ""}`.trim() || "Monthly Garbage Maintenance";
-  }
+  const periodOrCampaign = isSpecial
+    ? receipt.collectionName || receipt.specialCampaignName || "Special Society Campaign"
+    : receipt.isAdvance && receipt.periodLabel
+    ? `${receipt.periodLabel} (${receipt.advanceDuration || 1} Months Advance)`
+    : `${receipt.month || ""} ${receipt.year || ""}`.trim() || "Monthly Garbage Maintenance";
 
   const iframe = document.createElement("iframe");
   iframe.style.position = "fixed";

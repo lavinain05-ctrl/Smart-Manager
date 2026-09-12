@@ -60,9 +60,10 @@ export default function ResidentReceipts() {
           const pClean = String(p.mobile).replace(/\D/g, "").slice(-10);
           if (pClean === cleanPhone) return true;
         }
+        const residentOwnerName = (resident?.owner || user?.name || "").trim().toLowerCase();
         if (
-          (resident?.owner || user?.name) &&
-          p.residentName?.trim().toLowerCase() === (resident?.owner || user?.name).trim().toLowerCase() &&
+          residentOwnerName &&
+          p.residentName?.trim().toLowerCase() === residentOwnerName &&
           (!p.flat || p.flat === (resident?.flat || user?.flat))
         ) {
           return true;

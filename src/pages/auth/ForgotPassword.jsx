@@ -1461,33 +1461,8 @@ export default function ForgotPassword() {
           </form>
         )}
 
-        {/* Switch Between Resident and Admin Portal Link */}
-        {!actionOobCode && (
-          <div className="mt-4 pt-4 border-t border-gray-100 text-center">
-            {activeTab === "admin_reset" ? (
-              <button
-                type="button"
-                onClick={() => setActiveTab("forgot_password")}
-                className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold transition flex items-center justify-center gap-1.5 mx-auto"
-              >
-                <FaKey className="text-xs" />
-                <span>Are you a Society Resident? Click for Resident Account Recovery</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setActiveTab("admin_reset")}
-                className="text-xs text-amber-700 hover:text-amber-800 font-semibold transition flex items-center justify-center gap-1.5 mx-auto"
-              >
-                <FaUserShield className="text-xs" />
-                <span>Society Administrator? Click here for Admin Password Reset</span>
-              </button>
-            )}
-          </div>
-        )}
-
         {/* Back to Login */}
-        <div className="text-center mt-4">
+        <div className="text-center mt-6 pt-5 border-t border-gray-100">
           <Link
             to="/"
             className="inline-flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-700 font-semibold transition"

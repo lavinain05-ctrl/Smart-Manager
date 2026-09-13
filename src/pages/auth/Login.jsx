@@ -11,6 +11,8 @@ import {
   FaEye,
   FaEyeSlash,
   FaUserShield,
+  FaShieldAlt,
+  FaCity,
 } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
@@ -132,11 +134,24 @@ export default function Login() {
 
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 mx-auto rounded-3xl bg-emerald-600 text-white flex items-center justify-center text-4xl shadow-lg">
-            <FaBuilding />
+          <div className="relative mx-auto w-24 h-24 mb-4 flex items-center justify-center">
+            {/* Ambient soft glow */}
+            <div className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 blur-lg opacity-35 transform scale-95" />
+            {/* Badge */}
+            <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 text-white flex flex-col items-center justify-center shadow-xl shadow-emerald-900/25 border border-emerald-300/40 p-2">
+              <div className="relative flex items-center justify-center">
+                <FaCity className="text-4xl text-white drop-shadow-md" />
+                <span className="absolute -bottom-1.5 -right-2 bg-white text-emerald-700 rounded-full p-1 text-[11px] shadow-md border border-emerald-100 flex items-center justify-center">
+                  <FaShieldAlt />
+                </span>
+              </div>
+              <div className="mt-1.5 px-2 py-0.5 rounded-full bg-emerald-950/40 text-[9px] font-extrabold tracking-widest text-emerald-200 uppercase border border-emerald-400/30">
+                RWA
+              </div>
+            </div>
           </div>
-          <h1 className="text-4xl font-bold mt-5">Smart Manager</h1>
-          <p className="text-gray-500 mt-2">Society Management System</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-800">D BLOCK RWA</h1>
+          <p className="text-sm font-medium text-slate-500 mt-1">Society Management System</p>
         </div>
 
         {/* Login Form */}

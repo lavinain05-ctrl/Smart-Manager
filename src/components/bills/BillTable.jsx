@@ -7,15 +7,15 @@ import {
   FaFilePdf,
 } from "react-icons/fa";
 
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { generateSingleBillPDF } from "../../utils/printReportHelper";
 import Pagination from "../common/Pagination";
 
 export default function BillTable({
   bills,
   onPay,
   onView,
-  onDelete
+  onDelete,
+  settings = {},
 }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -34,76 +34,241 @@ export default function BillTable({
   }, [bills, page, pageSize]);
 
   function downloadBillPDF(bill) {
-    const doc = new jsPDF();
-    const status = bill.displayStatus || bill.status;
-
-    doc.setFontSize(20);
-    doc.text("Smart Manager", 105, 18, { align: "center" });
-
-    doc.setFontSize(12);
-    doc.text("Garbage Collection Bill", 105, 28, { align: "center" });
-
-    autoTable(doc, {
-      startY: 40,
-      theme: "grid",
-      head: [["Field", "Details"]],
-      body: [
-        ["Flat", bill.flat],
-        ["Resident", bill.residentName],
-        ["Block", bill.block || "-"],
-        ["Bill Amount", `₹${Number(bill.amount).toLocaleString()}`],
-        ["Month", `${bill.month} ${bill.year}`],
-        ["Due Date", bill.dueDate || "-"],
-        ["Status", status],
-        ["Payment Date", bill.paymentDate || "-"],
-        ["Payment Method", bill.paymentMethod || "-"],
-        ["Receipt ID", bill.paymentId || "-"],
-      ],
-    });
-
-    doc.save(`Bill-${bill.flat}-${bill.month}-${bill.year}.pdf`);
+    generateSingleBillPDF(bill, settings);
   }
 
   function printBill(bill) {
-    const status = bill.displayStatus || bill.status;
+    const status = (bill.displayStatus || bill.status || "Pending").toUpperCase();
+    const isPaid = status === "PAID";
+    const societyName = settings.societyName || "D BLOCK RWA INDRAPRASTHA";
+    const societyAddress = settings.address || "D Block, Indraprastha, New Delhi";
+    const societyContact = settings.contactNumber || settings.supportPhone || "";
     const printWindow = window.open("", "_blank");
 
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
       <head>
-        <title>Bill - ${bill.flat}</title>
+        <title>Invoice - Flat ${bill.flat} - ${bill.month} ${bill.year}</title>
+        <meta charset="utf-8" />
         <style>
-          body { font-family: Arial, sans-serif; padding: 30px; }
-          h2 { text-align: center; margin-bottom: 5px; }
-          h4 { text-align: center; color: #666; margin-top: 0; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          td { border: 1px solid #ddd; padding: 10px; }
-          td:first-child { font-weight: bold; width: 40%; background: #f9f9f9; }
-          .footer { margin-top: 40px; text-align: center; color: #999; font-size: 12px; }
+          @page { size: A4 portrait; margin: 15mm; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #0f172a;
+            margin: 0;
+            padding: 20px;
+            background: #fff;
+          }
+          .invoice-card {
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 750px;
+            margin: 0 auto;
+          }
+          .header-banner {
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 16px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+          }
+          .soc-name {
+            font-size: 20px;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.5px;
+          }
+          .soc-addr {
+            font-size: 11px;
+            color: #475569;
+            margin-top: 3px;
+          }
+          .inv-title-box {
+            text-align: right;
+          }
+          .inv-badge {
+            display: inline-block;
+            background: #0f172a;
+            color: #fff;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+          }
+          .inv-meta {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 5px;
+          }
+          .grid-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-bottom: 20px;
+          }
+          .item-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-bottom: 6px;
+          }
+          .item-lbl {
+            color: #64748b;
+          }
+          .item-val {
+            font-weight: 700;
+            color: #0f172a;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            margin-bottom: 20px;
+          }
+          th {
+            background: #0f172a;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 10px;
+            text-align: left;
+          }
+          td {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 10px;
+            font-size: 12px;
+          }
+          .status-box {
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 25px;
+            ${
+              isPaid
+                ? "background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;"
+                : "background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;"
+            }
+          }
+          .status-header {
+            font-size: 13px;
+            font-weight: 800;
+            margin-bottom: 4px;
+          }
+          .status-desc {
+            font-size: 11px;
+          }
+          .footer-sign {
+            margin-top: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding-top: 20px;
+          }
+          .sign-box {
+            text-align: center;
+            width: 200px;
+          }
+          .sign-line {
+            border-top: 1px solid #94a3b8;
+            margin-bottom: 6px;
+          }
+          .sign-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .sign-sub {
+            font-size: 10px;
+            color: #64748b;
+          }
         </style>
       </head>
       <body>
-        <h2>Smart Manager</h2>
-        <h4>Garbage Collection Bill</h4>
-        <table>
-          <tr><td>Flat</td><td>${bill.flat}</td></tr>
-          <tr><td>Resident</td><td>${bill.residentName}</td></tr>
-          <tr><td>Block</td><td>${bill.block || "-"}</td></tr>
-          <tr><td>Amount</td><td>₹${Number(bill.amount).toLocaleString()}</td></tr>
-          <tr><td>Billing Period</td><td>${bill.month} ${bill.year}</td></tr>
-          <tr><td>Due Date</td><td>${bill.dueDate || "-"}</td></tr>
-          <tr><td>Status</td><td>${status}</td></tr>
-          <tr><td>Payment Date</td><td>${bill.paymentDate || "-"}</td></tr>
-          <tr><td>Method</td><td>${bill.paymentMethod || "-"}</td></tr>
-          <tr><td>Receipt ID</td><td>${bill.paymentId || "-"}</td></tr>
-        </table>
-        <div class="footer">Generated by Smart Manager</div>
+        <div class="invoice-card">
+          <div class="header-banner">
+            <div>
+              <div class="soc-name">${societyName.toUpperCase()}</div>
+              <div class="soc-addr">${societyAddress}${societyContact ? ` • Tel: ${societyContact}` : ""}</div>
+            </div>
+            <div class="inv-title-box">
+              <div class="inv-badge">Official Maintenance Invoice</div>
+              <div class="inv-meta">Bill Ref: ${bill.paymentId || bill.id || "REC-" + bill.flat}</div>
+            </div>
+          </div>
+
+          <div class="grid-details">
+            <div>
+              <div class="item-row"><span class="item-lbl">Resident Name:</span> <span class="item-val">${bill.residentName || "-"}</span></div>
+              <div class="item-row"><span class="item-lbl">Flat Number:</span> <span class="item-val">${bill.flat}</span></div>
+              <div class="item-row"><span class="item-lbl">Block:</span> <span class="item-val">${bill.block || "General"}</span></div>
+            </div>
+            <div>
+              <div class="item-row"><span class="item-lbl">Billing Period:</span> <span class="item-val">${bill.month} ${bill.year}</span></div>
+              <div class="item-row"><span class="item-lbl">Due Date:</span> <span class="item-val">${bill.dueDate || "10th of Month"}</span></div>
+              <div class="item-row"><span class="item-lbl">Status:</span> <span class="item-val" style="color: ${isPaid ? '#16a34a' : '#dc2626'}">${status}</span></div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 40px; text-align: center;">#</th>
+                <th>Description</th>
+                <th style="text-align: right; width: 110px;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="text-align: center; color: #64748b;">1</td>
+                <td>
+                  <strong>Monthly Doorstep Waste & Society Maintenance Collection Fee</strong><br>
+                  <span style="font-size: 10.5px; color: #64748b;">Billing Cycle: ${bill.month} ${bill.year}</span>
+                </td>
+                <td style="text-align: right; font-weight: 700; font-size: 14px;">₹${Number(bill.amount).toLocaleString("en-IN")}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="status-box">
+            <div class="status-header">${isPaid ? "✓ PAYMENT RECEIVED WITH THANKS" : "⚠ PAYMENT OUTSTANDING NOTICE"}</div>
+            <div class="status-desc">
+              ${
+                isPaid
+                  ? `Receipt ID: <strong>${bill.paymentId || "CONFIRMED"}</strong> • Paid on: <strong>${bill.paymentDate || "Recorded"}</strong> via <strong>${bill.paymentMethod || "Cash"}</strong>.`
+                  : `Please clear dues by ${bill.dueDate || "the due date"} to ensure uninterrupted society services.`
+              }
+            </div>
+          </div>
+
+          <div class="footer-sign">
+            <div style="font-size: 10px; color: #94a3b8;">
+              Printed on ${new Date().toLocaleString("en-IN")}<br>
+              System Generated Official Bill
+            </div>
+            <div class="sign-box">
+              <div class="sign-line"></div>
+              <div class="sign-title">Authorized Signatory</div>
+              <div class="sign-sub">${societyName}</div>
+            </div>
+          </div>
+        </div>
       </body>
       </html>
     `);
 
     printWindow.document.close();
-    printWindow.print();
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 300);
   }
 
   return (

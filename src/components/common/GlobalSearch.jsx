@@ -248,7 +248,7 @@ export default function GlobalSearch({ isAdmin = false }) {
             icon: <FaRecycle className="text-emerald-500" />,
             title: a.residentName || "Account",
             subtitle: `${a.flat || "—"} • ${a.block || "—"} • ${a.status}`,
-            path: "/admin/garbage/accounts",
+            path: "/admin/residents",
           });
         }
       });

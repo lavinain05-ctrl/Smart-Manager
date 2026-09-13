@@ -144,7 +144,7 @@ export default function ResidentsTable({
                   {isPaid ? "Paid" : "Pending"}
                 </span>
               );
-              chargeDisplay = `₹${resident.charge || 0}`;
+              chargeDisplay = `₹${Number(resident.charge) > 0 ? resident.charge : 80}`;
             } else {
               paymentDisplay = (
                 <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-500">

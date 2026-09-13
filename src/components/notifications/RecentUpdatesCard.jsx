@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FaBell,
   FaCheckDouble,
@@ -12,53 +12,57 @@ import {
   FaChevronRight,
   FaChevronDown,
   FaChevronUp,
-  FaClock,
 } from "react-icons/fa";
 import { useNotifications } from "../../context/NotificationContext";
 
 const typeConfig = {
   notice: {
-    icon: <FaBullhorn className="text-indigo-600" />,
-    bg: "bg-indigo-50",
-    border: "border-indigo-100",
+    icon: <FaBullhorn className="text-indigo-600 dark:text-indigo-400 text-xs" />,
+    bg: "bg-indigo-50 dark:bg-indigo-950/50",
+    border: "border-indigo-100 dark:border-indigo-900/40",
     label: "Notice",
   },
   event: {
-    icon: <FaCalendarAlt className="text-emerald-600" />,
-    bg: "bg-emerald-50",
-    border: "border-emerald-100",
+    icon: <FaCalendarAlt className="text-emerald-600 dark:text-emerald-400 text-xs" />,
+    bg: "bg-emerald-50 dark:bg-emerald-950/50",
+    border: "border-emerald-100 dark:border-emerald-900/40",
     label: "Event",
   },
   payment: {
-    icon: <FaMoneyBillWave className="text-green-600" />,
-    bg: "bg-green-50",
-    border: "border-green-100",
+    icon: <FaMoneyBillWave className="text-green-600 dark:text-green-400 text-xs" />,
+    bg: "bg-green-50 dark:bg-green-950/50",
+    border: "border-green-100 dark:border-green-900/40",
     label: "Payment",
   },
   special_collection: {
-    icon: <FaHandHoldingHeart className="text-rose-600" />,
-    bg: "bg-rose-50",
-    border: "border-rose-100",
+    icon: <FaHandHoldingHeart className="text-rose-600 dark:text-rose-400 text-xs" />,
+    bg: "bg-rose-50 dark:bg-rose-950/50",
+    border: "border-rose-100 dark:border-rose-900/40",
     label: "Special Fund",
   },
   warning: {
-    icon: <FaExclamationTriangle className="text-amber-600" />,
-    bg: "bg-amber-50",
-    border: "border-amber-100",
+    icon: <FaExclamationTriangle className="text-amber-600 dark:text-amber-400 text-xs" />,
+    bg: "bg-amber-50 dark:bg-amber-950/50",
+    border: "border-amber-100 dark:border-amber-900/40",
     label: "Alert",
   },
   info: {
-    icon: <FaInfoCircle className="text-blue-600" />,
-    bg: "bg-blue-50",
-    border: "border-blue-100",
+    icon: <FaInfoCircle className="text-blue-600 dark:text-blue-400 text-xs" />,
+    bg: "bg-blue-50 dark:bg-blue-950/50",
+    border: "border-blue-100 dark:border-blue-900/40",
     label: "Update",
   },
 };
 
-export default function RecentUpdatesCard({ initialLimit = 3, maxItems, title = "Recent Updates & Announcements" }) {
-  const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
+export default function RecentUpdatesCard({
+  initialLimit = 2,
+  maxItems,
+  title = "Recent Updates & Announcements",
+}) {
+  const { notifications = [], unreadCount = 0, markRead, markAllRead } = useNotifications();
   const navigate = useNavigate();
   const [showAll, setShowAll] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const limit = maxItems !== undefined ? maxItems : initialLimit;
   const hasMore = notifications.length > limit;
@@ -85,161 +89,147 @@ export default function RecentUpdatesCard({ initialLimit = 3, maxItems, title = 
     }
   }
 
+  // If there are no notifications, show a very slim placeholder or null
+  if (!notifications || notifications.length === 0) {
+    return null;
+  }
+
   return (
-    <div className="bg-white rounded-3xl shadow-sm border border-slate-200/80 overflow-hidden">
-      {/* Card Header */}
-      <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-slate-50 to-white">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center text-base">
+    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-slate-200/80 dark:border-slate-800 overflow-hidden transition-all duration-200">
+      {/* Sleek Compact Header */}
+      <div className="px-4 py-3 flex items-center justify-between gap-3 bg-slate-50/60 dark:bg-slate-850/40">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center text-sm shrink-0">
             <FaBell />
           </div>
-          <div>
-            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
               {title}
-              {unreadCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-extrabold tracking-wide uppercase">
-                  {unreadCount} New
-                </span>
-              )}
             </h2>
-            <p className="text-xs text-slate-500">Official updates, circulars, and payment confirmations</p>
+
+            {unreadCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black uppercase tracking-wider shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                {unreadCount} New
+              </span>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {hasMore && (
-            <button
-              type="button"
-              onClick={() => setShowAll((prev) => !prev)}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100"
-            >
-              {showAll ? (
-                <>Show Latest ({limit}) <FaChevronUp className="text-[10px]" /></>
-              ) : (
-                <>View All ({notifications.length}) <FaChevronDown className="text-[10px]" /></>
-              )}
-            </button>
-          )}
-
+        {/* Header Action Buttons */}
+        <div className="flex items-center gap-1.5 shrink-0">
           {unreadCount > 0 && (
             <button
               type="button"
               onClick={markAllRead}
-              className="text-xs font-semibold text-slate-600 hover:text-slate-800 transition flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200"
+              className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition px-2 py-1 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-800 flex items-center gap-1"
+              title="Mark all as read"
             >
-              <FaCheckDouble className="text-[10px]" />
-              Mark all read
+              <FaCheckDouble className="text-[9px]" />
+              <span className="hidden sm:inline">Mark read</span>
             </button>
           )}
+
+          {/* Expand/Collapse Card Content Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsCollapsed((prev) => !prev)}
+            className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-800 flex items-center gap-1"
+            title={isCollapsed ? "Expand updates" : "Collapse updates"}
+          >
+            {isCollapsed ? (
+              <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                <span>Show</span> <FaChevronDown className="text-[9px]" />
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                <span>Hide</span> <FaChevronUp className="text-[9px]" />
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
-      {/* Mandatory Unread Alert Strip */}
-      {unreadCount > 0 && (
-        <div className="bg-gradient-to-r from-amber-500 to-rose-500 px-6 py-2.5 text-white flex items-center justify-between text-xs font-medium">
-          <span className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-            <span>
-              <strong>Mandatory Notification:</strong> You have {unreadCount} unread society update{unreadCount > 1 ? "s" : ""}. Please review.
-            </span>
-          </span>
-          <span className="text-[10px] text-white/80 hidden sm:inline">Real-time alerts</span>
-        </div>
-      )}
-
-      {/* Feed List */}
-      <div className="p-4 sm:p-6 divide-y divide-slate-100">
-        {displayed.length === 0 ? (
-          <div className="py-8 text-center text-slate-400">
-            <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2.5">
-              <FaBell className="text-xl text-slate-300" />
-            </div>
-            <p className="text-sm font-bold text-slate-700">All caught up!</p>
-            <p className="text-xs text-slate-400 mt-0.5">No recent notifications or announcements at this time.</p>
-          </div>
-        ) : (
-          displayed.map((notif) => {
+      {/* Body List (Only shown when not collapsed) */}
+      {!isCollapsed && (
+        <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+          {displayed.map((notif) => {
             const cfg = typeConfig[notif.type] || typeConfig.info;
 
             return (
               <div
                 key={notif.id}
                 onClick={() => handleClick(notif)}
-                className={`py-3.5 first:pt-0 last:pb-0 flex items-start gap-3.5 cursor-pointer rounded-xl px-3 transition-colors ${
-                  !notif.read ? "bg-indigo-50/50 hover:bg-indigo-50" : "hover:bg-slate-50"
+                className={`group px-4 py-2.5 flex items-center gap-3 cursor-pointer transition-colors duration-150 ${
+                  !notif.read
+                    ? "bg-indigo-50/40 dark:bg-indigo-950/20 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/40"
+                    : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
                 }`}
               >
-                {/* Type Icon */}
+                {/* Type Icon Badge */}
                 <div
-                  className={`w-9 h-9 rounded-xl ${cfg.bg} border ${cfg.border} flex items-center justify-center shrink-0 mt-0.5`}
+                  className={`w-7 h-7 rounded-lg ${cfg.bg} border ${cfg.border} flex items-center justify-center shrink-0`}
                 >
                   {cfg.icon}
                 </div>
 
-                {/* Body */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                      {cfg.label}
-                    </span>
-                    <span className="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
-                      <FaClock className="text-[9px]" /> {formatTime(notif.createdAt)}
-                    </span>
+                {/* Title & Preview In 1 Line */}
+                <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={`text-xs sm:text-sm truncate leading-snug ${
+                        !notif.read
+                          ? "font-bold text-slate-900 dark:text-white"
+                          : "font-medium text-slate-700 dark:text-slate-300"
+                      }`}
+                    >
+                      {notif.title}
+                    </p>
+                    {notif.message && (
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                        {notif.message}
+                      </p>
+                    )}
                   </div>
 
-                  <h3
-                    className={`text-sm mt-0.5 leading-snug ${
-                      !notif.read ? "font-bold text-slate-900" : "font-medium text-slate-800"
-                    }`}
-                  >
-                    {notif.title}
-                  </h3>
-
-                  {notif.message && (
-                    <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">
-                      {notif.message}
-                    </p>
-                  )}
-
-                  {notif.link && (
-                    <div className="mt-2 flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
-                      <span>View details</span>
-                      <FaChevronRight className="text-[9px]" />
-                    </div>
-                  )}
+                  {/* Category Pill & Time on the right */}
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto text-[10px] text-slate-400">
+                    <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold uppercase">
+                      {cfg.label}
+                    </span>
+                    <span>{formatTime(notif.createdAt)}</span>
+                    <FaChevronRight className="text-[8px] text-slate-300 dark:text-slate-600 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all" />
+                  </div>
                 </div>
 
                 {/* Unread indicator */}
                 {!notif.read && (
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0 mt-2 shadow-sm" />
+                  <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 shadow-xs" />
                 )}
               </div>
             );
-          })
-        )}
-      </div>
+          })}
 
-      {/* Card Footer: View All / Show Less Toggle */}
-      {hasMore && (
-        <div className="px-6 py-3.5 bg-slate-50/90 border-t border-slate-100 flex items-center justify-between">
-          <span className="text-xs text-slate-500 font-medium">
-            Showing {showAll ? notifications.length : limit} of {notifications.length} updates
-          </span>
-          <button
-            type="button"
-            onClick={() => setShowAll((prev) => !prev)}
-            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-300 shadow-sm"
-          >
-            {showAll ? (
-              <>
-                Show Less <FaChevronUp className="text-[10px]" />
-              </>
-            ) : (
-              <>
-                View All ({notifications.length}) <FaChevronDown className="text-[10px]" />
-              </>
-            )}
-          </button>
+          {/* Compact View All / Show Less footer toggle if more items exist */}
+          {hasMore && (
+            <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-850/20 flex items-center justify-between text-xs">
+              <span className="text-[11px] text-slate-400 font-medium">
+                {showAll ? `Showing all ${notifications.length}` : `Showing 2 of ${notifications.length} updates`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowAll((prev) => !prev)}
+                className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              >
+                {showAll ? (
+                  <>Show Less <FaChevronUp className="text-[8px]" /></>
+                ) : (
+                  <>View All ({notifications.length}) <FaChevronDown className="text-[8px]" /></>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

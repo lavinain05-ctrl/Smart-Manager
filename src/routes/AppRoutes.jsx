@@ -29,6 +29,7 @@ import Bills from "../pages/admin/Bills";
 import CollectorDailyReport from "../pages/admin/CollectorDailyReport";
 import Notices from "../pages/admin/Notices";
 import Complaints from "../pages/admin/Complaints";
+import Suggestions from "../pages/admin/Suggestions";
 import Events from "../pages/admin/Events";
 import PendingRegistrations from "../pages/admin/PendingRegistrations";
 import ManageFamilyMembers from "../pages/admin/ManageFamilyMembers";
@@ -37,6 +38,7 @@ import ProfileRequests from "../pages/admin/ProfileRequests";
 import BlocksAndFlats from "../pages/admin/BlocksAndFlats";
 import Activities from "../pages/admin/Activities";
 import ActivityLogs from "../pages/admin/ActivityLogs";
+import ActiveDevices from "../pages/admin/ActiveDevices";
 import EmergencyContacts from "../pages/admin/EmergencyContacts";
 import RegistrationRequests from "../pages/admin/RegistrationRequests";
 import DeletedAccounts from "../pages/admin/DeletedAccounts";
@@ -46,7 +48,6 @@ import AccountRecovery from "../pages/admin/AccountRecovery";
 import ManageSupport from "../pages/admin/ManageSupport";
 
 import GarbageDashboard from "../pages/admin/GarbageDashboard";
-import GarbageAccounts from "../pages/admin/GarbageAccounts";
 import GarbageCollectors from "../pages/admin/GarbageCollectors";
 import GarbageReports from "../pages/admin/GarbageReports";
 import GarbageRequests from "../pages/admin/GarbageRequests";
@@ -69,6 +70,7 @@ import ResidentReceipts from "../pages/resident/ResidentReceipts";
 import ResidentNotices from "../pages/resident/ResidentNotices";
 import ResidentProfile from "../pages/resident/ResidentProfile";
 import ResidentComplaints from "../pages/resident/ResidentComplaints";
+import ResidentSuggestions from "../pages/resident/ResidentSuggestions";
 import ResidentEvents from "../pages/resident/ResidentEvents";
 import ResidentActivities from "../pages/resident/ResidentActivities";
 import ResidentEmergency from "../pages/resident/ResidentEmergency";
@@ -93,10 +95,27 @@ import CommitteeGarbage from "../pages/committee/CommitteeGarbage";
 import CommitteeCollect from "../pages/committee/CommitteeCollect";
 import CommitteeCollectionHistory from "../pages/committee/CommitteeCollectionHistory";
 import ImpersonationBanner from "../components/common/ImpersonationBanner";
+import ImpersonatedMobileFrame from "../components/common/ImpersonatedMobileFrame";
+import { useAuth } from "../context/AuthContext";
 
-export default function AppRoutes() {
+function AppContent() {
+  const { isImpersonating, impersonatedDeviceMode } = useAuth();
+  const isInsideFrame =
+    typeof window !== "undefined" &&
+    (window.self !== window.top ||
+      new URLSearchParams(window.location.search).has("simulated_frame"));
+
+  if (isImpersonating && impersonatedDeviceMode === "mobile" && !isInsideFrame) {
+    return (
+      <>
+        <ImpersonationBanner />
+        <ImpersonatedMobileFrame />
+      </>
+    );
+  }
+
   return (
-    <BrowserRouter>
+    <>
       <ImpersonationBanner />
       <Routes>
 
@@ -241,6 +260,11 @@ export default function AppRoutes() {
           />
 
           <Route
+            path="suggestions"
+            element={<Suggestions />}
+          />
+
+          <Route
             path="events"
             element={<Events />}
           />
@@ -273,6 +297,16 @@ export default function AppRoutes() {
           <Route
             path="activity-logs"
             element={<ActivityLogs />}
+          />
+
+          <Route
+            path="devices"
+            element={<ActiveDevices />}
+          />
+
+          <Route
+            path="active-sessions"
+            element={<ActiveDevices />}
           />
 
           <Route
@@ -317,7 +351,7 @@ export default function AppRoutes() {
           />
           <Route
             path="garbage/accounts"
-            element={<GarbageAccounts />}
+            element={<Navigate to="/admin/garbage/dashboard" replace />}
           />
           <Route
             path="garbage/bills"
@@ -459,6 +493,11 @@ export default function AppRoutes() {
           <Route
             path="complaints"
             element={<ResidentComplaints />}
+          />
+
+          <Route
+            path="suggestions"
+            element={<ResidentSuggestions />}
           />
 
           <Route
@@ -705,6 +744,14 @@ export default function AppRoutes() {
         />
 
       </Routes>
+    </>
+  );
+}
+
+export default function AppRoutes() {
+  return (
+    <BrowserRouter>
+      <AppContent />
     </BrowserRouter>
   );
 }

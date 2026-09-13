@@ -12,11 +12,11 @@ import {
   FaMoneyBillWave,
   FaUserCheck,
   FaIdCard,
-  FaKey,
-  FaTrash,
   FaReceipt,
   FaShieldAlt,
   FaArrowRight,
+  FaRecycle,
+  FaKey,
 } from "react-icons/fa";
 
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
@@ -29,6 +29,8 @@ import { useComplaints } from "../../context/ComplaintContext";
 import { useCommittee } from "../../context/CommitteeContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useResidents } from "../../context/ResidentContext";
+import { useGarbage } from "../../context/GarbageContext";
+import { useBills } from "../../context/BillContext";
 import RecentUpdatesCard from "../../components/notifications/RecentUpdatesCard";
 
 export default function CommitteeDashboard() {
@@ -39,6 +41,8 @@ export default function CommitteeDashboard() {
   const { committee } = useCommittee();
   const { payments = [] } = usePayments();
   const { residents = [] } = useResidents();
+  const { garbageBills = [] } = useGarbage();
+  const { bills = [] } = useBills();
 
   const [profile, setProfile] = useState(null);
   const [permissions, setPermissions] = useState(user?.permissions || {});
@@ -100,6 +104,87 @@ export default function CommitteeDashboard() {
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
   }
+
+  // ══════════════════════════════════════════════════════
+  // Personal Flat Garbage Resolution for Committee Member
+  // ══════════════════════════════════════════════════════
+  const cleanPhone = useMemo(() => {
+    const raw = user?.phone || user?.mobile || (user?.email?.includes("@") ? user.email.split("@")[0] : "");
+    const digits = String(raw).replace(/\D/g, "");
+    return digits.length >= 10 ? digits.slice(-10) : digits;
+  }, [user]);
+
+  const canonicalResident = useMemo(() => {
+    return (
+      residents.find((r) => r.id === user?.residentId || r.id === user?.uid) ||
+      residents.find((r) => {
+        if (!cleanPhone) return false;
+        const rDigits = String(r.mobile || r.phone || "").replace(/\D/g, "");
+        const rClean = rDigits.length >= 10 ? rDigits.slice(-10) : rDigits;
+        return rClean === cleanPhone;
+      }) ||
+      residents.find(
+        (r) =>
+          user?.email &&
+          !user.email.includes("firebaseapp.com") &&
+          r.email?.toLowerCase() === user.email.toLowerCase()
+      ) ||
+      residents.find(
+        (r) =>
+          user?.name &&
+          r.owner?.toLowerCase() === user.name.toLowerCase()
+      ) ||
+      null
+    );
+  }, [residents, user, cleanPhone]);
+
+  const canonicalResidentId = canonicalResident?.id || user?.residentId || user?.uid;
+
+  const myPersonalPayments = useMemo(() => {
+    return payments.filter((p) => {
+      if (p.residentId === canonicalResidentId || p.residentId === user?.residentId || p.residentId === user?.uid) {
+        return true;
+      }
+      if (canonicalResident?.id && p.residentId === canonicalResident.id) {
+        return true;
+      }
+      if (cleanPhone && p.mobile) {
+        const pClean = String(p.mobile).replace(/\D/g, "").slice(-10);
+        if (pClean === cleanPhone) return true;
+      }
+      return false;
+    });
+  }, [payments, canonicalResidentId, user, canonicalResident, cleanPhone]);
+
+  const currentMonthName = useMemo(() => new Date().toLocaleString("default", { month: "long" }), []);
+  const currentYearNum = useMemo(() => new Date().getFullYear(), []);
+
+  const currentMonthPersonalPayment = myPersonalPayments.find(
+    (p) => p.month === currentMonthName && Number(p.year) === currentYearNum
+  );
+
+  const currentMonthPersonalBill = useMemo(() => {
+    return (
+      garbageBills.find(
+        (g) =>
+          (g.residentId === canonicalResidentId || g.residentId === user?.uid) &&
+          g.month === currentMonthName &&
+          Number(g.year) === currentYearNum
+      ) ||
+      bills.find(
+        (b) =>
+          (b.residentId === canonicalResidentId || b.residentId === user?.uid) &&
+          b.month === currentMonthName &&
+          Number(b.year) === currentYearNum
+      ) ||
+      null
+    );
+  }, [garbageBills, bills, canonicalResidentId, user, currentMonthName, currentYearNum]);
+
+  const isCurrentMonthPaid = Boolean(
+    currentMonthPersonalPayment || currentMonthPersonalBill?.status === "Paid"
+  );
+  const monthlyCharge = Number(canonicalResident?.charge || 80);
 
   return (
     <div className="space-y-6">
@@ -200,6 +285,68 @@ export default function CommitteeDashboard() {
             <p className="text-sm text-indigo-100 leading-relaxed">{profile.introduction}</p>
           </div>
         )}
+      </div>
+
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* My Flat Garbage Collection Status Banner               */}
+      {/* ══════════════════════════════════════════════════════ */}
+      <div className={`rounded-3xl p-5 sm:p-6 border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+        isCurrentMonthPaid
+          ? "bg-gradient-to-r from-emerald-50 via-teal-50/60 to-emerald-50 border-emerald-200"
+          : "bg-gradient-to-r from-amber-50 via-orange-50/60 to-amber-50 border-amber-200"
+      }`}>
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow-md ${
+            isCurrentMonthPaid
+              ? "bg-emerald-600 text-white shadow-emerald-600/20"
+              : "bg-amber-500 text-white shadow-amber-500/20"
+          }`}>
+            <FaRecycle />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                isCurrentMonthPaid
+                  ? "bg-emerald-200 text-emerald-950 border-emerald-300"
+                  : "bg-amber-200 text-amber-950 border-amber-300"
+              }`}>
+                {isCurrentMonthPaid ? "✅ Garbage Fee Paid" : "🔔 Garbage Fee Due"}
+              </span>
+              <span className="text-xs font-bold text-slate-800">
+                {currentMonthName} {currentYearNum}
+              </span>
+              <span className="text-xs text-slate-500 font-medium">
+                • Flat {canonicalResident?.flat || user?.flat || "—"}
+              </span>
+            </div>
+
+            <p className="text-xs sm:text-sm font-bold text-slate-900 mt-1">
+              {isCurrentMonthPaid
+                ? `Doorstep garbage collection fee for ${currentMonthName} ${currentYearNum} is paid.`
+                : `Doorstep garbage collection fee for ${currentMonthName} ${currentYearNum} is pending (₹${monthlyCharge}).`}
+            </p>
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+              {isCurrentMonthPaid
+                ? "Your flat's daily doorstep pickup is active. Official receipt is available."
+                : "Give or record your flat's monthly collection payment now to keep service active."}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+          <Link
+            to="/committee/garbage"
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs ${
+              isCurrentMonthPaid
+                ? "bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200"
+                : "bg-emerald-600 hover:bg-emerald-700 text-white"
+            }`}
+          >
+            <FaRecycle className="text-xs" />
+            <span>{isCurrentMonthPaid ? "View Service & Receipts" : `Pay ₹${monthlyCharge} Now`}</span>
+            <FaArrowRight className="text-[10px]" />
+          </Link>
+        </div>
       </div>
 
       {/* Financial Collection Operations (if collection powers assigned) */}

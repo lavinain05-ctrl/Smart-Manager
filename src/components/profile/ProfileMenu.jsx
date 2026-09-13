@@ -7,6 +7,7 @@ import {
   FaUserCircle,
   FaUserShield,
   FaSlidersH,
+  FaLaptop,
 } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
@@ -112,6 +113,15 @@ export default function ProfileMenu() {
                 >
                   <FaUserShield className="text-emerald-500 text-base" />
                   <span>Admin Account & Access</span>
+                </Link>
+
+                <Link
+                  to="/admin/devices"
+                  onClick={() => setOpen(false)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition"
+                >
+                  <FaLaptop className="text-blue-500 text-base" />
+                  <span>Active Devices & Logins</span>
                 </Link>
               </>
             )}

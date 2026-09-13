@@ -13,6 +13,8 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 
 import { useGarbage } from "../../context/GarbageContext";
+import { usePayments } from "../../context/PaymentContext";
+import { isGcParticipating } from "../../services/statisticsService";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 
 const MONTHS = [
@@ -24,6 +26,7 @@ export default function GarbageBills() {
   const {
     garbageAccounts,
     garbageBills,
+    residents = [],
     loading,
     selectedMonth,
     selectedYear,
@@ -34,6 +37,8 @@ export default function GarbageBills() {
     deleteBill,
   } = useGarbage();
 
+  const { payments = [] } = usePayments();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [blockFilter, setBlockFilter] = useState("all");
@@ -41,14 +46,68 @@ export default function GarbageBills() {
   const [payForm, setPayForm] = useState({ amount: "", paymentMethod: "Cash" });
   const [confirmDelete, setConfirmDelete] = useState(null);
 
-  // Monthly bills
-  const monthlyBills = useMemo(
-    () =>
-      garbageBills.filter(
-        (b) => b.month === selectedMonth && Number(b.year) === Number(selectedYear)
-      ),
-    [garbageBills, selectedMonth, selectedYear]
-  );
+  // Synchronized monthly bills: merge garbageBills with all active participating residents
+  const monthlyBills = useMemo(() => {
+    const billMap = new Map();
+
+    // 1. Existing bills from garbageBills
+    garbageBills
+      .filter((b) => b.month === selectedMonth && Number(b.year) === Number(selectedYear))
+      .forEach((b) => {
+        billMap.set(b.residentId, { ...b });
+      });
+
+    // 2. Active participating residents
+    const activeParticipants = (residents || []).filter(
+      (r) => isGcParticipating(r) && r.status !== "Inactive" && r.status !== "inactive"
+    );
+
+    activeParticipants.forEach((r) => {
+      const paymentMatch = (payments || []).find(
+        (p) =>
+          (p.residentId === r.id || p.residentId === r.uid || (r.mobile && p.mobile && p.mobile.includes(r.mobile.slice(-10)))) &&
+          p.month === selectedMonth &&
+          Number(p.year) === Number(selectedYear)
+      );
+
+      const isPaid = Boolean(paymentMatch);
+      const charge = Number(Number(r.charge) > 0 ? r.charge : 80);
+
+      if (billMap.has(r.id)) {
+        const b = billMap.get(r.id);
+        if (isPaid && b.status !== "Paid" && b.status !== "Exempted") {
+          billMap.set(r.id, {
+            ...b,
+            status: "Paid",
+            paidAmount: Number(paymentMatch.amount || b.amount || charge),
+            paymentDate: paymentMatch.paymentDate || b.paymentDate || "",
+            paymentMethod: paymentMatch.paymentMethod || b.paymentMethod || "Cash",
+            collectedBy: paymentMatch.collector || b.collectedBy || "Collector",
+          });
+        }
+      } else {
+        billMap.set(r.id, {
+          id: `auto-${r.id}`,
+          residentId: r.id,
+          residentName: r.owner || r.name || "Resident",
+          flat: r.flat || "—",
+          block: r.block || "General",
+          amount: charge,
+          status: isPaid ? "Paid" : "Pending",
+          paidAmount: isPaid ? Number(paymentMatch.amount || charge) : 0,
+          month: selectedMonth,
+          year: Number(selectedYear),
+          dueDate: `10 ${selectedMonth} ${selectedYear}`,
+          paymentDate: paymentMatch?.paymentDate || "",
+          paymentMethod: paymentMatch?.paymentMethod || "",
+          collectedBy: paymentMatch?.collector || "",
+          _isVirtual: true,
+        });
+      }
+    });
+
+    return Array.from(billMap.values());
+  }, [garbageBills, residents, payments, selectedMonth, selectedYear]);
 
   // Unique blocks
   const blocks = useMemo(() => {

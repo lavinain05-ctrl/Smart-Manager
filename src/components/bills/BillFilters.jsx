@@ -1,4 +1,4 @@
-import { FaSearch, FaFilter, FaBuilding, FaFileExcel, FaFilePdf } from "react-icons/fa";
+import { FaSearch, FaFilter, FaBuilding, FaFileExcel, FaFilePdf, FaPrint } from "react-icons/fa";
 
 export default function BillFilters({
   search,
@@ -10,6 +10,7 @@ export default function BillFilters({
   blocks = [],
   onExportExcel,
   onExportPdf,
+  onPrintBills,
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
@@ -61,8 +62,18 @@ export default function BillFilters({
           </div>
         )}
 
-        {/* Export Buttons */}
+        {/* Export and Print Buttons */}
         <div className="flex items-center gap-2 shrink-0">
+          {onPrintBills && (
+            <button
+              onClick={onPrintBills}
+              className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-3 border border-purple-300 text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-xl text-sm font-semibold transition shadow-xs"
+              title="Print All Monthly Bills (Block-Wise)"
+            >
+              <FaPrint className="text-purple-600" />
+              <span>Print (Block-Wise)</span>
+            </button>
+          )}
           {onExportExcel && (
             <button
               onClick={onExportExcel}

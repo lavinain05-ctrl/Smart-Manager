@@ -1,10 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   FaPlus,
   FaTimes,
   FaExclamationCircle,
   FaSearch,
-  FaFilter,
   FaCheckCircle,
   FaClock,
   FaSpinner,
@@ -18,6 +17,8 @@ import {
 import { useComplaints } from "../../context/ComplaintContext";
 import { useAuth } from "../../context/AuthContext";
 import { useResidents } from "../../context/ResidentContext";
+import { subscribeSettings } from "../../services/settingsService";
+import { FaBan } from "react-icons/fa";
 
 const CATEGORIES = [
   "Garbage",
@@ -98,6 +99,19 @@ export default function ResidentComplaints() {
   const [expandedId, setExpandedId] = useState(null);
   const [commentText, setCommentText] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const [settings, setSettings] = useState({ enableComplaints: true });
+
+  useEffect(() => {
+    const unsub = subscribeSettings((data) => {
+      setSettings(data || { enableComplaints: true });
+    });
+    return () => {
+      if (typeof unsub === "function") unsub();
+    };
+  }, []);
+
+  const isComplaintsEnabled = settings?.enableComplaints !== false;
 
   // Form state
   const [category, setCategory] = useState("Garbage");
@@ -181,17 +195,34 @@ export default function ResidentComplaints() {
           <p className="text-gray-500">Submit and track your complaints</p>
         </div>
 
-        <button
-          onClick={() => {
-            resetForm();
-            setShowForm(true);
-          }}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold transition shadow-lg"
-        >
-          <FaPlus />
-          New Complaint
-        </button>
+        {isComplaintsEnabled ? (
+          <button
+            onClick={() => {
+              resetForm();
+              setShowForm(true);
+            }}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold transition shadow-lg self-start sm:self-auto"
+          >
+            <FaPlus />
+            New Complaint
+          </button>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold">
+            <FaBan /> Complaints Registration Paused
+          </span>
+        )}
       </div>
+
+      {/* Paused Notice Banner */}
+      {!isComplaintsEnabled && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-3">
+          <FaBan className="text-rose-600 text-lg mt-0.5 shrink-0" />
+          <div className="text-xs sm:text-sm text-rose-800">
+            <strong className="block font-bold">New Complaint Registration Paused</strong>
+            The society administration has temporarily paused new complaint submissions. You can still view, track, and communicate on your existing complaints below.
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">

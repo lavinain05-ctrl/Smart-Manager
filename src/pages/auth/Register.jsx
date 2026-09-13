@@ -15,6 +15,8 @@ import {
   FaCheckCircle,
   FaLeaf,
   FaExclamationCircle,
+  FaEye,
+  FaEyeSlash,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -44,6 +46,8 @@ export default function Register() {
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // ========== Resident Info ==========
   const [name, setName] = useState("");
@@ -259,15 +263,24 @@ export default function Register() {
                 <div className="relative">
                   <FaLock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="Min 6 characters"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    className="w-full pl-10 pr-10 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
                     minLength={6}
                     required
                     autoComplete="new-password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1 transition"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <FaEyeSlash className="text-sm" /> : <FaEye className="text-sm" />}
+                  </button>
                 </div>
               </div>
               <div>
@@ -277,15 +290,24 @@ export default function Register() {
                 <div className="relative">
                   <FaLock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                   <input
-                    type="password"
+                    type={showConfirmPassword ? "text" : "password"}
                     placeholder="Confirm password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full pl-10 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    className="w-full pl-10 pr-10 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
                     minLength={6}
                     required
                     autoComplete="new-password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1 transition"
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                    title={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? <FaEyeSlash className="text-sm" /> : <FaEye className="text-sm" />}
+                  </button>
                 </div>
               </div>
             </div>

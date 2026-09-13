@@ -287,6 +287,17 @@ service cloud.firestore {
     }
 
     // ============================
+    // Active Device Sessions
+    // Allows managing active devices and remote logout
+    // ============================
+
+    match /activeSessions/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // ============================
     // Blocked Accounts & Suspensions
     // ============================
 
@@ -455,6 +466,26 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create: if true;
       allow update, delete: if false;
+    }
+
+    // ============================
+    // Notifications
+    // ============================
+
+    match /notifications/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn();
+    }
+
+    // ============================
+    // Suggestions
+    // ============================
+
+    match /suggestions/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || isCommittee();
     }
 
     // ============================

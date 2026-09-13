@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { getHomeRouteForRole } from "../../services/authService";
 
 export default function ResidentRoute({ children }) {
   const { user, loading, isImpersonating } = useAuth();
@@ -17,9 +18,13 @@ export default function ResidentRoute({ children }) {
     return children;
   }
 
-  const role = (user?.role || "").toLowerCase();
-  if (!user || role !== "resident") {
+  if (!user) {
     return <Navigate to="/" replace />;
+  }
+
+  const role = (user?.role || "").toLowerCase();
+  if (role !== "resident") {
+    return <Navigate to={getHomeRouteForRole(role)} replace />;
   }
 
   // Block pending or rejected residents

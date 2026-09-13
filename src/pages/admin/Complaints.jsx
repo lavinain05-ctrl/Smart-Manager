@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   FaExclamationCircle,
   FaSearch,
@@ -13,11 +13,15 @@ import {
   FaCommentDots,
   FaPaperPlane,
   FaUserTag,
+  FaToggleOn,
+  FaToggleOff,
 } from "react-icons/fa";
+import toast from "react-hot-toast";
 
 import { useComplaints } from "../../context/ComplaintContext";
 import { useAuth } from "../../context/AuthContext";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
+import { subscribeSettings, saveSettings } from "../../services/settingsService";
 
 const CATEGORIES = [
   "Garbage",
@@ -108,6 +112,36 @@ export default function Complaints() {
   const [statusNote, setStatusNote] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
 
+  const [settings, setSettings] = useState(null);
+  const [togglingComplaints, setTogglingComplaints] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeSettings((data) => {
+      setSettings(data);
+    });
+    return () => unsub();
+  }, []);
+
+  const isComplaintsEnabled = settings?.enableComplaints !== false;
+
+  const handleToggleComplaints = async () => {
+    try {
+      setTogglingComplaints(true);
+      const nextVal = !isComplaintsEnabled;
+      await saveSettings({ enableComplaints: nextVal });
+      toast.success(
+        nextVal
+          ? "Resident complaint submissions enabled"
+          : "Resident complaint submissions paused"
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update complaint setting");
+    } finally {
+      setTogglingComplaints(false);
+    }
+  };
+
   // Comment state
   const [commentText, setCommentText] = useState("");
 
@@ -161,7 +195,7 @@ export default function Complaints() {
     }
 
     if (Object.keys(updateData).length > 0) {
-      const { updateComplaint } = await import("../../context/ComplaintContext").then(() => {
+      const { updateComplaint: _updateComplaint } = await import("../../context/ComplaintContext").then(() => {
         // We use the context function via updateComplaintStatus which handles timeline
         return {};
       });
@@ -211,9 +245,40 @@ export default function Complaints() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">Complaints</h1>
-        <p className="text-gray-500">Manage resident complaints and grievances</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Complaints</h1>
+          <p className="text-gray-500">Manage resident complaints and grievances</p>
+        </div>
+
+        {/* Feature Toggle */}
+        <div className="flex items-center gap-3 bg-white dark:bg-gray-800 px-4 py-2.5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+          <div className="text-right">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              Resident Submissions
+            </p>
+            <p className="text-sm font-bold text-gray-900 dark:text-white">
+              {isComplaintsEnabled ? (
+                <span className="text-emerald-600 dark:text-emerald-400">Accepting</span>
+              ) : (
+                <span className="text-rose-500">Paused</span>
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleToggleComplaints}
+            disabled={togglingComplaints}
+            title={isComplaintsEnabled ? "Click to pause resident complaints" : "Click to enable resident complaints"}
+            className="text-2xl transition-transform active:scale-95 disabled:opacity-50"
+          >
+            {isComplaintsEnabled ? (
+              <FaToggleOn className="text-emerald-500 hover:text-emerald-600" />
+            ) : (
+              <FaToggleOff className="text-gray-400 hover:text-gray-500" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

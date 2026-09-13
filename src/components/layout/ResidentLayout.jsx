@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Outlet, NavLink, useLocation } from "react-router-dom";
+import { Outlet, NavLink, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useTheme } from "../../context/ThemeContext";
 import {
   FaHome,
   FaFileInvoiceDollar,
@@ -18,19 +19,37 @@ import {
   FaHandHoldingHeart,
   FaUserTie,
   FaQuestionCircle,
+  FaLightbulb,
   FaChevronDown,
   FaChevronRight,
   FaBars,
   FaTimes,
+  FaMoon,
+  FaSun,
+  FaChevronLeft,
 } from "react-icons/fa";
 import NotificationBell from "../notifications/NotificationBell";
 
 export default function ResidentLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const { darkMode, toggleTheme } = useTheme();
 
   // Mobile drawer state
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
+  // Desktop sidebar collapse state
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    return localStorage.getItem("smartmanager_resident_sidebar_collapsed") === "true";
+  });
+
+  const toggleSidebarCollapse = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("smartmanager_resident_sidebar_collapsed", String(next));
+      return next;
+    });
+  };
 
   // Check if current route is part of Garbage Collection module
   const isGarbageActive =
@@ -39,221 +58,31 @@ export default function ResidentLayout() {
     location.pathname === "/resident/payments" ||
     location.pathname === "/resident/receipts";
 
-  // Garbage accordion state (default open, especially when active)
+  // Garbage accordion state
   const [garbageOpen, setGarbageOpen] = useState(true);
+  const isGarbageSectionOpen = isGarbageActive || garbageOpen;
 
   const garbageItems = [
-    { name: "Garbage Overview", icon: <FaRecycle />, path: "/resident/garbage", subtitle: "Status & Service" },
-    { name: "My Bills", icon: <FaFileInvoiceDollar />, path: "/resident/bills", subtitle: "Monthly GC Bills" },
-    { name: "Payment History", icon: <FaHistory />, path: "/resident/payments", subtitle: "Collections Record" },
-    { name: "Receipts", icon: <FaReceipt />, path: "/resident/receipts", subtitle: "Download Receipts" },
+    { name: "Garbage Overview", icon: <FaRecycle />, path: "/resident/garbage" },
+    { name: "My Bills", icon: <FaFileInvoiceDollar />, path: "/resident/bills" },
+    { name: "Payment History", icon: <FaHistory />, path: "/resident/payments" },
+    { name: "Receipts", icon: <FaReceipt />, path: "/resident/receipts" },
   ];
 
   const societyItems = [
-    { name: "RWA Committee", icon: <FaUserTie />, path: "/resident/committee" },
-    { name: "Notices", icon: <FaBell />, path: "/resident/notices" },
-    { name: "Complaints", icon: <FaExclamationCircle />, path: "/resident/complaints" },
-    { name: "Events", icon: <FaCalendarAlt />, path: "/resident/events" },
-    { name: "Activities", icon: <FaLeaf />, path: "/resident/activities" },
-    { name: "Emergency", icon: <FaPhone />, path: "/resident/emergency" },
-    { name: "Help & Support", icon: <FaQuestionCircle />, path: "/resident/support" },
+    { name: "RWA Committee", icon: <FaUserTie className="text-amber-400" />, path: "/resident/committee" },
+    { name: "Notices", icon: <FaBell className="text-purple-400" />, path: "/resident/notices" },
+    { name: "Complaints", icon: <FaExclamationCircle className="text-rose-400" />, path: "/resident/complaints" },
+    { name: "Suggestion Box", icon: <FaLightbulb className="text-amber-400" />, path: "/resident/suggestions" },
+    { name: "Events", icon: <FaCalendarAlt className="text-indigo-400" />, path: "/resident/events" },
+    { name: "Activities", icon: <FaLeaf className="text-emerald-400" />, path: "/resident/activities" },
+    { name: "Emergency Contacts", icon: <FaPhone className="text-rose-400" />, path: "/resident/emergency" },
+    { name: "Help & Support", icon: <FaQuestionCircle className="text-teal-400" />, path: "/resident/support" },
   ];
 
   return (
-    <div className="flex h-screen bg-slate-100 overflow-hidden">
-
-      {/* Desktop & Mobile Drawer Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-gradient-to-b from-blue-700 via-blue-800 to-blue-950 text-white flex flex-col shadow-2xl transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
-          mobileDrawerOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
-      >
-        {/* Logo Header */}
-        <div className="h-20 flex items-center justify-between px-6 border-b border-blue-600/50">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-white text-blue-700 flex items-center justify-center text-2xl shadow-md">
-              <FaBuilding />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight">Resident Portal</h1>
-              <p className="text-xs text-blue-200 truncate max-w-[130px]">
-                {user?.name || "Resident"}
-              </p>
-            </div>
-          </div>
-          {/* Close mobile drawer button */}
-          <button
-            onClick={() => setMobileDrawerOpen(false)}
-            className="lg:hidden text-blue-200 hover:text-white p-1 rounded-lg"
-          >
-            <FaTimes className="text-xl" />
-          </button>
-        </div>
-
-        {/* Navigation Content */}
-        <nav className="flex-1 overflow-y-auto px-3.5 py-4 space-y-4 custom-scrollbar">
-
-          {/* 1. Dashboard */}
-          <div>
-            <NavLink
-              to="/resident/dashboard"
-              onClick={() => setMobileDrawerOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3.5 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  isActive
-                    ? "bg-white text-blue-800 font-bold shadow-lg"
-                    : "text-white/90 hover:bg-white/10 hover:text-white"
-                }`
-              }
-            >
-              <span className="text-lg"><FaHome /></span>
-              <span className="font-medium text-sm">Dashboard</span>
-            </NavLink>
-          </div>
-
-          {/* 2. GARBAGE COLLECTION MODULE (Distinct Module Card) */}
-          <div className="rounded-2xl bg-gradient-to-br from-emerald-950/40 to-blue-950/60 border border-emerald-500/30 p-2 shadow-inner">
-            {/* Module Accordion Header */}
-            <button
-              onClick={() => setGarbageOpen(!garbageOpen)}
-              type="button"
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
-                isGarbageActive ? "text-emerald-300" : "text-emerald-200 hover:text-white"
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 flex items-center justify-center text-sm shadow-sm">
-                  <FaRecycle />
-                </div>
-                <div className="text-left">
-                  <span className="font-bold text-xs uppercase tracking-wider block">
-                    Garbage Module
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-400/20 text-emerald-300 border border-emerald-400/30">
-                  4 Tabs
-                </span>
-                <span className="text-xs text-emerald-300/80">
-                  {garbageOpen ? <FaChevronDown /> : <FaChevronRight />}
-                </span>
-              </div>
-            </button>
-
-            {/* Sub-Items */}
-            {garbageOpen && (
-              <div className="mt-1.5 space-y-1 pl-1">
-                {garbageItems.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setMobileDrawerOpen(false)}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
-                        isActive
-                          ? "bg-emerald-500 text-white shadow-md font-bold"
-                          : "text-emerald-100/90 hover:bg-emerald-500/20 hover:text-white"
-                      }`
-                    }
-                  >
-                    <span className="text-sm">{item.icon}</span>
-                    <span>{item.name}</span>
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 3. Special Collections Module */}
-          <div>
-            <div className="px-3 pb-1 pt-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-300/70">
-                Contributions
-              </span>
-            </div>
-            <NavLink
-              to="/resident/special-collections"
-              onClick={() => setMobileDrawerOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3.5 px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                  isActive
-                    ? "bg-white text-blue-800 font-bold shadow-lg"
-                    : "text-white/90 hover:bg-white/10 hover:text-white"
-                }`
-              }
-            >
-              <span className="text-lg text-pink-300"><FaHandHoldingHeart /></span>
-              <span className="font-medium text-sm">Special Collections</span>
-            </NavLink>
-          </div>
-
-          {/* 4. Society & Services */}
-          <div>
-            <div className="px-3 pb-1 pt-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-300/70">
-                Society & Services
-              </span>
-            </div>
-            <div className="space-y-1">
-              {societyItems.map((item) => (
-                <NavLink
-                  key={item.name}
-                  to={item.path}
-                  onClick={() => setMobileDrawerOpen(false)}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3.5 px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                      isActive
-                        ? "bg-white text-blue-800 font-bold shadow-lg"
-                        : "text-white/90 hover:bg-white/10 hover:text-white"
-                    }`
-                  }
-                >
-                  <span className="text-base text-blue-200">{item.icon}</span>
-                  <span className="font-medium text-sm">{item.name}</span>
-                </NavLink>
-              ))}
-            </div>
-          </div>
-
-          {/* 5. Account */}
-          <div>
-            <div className="px-3 pb-1 pt-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-300/70">
-                Account
-              </span>
-            </div>
-            <NavLink
-              to="/resident/profile"
-              onClick={() => setMobileDrawerOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3.5 px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                  isActive
-                    ? "bg-white text-blue-800 font-bold shadow-lg"
-                    : "text-white/90 hover:bg-white/10 hover:text-white"
-                }`
-              }
-            >
-              <span className="text-lg text-blue-200"><FaUser /></span>
-              <span className="font-medium text-sm">Profile & Settings</span>
-            </NavLink>
-          </div>
-
-        </nav>
-
-        {/* Footer Logout */}
-        <div className="border-t border-blue-600/50 p-3.5">
-          <button
-            onClick={logout}
-            className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-xl bg-red-600/80 hover:bg-red-600 text-white text-sm font-semibold transition shadow-sm"
-          >
-            <FaSignOutAlt />
-            <span>Logout</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Mobile Drawer Backdrop */}
+    <div className="flex h-screen bg-slate-100 dark:bg-slate-950 overflow-hidden">
+      {/* Mobile Overlay */}
       {mobileDrawerOpen && (
         <div
           onClick={() => setMobileDrawerOpen(false)}
@@ -261,45 +90,371 @@ export default function ResidentLayout() {
         />
       )}
 
-      {/* Main Layout Area */}
-      <div className="flex flex-col flex-1 overflow-hidden">
+      {/* Desktop & Mobile Drawer Sidebar */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white flex flex-col shadow-2xl border-r border-slate-800 transition-all duration-300 ease-in-out lg:static lg:translate-x-0 ${
+          mobileDrawerOpen ? "translate-x-0" : "-translate-x-full"
+        } ${isCollapsed ? "lg:w-20" : "lg:w-68"}`}
+      >
+        {/* Brand Header */}
+        <div
+          className={`h-20 flex items-center border-b border-slate-800/80 px-4 transition-all duration-300 ${
+            isCollapsed ? "justify-center" : "justify-between"
+          }`}
+        >
+          <Link
+            to="/resident/dashboard"
+            onClick={() => setMobileDrawerOpen(false)}
+            title="Go to Home / Dashboard"
+            className="flex items-center gap-3 overflow-hidden group cursor-pointer hover:opacity-90 transition"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-lg shadow-lg shadow-blue-500/25 shrink-0 group-hover:scale-105 transition-transform">
+              <FaBuilding />
+            </div>
 
+            {!isCollapsed && (
+              <div className="min-w-0 transition-opacity duration-200">
+                <h1 className="text-sm font-black tracking-tight leading-snug truncate text-white group-hover:text-blue-300 transition-colors">
+                  Resident Portal
+                </h1>
+                <p className="text-[10px] text-blue-400 font-bold tracking-wider uppercase truncate">
+                  {user?.name || "D Block Resident"}
+                </p>
+              </div>
+            )}
+          </Link>
+
+          {/* Close Mobile Drawer Button */}
+          <button
+            onClick={() => setMobileDrawerOpen(false)}
+            className="lg:hidden text-slate-400 hover:text-white p-1 rounded-lg"
+            aria-label="Close menu"
+          >
+            <FaTimes className="text-lg" />
+          </button>
+
+          {/* Desktop Collapse Toggle Button */}
+          {!isCollapsed && (
+            <button
+              onClick={toggleSidebarCollapse}
+              className="hidden lg:flex w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white items-center justify-center text-xs transition"
+              title="Collapse sidebar"
+            >
+              <FaChevronLeft />
+            </button>
+          )}
+        </div>
+
+        {/* When collapsed on desktop, show an expand toggle button */}
+        {isCollapsed && (
+          <div className="hidden lg:flex justify-center pt-2 pb-1 border-b border-slate-800/60">
+            <button
+              onClick={toggleSidebarCollapse}
+              className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-xs transition"
+              title="Expand sidebar"
+            >
+              <FaChevronRight />
+            </button>
+          </div>
+        )}
+
+        {/* Navigation Content */}
+        <nav className="flex-1 overflow-y-auto px-3 py-3.5 space-y-3.5 custom-scrollbar">
+          {/* 1. Dashboard */}
+          <div>
+            <NavLink
+              to="/resident/dashboard"
+              onClick={() => setMobileDrawerOpen(false)}
+              title={isCollapsed ? "Dashboard" : undefined}
+              className={({ isActive }) =>
+                `group relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
+                  isActive
+                    ? "bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20"
+                    : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                } ${isCollapsed ? "justify-center px-0 py-3" : ""}`
+              }
+            >
+              <span className="text-base flex items-center justify-center shrink-0">
+                <FaHome />
+              </span>
+              {!isCollapsed && <span>Dashboard</span>}
+
+              {/* Tooltip in collapsed mode */}
+              {isCollapsed && (
+                <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-950 text-white text-xs font-semibold rounded-lg shadow-xl whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 border border-slate-800">
+                  Dashboard
+                </div>
+              )}
+            </NavLink>
+          </div>
+
+          {/* 2. Garbage Collection Module */}
+          <div className="space-y-1">
+            {!isCollapsed && (
+              <div className="px-3 pt-1 pb-1 flex items-center justify-between">
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                  Garbage Services
+                </span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-400 font-bold">
+                  4 Tabs
+                </span>
+              </div>
+            )}
+
+            {isCollapsed ? (
+              // Collapsed view for Garbage Module: direct link or clean icon
+              <NavLink
+                to="/resident/garbage"
+                onClick={() => setMobileDrawerOpen(false)}
+                title="Garbage Collection"
+                className={({ isActive }) =>
+                  `group relative flex items-center justify-center py-3 rounded-xl transition-all duration-200 ${
+                    isActive || isGarbageActive
+                      ? "bg-emerald-600 text-white font-bold shadow-md shadow-emerald-600/20"
+                      : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                  }`
+                }
+              >
+                <span className="text-base text-emerald-400 group-hover:text-white">
+                  <FaRecycle />
+                </span>
+                <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-950 text-white text-xs font-semibold rounded-lg shadow-xl whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 border border-slate-800">
+                  Garbage Services
+                </div>
+              </NavLink>
+            ) : (
+              // Expanded view: Clean accordion
+              <div className="rounded-2xl bg-slate-850/60 border border-slate-800/80 p-1.5 space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setGarbageOpen((prev) => !prev)}
+                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800/50 transition"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-xs">
+                      <FaRecycle />
+                    </div>
+                    <span>Doorstep Collection</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500">
+                    {isGarbageSectionOpen ? <FaChevronDown /> : <FaChevronRight />}
+                  </span>
+                </button>
+
+                {isGarbageSectionOpen && (
+                  <div className="space-y-0.5 pt-0.5">
+                    {garbageItems.map((item) => (
+                      <NavLink
+                        key={item.path}
+                        to={item.path}
+                        onClick={() => setMobileDrawerOpen(false)}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                            isActive
+                              ? "bg-emerald-500/20 text-emerald-400 font-bold"
+                              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                          }`
+                        }
+                      >
+                        <span className="text-sm shrink-0">{item.icon}</span>
+                        <span className="truncate">{item.name}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 3. Contributions & Special Drives */}
+          <div>
+            {!isCollapsed && (
+              <p className="px-3 pt-2 pb-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                Contributions
+              </p>
+            )}
+
+            {isCollapsed && <div className="h-px bg-slate-800/70 my-2 mx-2" />}
+
+            <NavLink
+              to="/resident/special-collections"
+              onClick={() => setMobileDrawerOpen(false)}
+              title={isCollapsed ? "Special Collections" : undefined}
+              className={({ isActive }) =>
+                `group relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
+                  isActive
+                    ? "bg-pink-600 text-white font-bold shadow-md shadow-pink-600/20"
+                    : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                } ${isCollapsed ? "justify-center px-0 py-3" : ""}`
+              }
+            >
+              <span className="text-base flex items-center justify-center shrink-0 text-pink-400 group-hover:text-white">
+                <FaHandHoldingHeart />
+              </span>
+              {!isCollapsed && <span className="truncate">Special Drives</span>}
+
+              {isCollapsed && (
+                <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-950 text-white text-xs font-semibold rounded-lg shadow-xl whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 border border-slate-800">
+                  Special Drives & Funds
+                </div>
+              )}
+            </NavLink>
+          </div>
+
+          {/* 4. Society & Community Services */}
+          <div>
+            {!isCollapsed && (
+              <p className="px-3 pt-2 pb-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                Society & Services
+              </p>
+            )}
+
+            {isCollapsed && <div className="h-px bg-slate-800/70 my-2 mx-2" />}
+
+            <div className="space-y-0.5">
+              {societyItems.map((item) => (
+                <NavLink
+                  key={item.name}
+                  to={item.path}
+                  onClick={() => setMobileDrawerOpen(false)}
+                  title={isCollapsed ? item.name : undefined}
+                  className={({ isActive }) =>
+                    `group relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
+                      isActive
+                        ? "bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20"
+                        : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                    } ${isCollapsed ? "justify-center px-0 py-3" : ""}`
+                  }
+                >
+                  <span className="text-base flex items-center justify-center shrink-0">
+                    {item.icon}
+                  </span>
+                  {!isCollapsed && <span className="truncate">{item.name}</span>}
+
+                  {isCollapsed && (
+                    <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-950 text-white text-xs font-semibold rounded-lg shadow-xl whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 border border-slate-800">
+                      {item.name}
+                    </div>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+
+          {/* 5. Profile & Settings */}
+          <div>
+            {!isCollapsed && (
+              <p className="px-3 pt-2 pb-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                My Account
+              </p>
+            )}
+
+            {isCollapsed && <div className="h-px bg-slate-800/70 my-2 mx-2" />}
+
+            <NavLink
+              to="/resident/profile"
+              onClick={() => setMobileDrawerOpen(false)}
+              title={isCollapsed ? "Profile & Settings" : undefined}
+              className={({ isActive }) =>
+                `group relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
+                  isActive
+                    ? "bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20"
+                    : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                } ${isCollapsed ? "justify-center px-0 py-3" : ""}`
+              }
+            >
+              <span className="text-base flex items-center justify-center shrink-0 text-sky-400 group-hover:text-white">
+                <FaUser />
+              </span>
+              {!isCollapsed && <span className="truncate">Profile & Flat</span>}
+
+              {isCollapsed && (
+                <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-950 text-white text-xs font-semibold rounded-lg shadow-xl whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 border border-slate-800">
+                  Profile & Flat
+                </div>
+              )}
+            </NavLink>
+          </div>
+        </nav>
+
+        {/* Footer: User Monogram & Logout */}
+        <div className="border-t border-slate-800/80 p-3">
+          <button
+            type="button"
+            onClick={logout}
+            title={isCollapsed ? "Logout" : undefined}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-slate-400 hover:bg-red-500/15 hover:text-red-400 transition text-xs font-semibold group ${
+              isCollapsed ? "justify-center px-0" : ""
+            }`}
+          >
+            <FaSignOutAlt className="text-base shrink-0 group-hover:-translate-x-0.5 transition-transform" />
+            {!isCollapsed && <span>Logout Account</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Layout Area */}
+      <div className="flex flex-col flex-1 overflow-hidden min-w-0">
         {/* Desktop Header */}
-        <header className="hidden lg:flex sticky top-0 z-20 h-16 bg-white border-b border-slate-200 px-8 items-center justify-between shadow-sm">
+        <header className="hidden lg:flex sticky top-0 z-20 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-8 items-center justify-between shadow-xs transition-colors">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
               Resident Workspace
             </span>
-            <span className="text-slate-300">•</span>
-            <span className="text-sm font-bold text-slate-800">
+            <span className="text-slate-300 dark:text-slate-700">•</span>
+            <span className="text-sm font-bold text-slate-800 dark:text-white">
               D BLOCK RWA INDRAPRASTHA
             </span>
           </div>
-          <div className="flex items-center gap-4">
-            <NotificationBell />
+
+          <div className="flex items-center gap-3">
+            {/* Theme Toggle Button */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+              title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+              {darkMode ? <FaSun className="text-yellow-500" /> : <FaMoon />}
+            </button>
+
+            <NotificationBell isDark={darkMode} />
           </div>
         </header>
 
         {/* Mobile Header */}
-        <header className="lg:hidden sticky top-0 z-30 h-16 bg-gradient-to-r from-blue-700 to-blue-800 text-white flex items-center justify-between px-4 shadow-md">
+        <header className="lg:hidden sticky top-0 z-30 h-16 bg-slate-900 text-white flex items-center justify-between px-4 shadow-md border-b border-slate-800">
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={() => setMobileDrawerOpen(true)}
-              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition"
+              className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white transition"
               aria-label="Open menu"
             >
               <FaBars className="text-lg" />
             </button>
             <div className="flex items-center gap-2">
-              <FaBuilding className="text-xl" />
-              <h1 className="text-base font-bold">Resident Portal</h1>
+              <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs">
+                <FaBuilding />
+              </div>
+              <h1 className="text-sm font-bold">Resident Portal</h1>
             </div>
           </div>
-          <div className="flex items-center gap-2.5">
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-xs bg-slate-800 text-slate-300 hover:text-white transition"
+              title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+              {darkMode ? <FaSun className="text-yellow-500" /> : <FaMoon />}
+            </button>
             <NotificationBell isDark={true} />
             <button
+              type="button"
               onClick={logout}
-              className="text-xs bg-white/20 hover:bg-white/30 px-2.5 py-1.5 rounded-lg transition"
+              className="text-xs bg-red-600/80 hover:bg-red-600 text-white px-2.5 py-1.5 rounded-lg transition font-semibold"
             >
               Logout
             </button>
@@ -307,17 +462,17 @@ export default function ResidentLayout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 custom-scrollbar">
           <Outlet />
         </main>
 
         {/* Mobile Bottom Navigation */}
-        <nav className="lg:hidden bg-white border-t border-slate-200 flex justify-around py-2 shadow-lg">
+        <nav className="lg:hidden bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-around py-2 shadow-lg">
           <NavLink
             to="/resident/dashboard"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 text-[11px] px-2 py-1 font-medium ${
-                isActive ? "text-blue-700 font-bold" : "text-gray-500 hover:text-gray-700"
+              `flex flex-col items-center gap-1 text-[11px] px-2 py-1 font-medium transition ${
+                isActive ? "text-blue-600 font-bold" : "text-slate-400 hover:text-slate-600 dark:hover:text-white"
               }`
             }
           >
@@ -328,32 +483,34 @@ export default function ResidentLayout() {
           <NavLink
             to="/resident/garbage"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 text-[11px] px-2 py-1 font-medium ${
-                isGarbageActive ? "text-emerald-600 font-bold" : "text-gray-500 hover:text-gray-700"
+              `flex flex-col items-center gap-1 text-[11px] px-2 py-1 font-medium transition ${
+                isActive || isGarbageActive
+                  ? "text-emerald-600 font-bold"
+                  : "text-slate-400 hover:text-slate-600 dark:hover:text-white"
               }`
             }
           >
-            <span className="text-lg text-emerald-600"><FaRecycle /></span>
+            <span className="text-lg"><FaRecycle /></span>
             <span>Garbage</span>
           </NavLink>
 
           <NavLink
             to="/resident/special-collections"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 text-[11px] px-2 py-1 font-medium ${
-                isActive ? "text-pink-600 font-bold" : "text-gray-500 hover:text-gray-700"
+              `flex flex-col items-center gap-1 text-[11px] px-2 py-1 font-medium transition ${
+                isActive ? "text-pink-600 font-bold" : "text-slate-400 hover:text-slate-600 dark:hover:text-white"
               }`
             }
           >
-            <span className="text-lg text-pink-500"><FaHandHoldingHeart /></span>
+            <span className="text-lg"><FaHandHoldingHeart /></span>
             <span>Special</span>
           </NavLink>
 
           <NavLink
             to="/resident/committee"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 text-[11px] px-2 py-1 font-medium ${
-                isActive ? "text-blue-700 font-bold" : "text-gray-500 hover:text-gray-700"
+              `flex flex-col items-center gap-1 text-[11px] px-2 py-1 font-medium transition ${
+                isActive ? "text-amber-600 font-bold" : "text-slate-400 hover:text-slate-600 dark:hover:text-white"
               }`
             }
           >
@@ -364,8 +521,8 @@ export default function ResidentLayout() {
           <NavLink
             to="/resident/profile"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 text-[11px] px-2 py-1 font-medium ${
-                isActive ? "text-blue-700 font-bold" : "text-gray-500 hover:text-gray-700"
+              `flex flex-col items-center gap-1 text-[11px] px-2 py-1 font-medium transition ${
+                isActive ? "text-blue-600 font-bold" : "text-slate-400 hover:text-slate-600 dark:hover:text-white"
               }`
             }
           >

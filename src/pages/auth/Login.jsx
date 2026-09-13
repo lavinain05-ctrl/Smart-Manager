@@ -6,11 +6,15 @@ import {
   FaUser,
   FaLock,
   FaPhone,
+  FaEnvelope,
   FaHeadset,
+  FaEye,
+  FaEyeSlash,
+  FaUserShield,
 } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
-import { normalizeMobile } from "../../services/authService";
+import { normalizeMobile, getHomeRouteForRole, isExactAdminEmail } from "../../services/authService";
 import toast from "react-hot-toast";
 
 export default function Login() {
@@ -24,6 +28,7 @@ export default function Login() {
   // Login state
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Redirect already-authenticated users
@@ -41,16 +46,10 @@ export default function Login() {
         navigate("/pending-approval", { replace: true });
         return;
       }
-      if (role === "admin") {
-        navigate("/admin/dashboard", { replace: true });
-      } else if (role === "collector") {
-        navigate("/collector/dashboard", { replace: true });
-      } else if (role === "resident") {
-        navigate("/resident/dashboard", { replace: true });
-      } else if (role === "family") {
-        navigate("/family/dashboard", { replace: true });
-      } else if (role === "committee") {
-        navigate("/committee/dashboard", { replace: true });
+
+      const targetPath = getHomeRouteForRole(role);
+      if (targetPath && targetPath !== "/") {
+        navigate(targetPath, { replace: true });
       }
     }
   }, [user, navigate]);
@@ -142,47 +141,86 @@ export default function Login() {
 
         {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-5">
-          <div>
-            <label className="block mb-2 font-medium">Mobile Number</label>
-            <div className="relative">
-              <FaPhone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Enter 10-digit mobile number"
-                value={identifier}
-                onChange={handleIdentifierChange}
-                className="w-full pl-10 pr-4 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                required
-                autoComplete="username"
-              />
-            </div>
-          </div>
+          {(() => {
+            const isAdminEmailEntered = isExactAdminEmail(identifier);
 
-          <div>
-            <label className="block mb-2 font-medium">Password</label>
-            <div className="relative">
-              <FaLock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-4 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                required
-                autoComplete="current-password"
-              />
-            </div>
-          </div>
+            return (
+              <>
+                <div>
+                  <label className="block mb-2 font-medium">
+                    {isAdminEmailEntered ? "Admin Email Address" : "Mobile Number"}
+                  </label>
+                  <div className="relative">
+                    {isAdminEmailEntered ? (
+                      <FaEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    ) : (
+                      <FaPhone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    )}
+                    <input
+                      type="text"
+                      placeholder="Enter 10-digit mobile or admin email"
+                      value={identifier}
+                      onChange={handleIdentifierChange}
+                      className="w-full pl-10 pr-4 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+                      required
+                      autoComplete="username"
+                    />
+                  </div>
+                </div>
 
-          {/* Forgot Password Link */}
-          <div className="text-right">
-            <Link
-              to="/forgot-password"
-              className="text-sm text-emerald-600 hover:text-emerald-700 font-medium transition"
-            >
-              Forgot Password?
-            </Link>
-          </div>
+                <div>
+                  <label className="block mb-2 font-medium">Password</label>
+                  <div className="relative">
+                    <FaLock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Enter your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-10 pr-11 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+                      required
+                      autoComplete="current-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1.5 transition rounded-lg hover:bg-gray-100"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <FaEyeSlash className="text-base" /> : <FaEye className="text-base" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Forgot Password Links */}
+                <div className="flex items-center justify-between text-xs pt-0.5 min-h-[28px]">
+                  {isAdminEmailEntered ? (
+                    <Link
+                      to={`/forgot-password?tab=admin&email=${encodeURIComponent(identifier.trim())}`}
+                      className="text-amber-700 hover:text-amber-800 font-bold transition flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 animate-in fade-in duration-200"
+                    >
+                      <FaUserShield className="text-sm text-amber-600" />
+                      <span>Admin Password Reset</span>
+                    </Link>
+                  ) : (
+                    <span />
+                  )}
+
+                  <Link
+                    to={
+                      identifier.trim()
+                        ? `/forgot-password?identifier=${encodeURIComponent(identifier.trim())}`
+                        : "/forgot-password"
+                    }
+                    className="text-emerald-600 hover:text-emerald-700 font-medium transition ml-auto"
+                  >
+                    Forgot Password?
+                  </Link>
+                </div>
+              </>
+            );
+          })()}
 
           <button
             type="submit"

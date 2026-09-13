@@ -2,13 +2,15 @@ import { FaExclamationTriangle } from "react-icons/fa";
 
 export default function ConfirmDialog({
   open = true,
+  isOpen,
   title,
   message,
   onCancel,
   onConfirm,
   confirmText,
 }) {
-  if (!open) return null;
+  const isVisible = isOpen !== undefined ? isOpen : open;
+  if (!isVisible) return null;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">

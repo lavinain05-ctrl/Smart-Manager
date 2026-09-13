@@ -28,12 +28,6 @@ export default function QuickActions() {
       path: "/admin/collections",
     },
     {
-      title: "GC Accounts",
-      icon: <FaRecycle />,
-      color: "bg-teal-600 hover:bg-teal-700",
-      path: "/admin/garbage/accounts",
-    },
-    {
       title: "Bills",
       icon: <FaFileInvoiceDollar />,
       color: "bg-amber-600 hover:bg-amber-700",

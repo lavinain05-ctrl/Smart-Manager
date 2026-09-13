@@ -10,6 +10,8 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 
 import { useGarbage } from "../../context/GarbageContext";
+import { usePayments } from "../../context/PaymentContext";
+import { isGcParticipating } from "../../services/statisticsService";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -29,19 +31,75 @@ export default function GarbageReports() {
     garbageAccounts,
     garbageBills,
     garbageCollectors,
+    residents = [],
     selectedMonth,
     selectedYear,
     setSelectedMonth,
     setSelectedYear,
   } = useGarbage();
 
+  const { payments = [] } = usePayments();
+
   const [reportType, setReportType] = useState("monthly");
 
-  // Monthly bills
-  const monthlyBills = useMemo(
-    () => garbageBills.filter((b) => b.month === selectedMonth && Number(b.year) === Number(selectedYear)),
-    [garbageBills, selectedMonth, selectedYear]
-  );
+  // Synchronized monthly bills: merge garbageBills with any participating residents who don't have a bill doc yet
+  const monthlyBills = useMemo(() => {
+    const billMap = new Map();
+
+    // 1. Existing bills from garbageBills
+    garbageBills
+      .filter((b) => b.month === selectedMonth && Number(b.year) === Number(selectedYear))
+      .forEach((b) => {
+        billMap.set(b.residentId, { ...b });
+      });
+
+    // 2. Active participating residents
+    const activeParticipants = (residents || []).filter(
+      (r) => isGcParticipating(r) && r.status !== "Inactive" && r.status !== "inactive"
+    );
+
+    activeParticipants.forEach((r) => {
+      const paymentMatch = (payments || []).find(
+        (p) =>
+          (p.residentId === r.id || p.residentId === r.uid || (r.mobile && p.mobile && p.mobile.includes(r.mobile.slice(-10)))) &&
+          p.month === selectedMonth &&
+          Number(p.year) === Number(selectedYear)
+      );
+
+      const isPaid = Boolean(paymentMatch);
+      const charge = Number(Number(r.charge) > 0 ? r.charge : 80);
+
+      if (billMap.has(r.id)) {
+        const b = billMap.get(r.id);
+        if (isPaid && b.status !== "Paid" && b.status !== "Exempted") {
+          billMap.set(r.id, {
+            ...b,
+            status: "Paid",
+            paidAmount: Number(paymentMatch.amount || b.amount || charge),
+            paymentDate: paymentMatch.paymentDate || b.paymentDate || "",
+            paymentMethod: paymentMatch.paymentMethod || b.paymentMethod || "Cash",
+            collectedBy: paymentMatch.collector || b.collectedBy || "Collector",
+          });
+        }
+      } else {
+        billMap.set(r.id, {
+          id: `auto-${r.id}`,
+          residentId: r.id,
+          residentName: r.owner || r.name || "Resident",
+          flat: r.flat || "—",
+          block: r.block || "General",
+          amount: charge,
+          status: isPaid ? "Paid" : "Pending",
+          paidAmount: isPaid ? Number(paymentMatch.amount || charge) : 0,
+          paymentDate: paymentMatch?.paymentDate || "—",
+          paymentMethod: paymentMatch?.paymentMethod || "—",
+          collectedBy: paymentMatch?.collector || "—",
+        });
+      }
+    });
+
+    return Array.from(billMap.values());
+  }, [garbageBills, residents, payments, selectedMonth, selectedYear]);
 
   // ========================
   // Report Data

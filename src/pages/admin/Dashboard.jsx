@@ -41,6 +41,7 @@ import {
 } from "../../services/statisticsService";
 
 import CollectionProgress from "../../components/dashboard/CollectionProgress";
+import DashboardAnalyticsChart from "../../components/dashboard/DashboardAnalyticsChart";
 import RecentActivity from "../../components/dashboard/RecentActivity";
 import QuickActions from "../../components/dashboard/QuickActions";
 import MonthSelector from "../../components/common/MonthSelector";
@@ -184,6 +185,13 @@ export default function Dashboard() {
           <h3 className="text-2xl font-bold">{paymentStats.totalReceipts}</h3>
         </div>
       </div>
+
+      {/* ═══════════ Financial Analytics Graphical Representation ═══════════ */}
+      <DashboardAnalyticsChart
+        paymentStats={paymentStats}
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
+      />
 
       {/* ═══════════ Collection Progress (GC Billing) ═══════════ */}
       <CollectionProgress

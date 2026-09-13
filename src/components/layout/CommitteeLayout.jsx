@@ -14,7 +14,7 @@ import {
   FaBuilding,
   FaLeaf,
   FaPhone,
-  FaTrash,
+  FaRecycle,
   FaMoneyBillWave,
   FaUserTie,
   FaUserPlus,
@@ -81,7 +81,7 @@ export default function CommitteeLayout() {
       { name: "Committee", icon: <FaUsers />, path: "/committee/directory" },
       { name: "Activities", icon: <FaLeaf />, path: "/committee/activities" },
       { name: "Emergency", icon: <FaPhone />, path: "/committee/emergency" },
-      { name: "Garbage", icon: <FaTrash />, path: "/committee/garbage" },
+      { name: "Garbage Collection", icon: <FaRecycle />, path: "/committee/garbage" },
       { name: "Profile", icon: <FaUser />, path: "/committee/profile" }
     );
 

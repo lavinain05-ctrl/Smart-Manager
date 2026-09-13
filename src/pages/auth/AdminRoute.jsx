@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { getHomeRouteForRole } from "../../services/authService";
 
 export default function AdminRoute({ children }) {
   const { user, realUser, loading, isImpersonating } = useAuth();
@@ -19,7 +20,7 @@ export default function AdminRoute({ children }) {
   // If currently simulating a portal, check if the underlying actual user is admin
   const effectiveRole = ((realUser || user)?.role || "").toLowerCase();
   if (effectiveRole !== "admin") {
-    return <Navigate to="/collector/dashboard" replace />;
+    return <Navigate to={getHomeRouteForRole(effectiveRole)} replace />;
   }
 
   return children;

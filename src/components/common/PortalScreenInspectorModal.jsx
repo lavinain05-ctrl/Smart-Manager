@@ -15,10 +15,6 @@ import {
   FaShieldAlt,
   FaHome,
   FaUserTie,
-  FaCalendarAlt,
-  FaPhoneAlt,
-  FaTrashAlt,
-  FaBug,
   FaTools,
 } from "react-icons/fa";
 
@@ -317,7 +313,7 @@ export default function PortalScreenInspectorModal({
   }, [selectedUser, bills, payments]);
 
   // Launch live portal experience in full page view
-  const handleLaunchLive = () => {
+  const handleLaunchLive = (preferredMode) => {
     if (!selectedUser) return;
 
     if (selectedUser.role === "admin" || (selectedUser.portal && selectedUser.portal.toLowerCase().includes("admin"))) {
@@ -325,7 +321,8 @@ export default function PortalScreenInspectorModal({
       return;
     }
 
-    impersonateUser(selectedUser);
+    const mode = preferredMode || deviceMode;
+    impersonateUser(selectedUser, mode);
     onClose();
 
     const role = (selectedUser.role || "resident").toLowerCase();
@@ -391,14 +388,32 @@ export default function PortalScreenInspectorModal({
               </button>
             </div>
 
-            {/* Launch Full Portal Button */}
-            <button
-              onClick={handleLaunchLive}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-bold rounded-xl shadow transition"
-              title="Open full portal pages as this user"
-            >
-              <FaExternalLinkAlt /> Launch Full Experience
-            </button>
+            {/* Launch Full Portal Buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => handleLaunchLive("mobile")}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl shadow transition ${
+                  deviceMode === "mobile"
+                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-500/30"
+                    : "bg-slate-700/80 hover:bg-slate-700 text-slate-200"
+                }`}
+                title="Open full portal inside a simulated mobile device screen"
+              >
+                <FaMobileAlt /> Launch Mobile Screen
+              </button>
+
+              <button
+                onClick={() => handleLaunchLive("desktop")}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl shadow transition ${
+                  deviceMode === "desktop"
+                    ? "bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white shadow-orange-500/30"
+                    : "bg-slate-700/80 hover:bg-slate-700 text-slate-200"
+                }`}
+                title="Open full desktop portal experience"
+              >
+                <FaExternalLinkAlt /> Launch Desktop View
+              </button>
+            </div>
 
             {/* Close Button */}
             <button
@@ -566,19 +581,35 @@ export default function PortalScreenInspectorModal({
                 }`}
               >
                 {/* Simulated Device Top Notch / Browser Bar */}
-                <div className="bg-slate-800 text-slate-200 px-4 py-2 flex items-center justify-between text-[11px] border-b border-slate-700">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                    <span className="font-mono text-[10px] text-slate-400 ml-2">
-                      https://rwa-portal.local/{selectedUser.role}
+                {deviceMode === "mobile" ? (
+                  <div className="bg-slate-900 text-white px-5 py-2.5 flex items-center justify-between text-[11px] font-semibold border-b border-slate-800 relative select-none shrink-0">
+                    <span className="font-mono">9:41</span>
+                    {/* Dynamic Island pill */}
+                    <div className="absolute left-1/2 -translate-x-1/2 top-2 w-24 h-5 bg-black rounded-full border border-slate-800 flex items-center justify-between px-2.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-[9px] font-bold text-slate-300">5G</span>
+                      <span>📶</span>
+                      <span>🔋</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-slate-800 text-slate-200 px-4 py-2 flex items-center justify-between text-[11px] border-b border-slate-700">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                      <span className="font-mono text-[10px] text-slate-400 ml-2">
+                        https://rwa-portal.local/{selectedUser.role}
+                      </span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 text-[10px] font-bold">
+                      {selectedUser.portal}
                     </span>
                   </div>
-                  <span className="px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 text-[10px] font-bold">
-                    {selectedUser.portal}
-                  </span>
-                </div>
+                )}
 
                 {/* Simulated Portal Content */}
                 <div className="p-5 flex-1 overflow-y-auto space-y-4 bg-gray-50 text-slate-800">
@@ -835,10 +866,18 @@ export default function PortalScreenInspectorModal({
             {/* Launch Full View As Button */}
             <div className="pt-2 border-t border-slate-800 space-y-2">
               <button
-                onClick={handleLaunchLive}
+                onClick={() => handleLaunchLive("mobile")}
                 className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg transition"
+                title="Open this user's portal inside a simulated mobile device screen"
               >
-                <FaEye /> Open & Fix in Live Portal
+                <FaMobileAlt /> Open as Mobile Device Screen
+              </button>
+              <button
+                onClick={() => handleLaunchLive("desktop")}
+                className="w-full py-2 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 border border-slate-700 transition"
+                title="Open this user's portal in desktop screen view"
+              >
+                <FaLaptop /> Open as Desktop Screen
               </button>
               <p className="text-[10px] text-slate-500 text-center">
                 Allows Admin to navigate their exact portal pages and test buttons live.

@@ -42,10 +42,11 @@ export async function collectResidentPayment({
       : [{ month, year: Number(year) }];
 
     const duration = coveredMonths.length;
-    const totalAmount = paymentData.amount !== undefined ? Number(paymentData.amount) : Number(resident.charge || 0);
+    const defaultRate = Number(resident.charge) > 0 ? Number(resident.charge) : 80;
+    const totalAmount = paymentData.amount !== undefined ? Number(paymentData.amount) : defaultRate;
     const monthlyRate = paymentData.monthlyRate !== undefined
       ? Number(paymentData.monthlyRate)
-      : (duration > 0 ? Math.round(totalAmount / duration) : Number(resident.charge || 0));
+      : (duration > 0 ? Math.round(totalAmount / duration) : defaultRate);
 
     const receiptNo = "REC-" + Date.now();
     const newStatus = paymentData.method === "Exempted" ? "Exempted" : "Paid";

@@ -20,12 +20,13 @@ import {
   FaBan,
   FaPhone,
   FaWhatsapp,
-  FaBell,
-  FaExclamationTriangle,
   FaPaperPlane,
   FaTimes,
   FaQuestionCircle,
   FaHandHoldingHeart,
+  FaShieldAlt,
+  FaLightbulb,
+  FaChevronRight,
 } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
@@ -43,29 +44,30 @@ import { useNotifications } from "../../context/NotificationContext";
 import { createNotification } from "../../services/notificationService";
 import { getDisplayStatus } from "../../utils/billStatus";
 import { isGcParticipating } from "../../services/statisticsService";
+import { subscribeSpecialCollections } from "../../services/specialCollectionService";
 import { DEFAULT_JOIN_GC_MESSAGE } from "./ResidentGarbage";
 import RecentUpdatesCard from "../../components/notifications/RecentUpdatesCard";
 
 const GC_CONFIG = {
   participating: {
-    label: "Active",
-    color: "text-green-700 bg-green-100",
-    icon: <FaCheckCircle className="text-green-500" />,
+    label: "Active Service",
+    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800",
+    icon: <FaCheckCircle className="text-emerald-500" />,
   },
   not_participating: {
     label: "Not Enrolled",
-    color: "text-gray-600 bg-gray-100",
-    icon: <FaInfoCircle className="text-gray-400" />,
+    badgeClass: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700",
+    icon: <FaInfoCircle className="text-slate-400" />,
   },
   temporary_stopped: {
-    label: "Paused",
-    color: "text-yellow-700 bg-yellow-100",
-    icon: <FaPauseCircle className="text-yellow-500" />,
+    label: "Service Paused",
+    badgeClass: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800",
+    icon: <FaPauseCircle className="text-amber-500" />,
   },
   inactive: {
-    label: "Inactive",
-    color: "text-red-700 bg-red-100",
-    icon: <FaBan className="text-red-500" />,
+    label: "Service Inactive",
+    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800",
+    icon: <FaBan className="text-rose-500" />,
   },
 };
 
@@ -85,6 +87,18 @@ export default function ResidentDashboard() {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinReason, setJoinReason] = useState(DEFAULT_JOIN_GC_MESSAGE);
   const [submittingJoin, setSubmittingJoin] = useState(false);
+
+  // Live special collection drives
+  const [specialDrives, setSpecialDrives] = useState([]);
+
+  useEffect(() => {
+    const unsub = subscribeSpecialCollections((data) => {
+      setSpecialDrives(data || []);
+    });
+    return () => {
+      if (typeof unsub === "function") unsub();
+    };
+  }, []);
 
   const cleanPhone = useMemo(() => {
     const raw = user?.phone || user?.mobile || (user?.email?.includes("@") ? user.email.split("@")[0] : "");
@@ -226,6 +240,13 @@ export default function ResidentDashboard() {
 
   const { notifications = [] } = useNotifications();
 
+  // Active special drives to display
+  const activeSpecialDrives = useMemo(() => {
+    return specialDrives
+      .filter((d) => d.status === "active" || !d.status)
+      .slice(0, 2);
+  }, [specialDrives]);
+
   // Current Calendar Month & Year for New Month Garbage Payment
   const currentMonthName = useMemo(() => {
     return new Date().toLocaleString("en-US", { month: "long" });
@@ -242,7 +263,6 @@ export default function ResidentDashboard() {
     return Number(resident?.charge) || Number(currentBill?.amount) || Number(myPayments[0]?.amount) || 80;
   }, [resident, currentBill, myPayments]);
 
-  // Check if a payment covers a given month and year (either direct match or coveredMonths array)
   const isCoveredByPayment = (p, m, y) => {
     if (!p) return false;
     const yNum = Number(y);
@@ -263,7 +283,6 @@ export default function ResidentDashboard() {
     );
   }, [myPayments, currentMonthName, selectedMonth, currentYearNum, selectedYear]);
 
-  // Check if bill exists and is marked Paid / Exempted
   const currentMonthBillPaid = useMemo(() => {
     return myBills.some(
       (b) =>
@@ -273,7 +292,6 @@ export default function ResidentDashboard() {
     );
   }, [myBills, currentMonthName, currentYearNum, selectedMonth, selectedYear]);
 
-  // Is this month paid via advance payment?
   const isAdvanceCovered = useMemo(() => {
     if (currentMonthPayment?.isAdvance) return true;
     const billMatch = myBills.find(
@@ -294,7 +312,6 @@ export default function ResidentDashboard() {
     );
   }, [isAdvanceCovered, currentMonthPayment, myPayments, myBills, currentMonthName, currentYearNum, selectedMonth, selectedYear]);
 
-  // If paid (regular or advance) -> TRUE, so no due message is ever shown for covered months!
   const isCurrentMonthPaid = !!currentMonthPayment || currentMonthBillPaid || isAdvanceCovered;
 
   const collectorName = useMemo(() => {
@@ -338,11 +355,21 @@ export default function ResidentDashboard() {
 
   if (!resident) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <FaUser className="text-6xl text-gray-300 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-600">Profile Not Linked</h2>
-          <p className="text-gray-500 mt-2">Contact your administrator to link your account.</p>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 max-w-md text-center shadow-lg">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-600 flex items-center justify-center text-3xl mx-auto mb-4">
+            <FaUser />
+          </div>
+          <h2 className="text-xl font-black text-slate-900 dark:text-white">Profile Not Linked</h2>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 leading-relaxed">
+            Your login account is not linked to a resident record yet. Please contact the society administrator to map your flat number.
+          </p>
+          <Link
+            to="/resident/support"
+            className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-md transition"
+          >
+            <FaQuestionCircle /> Contact Support
+          </Link>
         </div>
       </div>
     );
@@ -351,77 +378,122 @@ export default function ResidentDashboard() {
   const basePath = `/resident`;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 sm:space-y-7 pb-12">
+      {/* ═══════════ Hero Card: Resident & Society Profile ═══════════ */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 text-white p-6 sm:p-8 shadow-xl border border-slate-800/80">
+        {/* Glow ambient effects */}
+        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 -ml-20 -mb-20 w-72 h-72 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
 
-      {/* Welcome Card */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-          <div className="w-18 h-18 bg-white/20 rounded-2xl flex items-center justify-center text-4xl shrink-0">
-            <FaUser />
-          </div>
-          <div className="flex-1">
-            <p className="text-blue-200 text-sm">Welcome back,</p>
-            <h1 className="text-2xl sm:text-3xl font-bold">{resident.owner}</h1>
-            <div className="flex flex-wrap items-center gap-3 mt-2 text-blue-200 text-sm">
-              <span className="flex items-center gap-1"><FaHome className="text-xs" /> {resident.flat}</span>
-              {resident.block && <span>• Block {resident.block}</span>}
-              {resident.floor && <span>• Floor {resident.floor}</span>}
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-start sm:items-center gap-4 sm:gap-5">
+            {/* Avatar container */}
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-2xl sm:text-3xl font-black shrink-0 shadow-lg shadow-blue-500/30 border border-white/20">
+              {resident.owner
+                ?.split(" ")
+                .map((n) => n[0])
+                .slice(0, 2)
+                .join("")
+                .toUpperCase() || <FaUser />}
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                  <FaShieldAlt className="text-[9px]" /> Verified Resident
+                </span>
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${gcCfg.badgeClass}`}>
+                  {gcCfg.icon} {gcCfg.label}
+                </span>
+              </div>
+
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                {resident.owner}
+              </h1>
+
+              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs text-slate-300">
+                <span className="inline-flex items-center gap-1 bg-white/10 px-2.5 py-1 rounded-lg font-semibold text-white border border-white/10">
+                  <FaHome className="text-emerald-400" /> Flat {resident.flat}
+                </span>
+                {resident.block && (
+                  <span className="bg-white/10 px-2 py-1 rounded-lg font-medium border border-white/10">
+                    Block {resident.block}
+                  </span>
+                )}
+                {resident.floor && (
+                  <span className="bg-white/10 px-2 py-1 rounded-lg font-medium border border-white/10">
+                    Floor {resident.floor}
+                  </span>
+                )}
+                <span className="text-slate-400 hidden sm:inline">• D BLOCK RWA INDRAPRASTHA</span>
+              </div>
             </div>
           </div>
-          <div className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${gcCfg.color}`}>
-            <FaRecycle className="text-[10px]" /> GC: {gcCfg.label}
+
+          {/* Quick Header Shortcuts */}
+          <div className="flex items-center gap-2.5 self-start md:self-center shrink-0 flex-wrap">
+            <Link
+              to="/resident/support"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 transition backdrop-blur-sm"
+              title="Help & FAQs"
+            >
+              <FaQuestionCircle className="text-amber-400 text-xs" />
+              <span>Support & FAQs</span>
+            </Link>
           </div>
         </div>
       </div>
 
-      {/* ─── NEW MONTH GARBAGE PAYMENT NOTIFICATION / MESSAGE CARD ─── */}
-      {isParticipating && (
+      {/* ═══════════ Billing Status / Payment Notice Card ═══════════ */}
+      {isParticipating ? (
         !isCurrentMonthPaid ? (
-          <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50/70 border border-amber-300/80 rounded-3xl p-5 sm:p-6 shadow-sm relative overflow-hidden">
-            {/* Background watermark icon */}
-            <div className="absolute -right-6 -bottom-6 text-amber-200/30 text-9xl pointer-events-none select-none">
-              <FaRecycle />
-            </div>
-
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-amber-500/10 border border-amber-300/80 dark:border-amber-700/50 p-6 sm:p-7 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="flex items-start gap-4">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-500/15 text-amber-700 border border-amber-400/30 flex items-center justify-center text-2xl shrink-0 shadow-2xs">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-2xl shrink-0 shadow-lg shadow-amber-500/30">
                   <FaMoneyBillWave />
                 </div>
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      isPastDue ? "bg-red-100 text-red-800 border border-red-200" : "bg-amber-100 text-amber-900 border border-amber-200"
-                    }`}>
-                      {isPastDue ? "⚠️ Overdue Payment" : "🔔 New Month Billing • Payment Due"}
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                        isPastDue
+                          ? "bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300"
+                          : "bg-amber-100 text-amber-900 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300"
+                      }`}
+                    >
+                      {isPastDue ? "⚠️ Overdue Payment" : "🔔 Monthly Fee Due"}
                     </span>
-                    <span className="text-xs text-amber-900 font-semibold">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       Billing Cycle: {currentMonthName} {currentYearNum}
                     </span>
                   </div>
 
-                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 leading-snug">
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white leading-snug">
                     Garbage Collection Fee for {currentMonthName} {currentYearNum} is Due
                   </h2>
 
-                  <p className="text-xs sm:text-sm text-gray-600 max-w-2xl leading-relaxed">
-                    Friendly reminder: The society door-to-door garbage collection fee of{" "}
-                    <strong className="text-gray-900 font-mono font-bold">₹{currentMonthFee}</strong> for{" "}
-                    <strong>{currentMonthName} {currentYearNum}</strong> is pending. Please complete your payment to maintain uninterrupted daily waste pickup.
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-2xl leading-relaxed">
+                    Please clear your monthly fee of{" "}
+                    <strong className="text-emerald-700 dark:text-emerald-400 font-bold">
+                      ₹{currentMonthFee}
+                    </strong>{" "}
+                    to maintain seamless daily doorstep waste collection.
                   </p>
 
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-gray-600">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-slate-500 dark:text-slate-400">
                     <span>
-                      Fee: <strong className="text-emerald-700 font-mono font-bold">₹{currentMonthFee}</strong>
+                      Fee: <strong className="text-slate-900 dark:text-white font-bold">₹{currentMonthFee}</strong>
                     </span>
                     <span>
-                      Due Date: <strong className={isPastDue ? "text-red-700 font-bold" : "text-gray-800 font-semibold"}>
+                      Due Date:{" "}
+                      <strong className={isPastDue ? "text-rose-600 font-bold" : "text-slate-900 dark:text-white font-semibold"}>
                         {currentBill?.dueDate || `10 ${currentMonthName} ${currentYearNum}`}
                       </strong>
                     </span>
                     {collectorName && (
-                      <span className="text-gray-500">
-                        Assigned Collector: <strong className="text-gray-700">{collectorName}</strong>
+                      <span>
+                        Assigned Collector: <strong className="text-slate-800 dark:text-slate-200">{collectorName}</strong>
                       </span>
                     )}
                   </div>
@@ -437,7 +509,7 @@ export default function ResidentDashboard() {
                 </Link>
                 <Link
                   to="/resident/bills"
-                  className="w-full sm:w-auto px-4 py-2 bg-white/80 hover:bg-white text-gray-700 border border-gray-200 rounded-xl text-xs font-semibold transition text-center"
+                  className="w-full sm:w-auto px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold transition text-center"
                 >
                   View Bill Details
                 </Link>
@@ -445,36 +517,36 @@ export default function ResidentDashboard() {
             </div>
           </div>
         ) : (
-          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-green-50/70 border border-emerald-300/80 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="rounded-3xl bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-emerald-950/30 border border-emerald-300/80 dark:border-emerald-800/60 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-3.5">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 text-emerald-700 border border-emerald-300 flex items-center justify-center text-xl shrink-0">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-xl shrink-0 shadow-md shadow-emerald-600/20">
                 <FaCheckCircle />
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-200 text-emerald-950 border border-emerald-300">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-200 dark:bg-emerald-900/60 text-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
                     {isAdvanceCovered ? "🎉 Paid in Advance" : "✅ Payment Confirmed"}
                   </span>
-                  <span className="text-xs font-bold text-emerald-950">
+                  <span className="text-xs font-bold text-emerald-950 dark:text-emerald-200">
                     {currentMonthName} {currentYearNum}
                   </span>
                   {advanceDetails?.receiptNumber && (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white text-emerald-800 border border-emerald-200 shadow-2xs">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white dark:bg-slate-800 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700">
                       {advanceDetails.receiptNumber}
                     </span>
                   )}
                 </div>
 
-                <p className="text-xs sm:text-sm font-bold text-emerald-950 mt-1">
+                <p className="text-xs sm:text-sm font-bold text-emerald-950 dark:text-emerald-200 mt-1">
                   {isAdvanceCovered
                     ? `Garbage Collection Fee Paid in Advance for ${currentMonthName} ${currentYearNum}`
                     : `Garbage Collection Fee for ${currentMonthName} ${currentYearNum} is Paid`}
                 </p>
 
-                <p className="text-[11px] sm:text-xs text-emerald-700 mt-0.5">
+                <p className="text-[11px] sm:text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
                   {isAdvanceCovered
-                    ? `Covered under advance payment ${advanceDetails?.periodLabel ? `(${advanceDetails.periodLabel})` : ""}. You have zero dues for this month!`
-                    : `Thank you! Your daily door-to-door garbage collection service is active for this month.`}
+                    ? `Covered under advance payment ${advanceDetails?.periodLabel ? `(${advanceDetails.periodLabel})` : ""}. Zero dues pending!`
+                    : `Thank you! Your daily doorstep garbage collection service is active for this month.`}
                 </p>
               </div>
             </div>
@@ -482,99 +554,48 @@ export default function ResidentDashboard() {
             <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
               <Link
                 to="/resident/receipts"
-                className="px-3.5 py-2 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs"
+                className="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-slate-700 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs"
               >
                 <FaReceipt className="text-emerald-600" /> View Receipt
               </Link>
             </div>
           </div>
         )
-      )}
-
-      {/* Mandatory Notifications & Recent Society Updates */}
-      <RecentUpdatesCard />
-
-      {/* GC Status Section — adapts to participation */}
-      {isParticipating ? (
-        <>
-          {/* GC Active — Show billing */}
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-800">
-                {selectedMonth} {selectedYear} — Collection Status
-              </h2>
-              <span className={`px-4 py-1.5 rounded-full text-sm font-bold ${
-                isAdvanceCovered || currentBill?.isAdvance || currentBill?.displayStatus === "Paid" ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                : currentBill?.displayStatus === "Overdue" ? "bg-red-100 text-red-700"
-                : currentBill?.displayStatus === "Exempted" ? "bg-gray-200 text-gray-700"
-                : "bg-yellow-100 text-yellow-700"
-              }`}>
-                {isAdvanceCovered || currentBill?.isAdvance
-                  ? "Advance Paid"
-                  : currentBill?.displayStatus || "No Bill"}
-              </span>
-            </div>
-            {currentBill && (
-              <p className="text-sm text-gray-500">
-                {isAdvanceCovered || currentBill?.isAdvance
-                  ? `Covered by advance payment: ${advanceDetails?.periodLabel || `${selectedMonth} ${selectedYear}`}`
-                  : `Due: ${currentBill.dueDate || "—"}`}
-              </p>
-            )}
-          </div>
-
-          {/* Payment Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard icon={<FaMoneyBillWave />} label="Total Paid" value={`₹${totalPaid.toLocaleString()}`} color="emerald" />
-            <StatCard icon={<FaWallet />} label="Monthly Charge" value={`₹${(Number(resident.charge) || Number(myPayments[0]?.amount) || 0).toLocaleString()}`} color="purple" />
-            <StatCard icon={<FaReceipt />} label="Receipts" value={myPayments.length} color="blue" />
-            <StatCard icon={<FaClock />} label="Bills" value={myBills.length} color="orange" />
-          </div>
-
-          {/* Last Payment */}
-          {lastPayment && (
-            <div className="bg-white rounded-2xl shadow-sm p-5">
-              <h2 className="text-lg font-bold text-gray-800 mb-3">Last Payment</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div><span className="text-gray-500">Amount</span><p className="font-bold text-emerald-600 text-lg">₹{Number(lastPayment.amount).toLocaleString()}</p></div>
-                <div><span className="text-gray-500">Method</span><p className="font-bold">{lastPayment.paymentMethod}</p></div>
-                <div><span className="text-gray-500">Date</span><p className="font-bold">{lastPayment.paymentDate}</p></div>
-                <div><span className="text-gray-500">Receipt</span><p className="font-bold font-mono text-xs">{lastPayment.receiptNumber}</p></div>
-              </div>
-            </div>
-          )}
-        </>
       ) : (
-        /* GC Not Active — Show info card */
-        <div className={`rounded-2xl shadow-sm p-6 border ${
-          gcStatus === "temporary_stopped" ? "bg-yellow-50 border-yellow-200" :
-          gcStatus === "inactive" ? "bg-red-50 border-red-200" :
-          "bg-gray-50 border-gray-200"
-        }`}>
+        /* GC Not Active — Info Card */
+        <div
+          className={`rounded-3xl p-6 border shadow-sm ${
+            gcStatus === "temporary_stopped"
+              ? "bg-amber-50/70 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60"
+              : gcStatus === "inactive"
+              ? "bg-rose-50/70 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/60"
+              : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800"
+          }`}
+        >
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
             <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-2xl shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center text-2xl shrink-0">
                 {gcCfg.icon}
               </div>
               <div>
-                <h2 className="text-lg font-bold text-gray-800">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
                   {gcStatus === "temporary_stopped"
                     ? "Garbage Collection Service Paused"
                     : gcStatus === "inactive"
                     ? "Garbage Collection Service Inactive"
                     : "Not Enrolled in Garbage Collection"}
                 </h2>
-                <p className="text-gray-600 text-sm mt-1 leading-relaxed">
+                <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm mt-1 leading-relaxed max-w-2xl">
                   {gcStatus === "temporary_stopped"
-                    ? "Your garbage collection service is temporarily paused. Payment and collection features are unavailable until the service is reactivated by the admin."
+                    ? "Your garbage collection service is temporarily paused. Service will resume once reactivated."
                     : gcStatus === "inactive"
-                    ? "Your garbage collection service is currently inactive. No collection or payment features are available."
-                    : "You are currently not participating in the Society Garbage Collection Program. No charges, bills, or payment records will be generated for your account."}
+                    ? "Your garbage collection service is currently inactive. Contact society administration for activation."
+                    : "You are currently not participating in the Society Garbage Collection Program. Doorstep pickup is not scheduled for your flat."}
                 </p>
                 {gcStatus === "not_participating" && (
-                  <p className="text-gray-500 text-xs mt-2.5 flex items-center gap-1.5">
+                  <p className="text-slate-500 dark:text-slate-400 text-xs mt-2 flex items-center gap-1.5">
                     <FaInfoCircle className="text-blue-500 shrink-0" />
-                    Want doorstep waste pickup? Send an enrollment request to the admin below.
+                    Want door-to-door waste pickup? Submit an enrollment request below.
                   </p>
                 )}
               </div>
@@ -583,12 +604,13 @@ export default function ResidentDashboard() {
             {/* Option to send request to admin to join GC */}
             <div className="md:shrink-0 flex items-center self-start md:self-center">
               {myPendingRequest ? (
-                <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold shadow-xs">
+                <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-semibold shadow-xs">
                   <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                   Request Sent to Admin (Pending Approval)
                 </div>
               ) : (
                 <button
+                  type="button"
                   onClick={() => {
                     setJoinReason(DEFAULT_JOIN_GC_MESSAGE);
                     setShowJoinModal(true);
@@ -596,7 +618,7 @@ export default function ResidentDashboard() {
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs transition shadow-sm"
                 >
                   <FaPaperPlane className="text-xs" />
-                  Send Request to Admin to Join GC
+                  Request to Join Garbage Collection
                 </button>
               )}
             </div>
@@ -604,137 +626,486 @@ export default function ResidentDashboard() {
         </div>
       )}
 
-      {/* Quick Actions */}
-      <div className="bg-white rounded-2xl shadow-sm p-5">
-        <h2 className="text-lg font-bold text-gray-800 mb-4">Quick Actions</h2>
-        <div className={`grid ${isParticipating ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"} gap-3`}>
+      {/* ═══════════ Mandatory Notifications & Recent Updates ═══════════ */}
+      <RecentUpdatesCard />
+
+      {/* ═══════════ Section: Financial & Account Metrics ═══════════ */}
+      {isParticipating && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Paid</p>
+              <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
+                ₹{totalPaid.toLocaleString("en-IN")}
+              </h3>
+              <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">Lifetime verified</p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-lg shrink-0">
+              <FaMoneyBillWave />
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Monthly Fee</p>
+              <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
+                ₹{(Number(resident.charge) || Number(myPayments[0]?.amount) || 80).toLocaleString("en-IN")}
+              </h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">Monthly billing rate</p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center text-lg shrink-0">
+              <FaWallet />
+            </div>
+          </div>
+
+          <Link
+            to="/resident/receipts"
+            className="group bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition flex items-center justify-between"
+          >
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Receipts</p>
+              <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
+                {myPayments.length}
+              </h3>
+              <p className="text-[10px] text-blue-600 group-hover:underline mt-0.5">View all slips →</p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-lg shrink-0 group-hover:scale-110 transition-transform">
+              <FaReceipt />
+            </div>
+          </Link>
+
+          <Link
+            to="/resident/bills"
+            className="group bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition flex items-center justify-between"
+          >
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Bills</p>
+              <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
+                {myBills.length}
+              </h3>
+              <p className="text-[10px] text-amber-600 group-hover:underline mt-0.5">Invoice history →</p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg shrink-0 group-hover:scale-110 transition-transform">
+              <FaClock />
+            </div>
+          </Link>
+        </div>
+      )}
+
+      {/* ═══════════ Last Payment Highlight ═══════════ */}
+      {lastPayment && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <FaReceipt className="text-emerald-500" /> Most Recent Payment
+            </h3>
+            <Link
+              to="/resident/receipts"
+              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+            >
+              All Receipts <FaArrowRight className="text-[9px]" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+              <span className="text-[11px] text-slate-400">Amount Paid</span>
+              <p className="font-black text-emerald-600 dark:text-emerald-400 text-base">
+                ₹{Number(lastPayment.amount || 0).toLocaleString("en-IN")}
+              </p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+              <span className="text-[11px] text-slate-400">Payment Mode</span>
+              <p className="font-bold text-slate-900 dark:text-white truncate">
+                {lastPayment.paymentMethod || "Direct"}
+              </p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+              <span className="text-[11px] text-slate-400">Date</span>
+              <p className="font-bold text-slate-900 dark:text-white truncate">
+                {lastPayment.paymentDate || "—"}
+              </p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+              <span className="text-[11px] text-slate-400">Receipt No</span>
+              <p className="font-bold font-mono text-xs text-blue-600 dark:text-blue-400 truncate">
+                {lastPayment.receiptNumber || "—"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ Active Special Collection Drives ═══════════ */}
+      {activeSpecialDrives.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-pink-500/10 text-pink-600 dark:text-pink-400 flex items-center justify-center text-lg font-bold">
+                <FaHandHoldingHeart />
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                  Active Community Drives & Fundraisers
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Festival celebrations, security funds, and society improvements
+                </p>
+              </div>
+            </div>
+
+            <Link
+              to="/resident/special-collections"
+              className="text-xs font-bold text-pink-600 dark:text-pink-400 hover:underline flex items-center gap-1"
+            >
+              View All <FaArrowRight className="text-[9px]" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {activeSpecialDrives.map((drive) => {
+              const collected = Number(drive.collectedAmount || drive.currentAmount || 0);
+              const target = Number(drive.targetAmount || 0);
+              const pct = target > 0 ? Math.round((collected / target) * 100) : 0;
+
+              return (
+                <div
+                  key={drive.id}
+                  className="p-4 rounded-2xl bg-gradient-to-br from-pink-50/50 via-slate-50 to-pink-50/30 dark:from-pink-950/20 dark:via-slate-850 dark:to-slate-800 border border-pink-100 dark:border-pink-900/40 flex flex-col justify-between space-y-3"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-pink-100 dark:bg-pink-900/60 text-pink-700 dark:text-pink-300">
+                        {drive.collectionType || "Special Drive"}
+                      </span>
+                      <span className="text-xs font-bold text-pink-600 dark:text-pink-400">
+                        {pct}% Funded
+                      </span>
+                    </div>
+
+                    <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
+                      {drive.name || drive.title || "Society Initiative"}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
+                      {drive.purpose || drive.description || "Community contribution drive"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
+                      <span>Raised: <strong>₹{collected.toLocaleString("en-IN")}</strong></span>
+                      {target > 0 && <span>Goal: ₹{target.toLocaleString("en-IN")}</span>}
+                    </div>
+
+                    <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-pink-500 to-rose-500 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(pct, 100)}%` }}
+                      />
+                    </div>
+
+                    <div className="mt-3.5 pt-2.5 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400">
+                        {drive.targetAudience === "public_open" ? "Open to All" : "Society Residents"}
+                      </span>
+
+                      <Link
+                        to={`/resident/special-collections`}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold transition shadow-xs"
+                      >
+                        <FaHandHoldingHeart className="text-[10px]" /> Contribute
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ Quick Actions Grid ═══════════ */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+            Quick Services & Shortcuts
+          </h2>
+          <span className="text-xs text-slate-400">Essential Resident Tools</span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-3.5">
           {isParticipating && (
             <>
-              <QuickAction to={`${basePath}/bills`} icon={<FaWallet />} label="My Bills" color="blue" />
-              <QuickAction to={`${basePath}/payments`} icon={<FaReceipt />} label="Payments" color="emerald" />
+              <QuickActionTile to={`${basePath}/bills`} icon={<FaWallet />} label="My Bills" desc="Dues & invoices" color="blue" />
+              <QuickActionTile to={`${basePath}/payments`} icon={<FaReceipt />} label="Payments" desc="Receipt archive" color="emerald" />
             </>
           )}
-          <QuickAction to={`${basePath}/notices`} icon={<FaBullhorn />} label="Notices" color="purple" />
-          <QuickAction to={`${basePath}/complaints`} icon={<FaExclamationCircle />} label="Complaints" color="red" />
-          <QuickAction to={`${basePath}/events`} icon={<FaCalendarAlt />} label="Events" color="indigo" />
-          <QuickAction to={`${basePath}/activities`} icon={<FaLeaf />} label="Activities" color="green" />
-          <QuickAction to={`${basePath}/committee`} icon={<FaUserTie />} label="Committee" color="amber" />
-          <QuickAction to={`${basePath}/special-collections`} icon={<FaHandHoldingHeart />} label="Special Drives" color="rose" />
-          <QuickAction to={`${basePath}/support`} icon={<FaQuestionCircle />} label="Help & FAQs" color="teal" />
-          <QuickAction to={`${basePath}/profile`} icon={<FaUser />} label="Profile" color="sky" />
+          <QuickActionTile to={`${basePath}/special-collections`} icon={<FaHandHoldingHeart />} label="Special Drives" desc="Festivals & funds" color="pink" />
+          <QuickActionTile to={`${basePath}/notices`} icon={<FaBullhorn />} label="Notices" desc="Circulars & alerts" color="purple" />
+          <QuickActionTile to={`${basePath}/complaints`} icon={<FaExclamationCircle />} label="Complaints" desc="Report an issue" color="rose" />
+          <QuickActionTile to={`${basePath}/suggestions`} icon={<FaLightbulb />} label="Suggestions" desc="Ideas & feedback" color="amber" />
+          <QuickActionTile to={`${basePath}/events`} icon={<FaCalendarAlt />} label="Events" desc="Society calendar" color="indigo" />
+          <QuickActionTile to={`${basePath}/activities`} icon={<FaLeaf />} label="Activities" desc="Green drives & work" color="green" />
+          <QuickActionTile to={`${basePath}/committee`} icon={<FaUserTie />} label="Committee" desc="Office bearers" color="amber" />
+          <QuickActionTile to={`${basePath}/support`} icon={<FaQuestionCircle />} label="Help & FAQs" desc="Support guides" color="teal" />
+          <QuickActionTile to={`${basePath}/profile`} icon={<FaUser />} label="My Profile" desc="Account settings" color="sky" />
         </div>
       </div>
 
-      {/* Two-Column Layout */}
+      {/* ═══════════ Community Hub: 2-Column Grid ═══════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        {/* Recent Notices */}
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold flex items-center gap-2"><FaBullhorn className="text-purple-500" /> Notices</h2>
-            <Link to={`${basePath}/notices`} className="text-xs text-blue-600 flex items-center gap-1 hover:underline">View All <FaArrowRight className="text-[10px]" /></Link>
-          </div>
-          {recentNotices.length === 0 ? (
-            <p className="text-gray-400 text-sm">No notices yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {recentNotices.map((n) => (
-                <div key={n.id} className="bg-gray-50 rounded-xl p-3">
-                  <p className="font-semibold text-sm truncate">{n.title}</p>
-                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{n.content || n.description}</p>
-                </div>
-              ))}
+        {/* Notice Board */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center text-sm">
+                  <FaBullhorn />
+                </span>
+                Official Notices
+              </h2>
+              <Link to={`${basePath}/notices`} className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+                View All <FaArrowRight className="text-[9px]" />
+              </Link>
             </div>
-          )}
+
+            {recentNotices.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-sm">
+                No active announcements right now.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentNotices.map((n) => (
+                  <Link
+                    key={n.id}
+                    to={`${basePath}/notices`}
+                    className="block group p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 transition"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="font-bold text-sm text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        {n.title}
+                      </h4>
+                      {n.priority === "urgent" && (
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+                          Urgent
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                      {n.content || n.description}
+                    </p>
+                    {n.date && (
+                      <span className="text-[10px] text-slate-400 mt-2 block">
+                        Published: {n.date}
+                      </span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-right">
+            <Link to={`${basePath}/notices`} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">
+              Read all circulars <FaChevronRight className="text-[9px]" />
+            </Link>
+          </div>
         </div>
 
-        {/* Upcoming Events */}
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold flex items-center gap-2"><FaCalendarAlt className="text-indigo-500" /> Upcoming Events</h2>
-            <Link to={`${basePath}/events`} className="text-xs text-blue-600 flex items-center gap-1 hover:underline">View All <FaArrowRight className="text-[10px]" /></Link>
-          </div>
-          {upcomingEvents.length === 0 ? (
-            <p className="text-gray-400 text-sm">No upcoming events.</p>
-          ) : (
-            <div className="space-y-2">
-              {upcomingEvents.map((e) => (
-                <div key={e.id} className="bg-gray-50 rounded-xl p-3">
-                  <p className="font-semibold text-sm truncate">{e.title}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{e.date || e.eventDate} {e.time && `at ${e.time}`}</p>
-                </div>
-              ))}
+        {/* Upcoming Society Events */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center text-sm">
+                  <FaCalendarAlt />
+                </span>
+                Upcoming Society Events
+              </h2>
+              <Link to={`${basePath}/events`} className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+                View All <FaArrowRight className="text-[9px]" />
+              </Link>
             </div>
-          )}
+
+            {upcomingEvents.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-sm">
+                No upcoming events scheduled.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {upcomingEvents.map((e) => (
+                  <div
+                    key={e.id}
+                    className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60"
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex flex-col items-center justify-center text-center shrink-0 border border-indigo-100 dark:border-indigo-900/50">
+                      <span className="text-[10px] font-bold uppercase tracking-wider">EVENT</span>
+                      <FaCalendarAlt className="text-sm" />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                        {e.title}
+                      </h4>
+                      <p className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold mt-0.5">
+                        {e.date || e.eventDate} {e.time && `• ${e.time}`}
+                      </p>
+                      {e.location && (
+                        <p className="text-xs text-slate-400 truncate mt-0.5">
+                          📍 {e.location}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-right">
+            <Link to={`${basePath}/events`} className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">
+              Check society calendar <FaChevronRight className="text-[9px]" />
+            </Link>
+          </div>
         </div>
 
         {/* My Complaints */}
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold flex items-center gap-2"><FaExclamationCircle className="text-red-500" /> My Complaints</h2>
-            <Link to={`${basePath}/complaints`} className="text-xs text-blue-600 flex items-center gap-1 hover:underline">View All <FaArrowRight className="text-[10px]" /></Link>
-          </div>
-          {myComplaints.length === 0 ? (
-            <p className="text-gray-400 text-sm">No complaints submitted.</p>
-          ) : (
-            <div className="space-y-2">
-              {myComplaints.map((c) => (
-                <div key={c.id} className="bg-gray-50 rounded-xl p-3 flex items-center justify-between">
-                  <p className="font-semibold text-sm truncate flex-1">{c.title || c.subject}</p>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ml-2 ${
-                    c.status === "resolved" ? "bg-green-100 text-green-700" :
-                    c.status === "in_progress" ? "bg-blue-100 text-blue-700" :
-                    "bg-yellow-100 text-yellow-700"
-                  }`}>
-                    {c.status?.replace("_", " ") || "Pending"}
-                  </span>
-                </div>
-              ))}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center text-sm">
+                  <FaExclamationCircle />
+                </span>
+                My Tickets & Grievances
+              </h2>
+              <Link to={`${basePath}/complaints`} className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+                View All <FaArrowRight className="text-[9px]" />
+              </Link>
             </div>
-          )}
+
+            {myComplaints.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-sm">
+                <p>No complaints submitted.</p>
+                <Link
+                  to={`${basePath}/complaints`}
+                  className="mt-2 inline-block text-xs font-bold text-rose-600 hover:underline"
+                >
+                  Raise a ticket if you need assistance +
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {myComplaints.map((c) => {
+                  const status = (c.status || "pending").toLowerCase();
+                  const badgeColor =
+                    status === "resolved"
+                      ? "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300"
+                      : status === "in_progress"
+                      ? "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950 dark:text-blue-300"
+                      : "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300";
+
+                  return (
+                    <div
+                      key={c.id}
+                      className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                          {c.title || c.subject}
+                        </h4>
+                        <p className="text-xs text-slate-400 truncate mt-0.5">
+                          {c.category || "General"} • {c.createdAt ? String(c.createdAt).slice(0, 10) : "Recent"}
+                        </p>
+                      </div>
+
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shrink-0 ${badgeColor}`}>
+                        {status.replace("_", " ")}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-right">
+            <Link to={`${basePath}/complaints`} className="text-xs font-semibold text-rose-600 hover:underline inline-flex items-center gap-1">
+              Submit new complaint +
+            </Link>
+          </div>
         </div>
 
         {/* Recent Activities */}
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold flex items-center gap-2"><FaLeaf className="text-green-500" /> Recent Activities</h2>
-            <Link to={`${basePath}/activities`} className="text-xs text-blue-600 flex items-center gap-1 hover:underline">View All <FaArrowRight className="text-[10px]" /></Link>
-          </div>
-          {recentActivities.length === 0 ? (
-            <p className="text-gray-400 text-sm">No activities yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {recentActivities.map((a) => (
-                <div key={a.id} className="bg-gray-50 rounded-xl p-3">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">{a.category}</span>
-                    <p className="font-semibold text-sm truncate">{a.title}</p>
-                  </div>
-                  {a.date && <p className="text-xs text-gray-500 mt-0.5">{a.date}</p>}
-                </div>
-              ))}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-sm">
+                  <FaLeaf />
+                </span>
+                Society Activities & Drives
+              </h2>
+              <Link to={`${basePath}/activities`} className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+                View All <FaArrowRight className="text-[9px]" />
+              </Link>
             </div>
-          )}
+
+            {recentActivities.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-sm">
+                No recent activities posted yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentActivities.map((a) => (
+                  <div
+                    key={a.id}
+                    className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                        {a.category || "Activity"}
+                      </span>
+                      {a.date && <span className="text-xs text-slate-400">{a.date}</span>}
+                    </div>
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                      {a.title}
+                    </h4>
+                    {a.description && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
+                        {a.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-right">
+            <Link to={`${basePath}/activities`} className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1">
+              Explore past activities <FaChevronRight className="text-[9px]" />
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* RWA Committee Section */}
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200/80 p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-5 pb-4 border-b border-slate-100">
+      {/* ═══════════ RWA Committee Section ═══════════ */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200/80 dark:border-slate-800 p-6 sm:p-7">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2.5">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
               <span className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center text-base">
                 <FaUserTie />
               </span>
-              RWA Committee Members
+              RWA Executive Committee
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Elected leadership and office bearers of D BLOCK RWA INDRAPRASTHA
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Leadership and office bearers of D BLOCK RWA INDRAPRASTHA
             </p>
           </div>
           <Link
             to={`${basePath}/committee`}
-            className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 transition"
+            className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 transition"
           >
             View All ({activeCommittee.length}) <FaArrowRight className="text-[10px]" />
           </Link>
@@ -751,16 +1122,20 @@ export default function ResidentDashboard() {
             {activeCommittee.slice(0, 6).map((member) => {
               const phoneClean = (member.phone || "").replace(/\D/g, "").slice(-10);
               const desigColor =
-                member.designation === "President" ? "bg-amber-100 text-amber-800" :
-                member.designation === "Vice President" ? "bg-emerald-100 text-emerald-800" :
-                member.designation === "General Secretary" ? "bg-blue-100 text-blue-800" :
-                member.designation === "Treasurer" ? "bg-violet-100 text-violet-800" :
-                "bg-slate-100 text-slate-700";
+                member.designation === "President"
+                  ? "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200"
+                  : member.designation === "Vice President"
+                  ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200"
+                  : member.designation === "General Secretary"
+                  ? "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200"
+                  : member.designation === "Treasurer"
+                  ? "bg-violet-100 text-violet-900 dark:bg-violet-950/60 dark:text-violet-300 border-violet-200"
+                  : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-200";
 
               return (
                 <div
                   key={member.id || member.uid}
-                  className="bg-slate-50/70 hover:bg-slate-100/80 rounded-2xl p-4 border border-slate-200/80 transition duration-200 flex flex-col justify-between"
+                  className="bg-slate-50/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 transition duration-200 flex flex-col justify-between"
                 >
                   <div>
                     <div className="flex items-center gap-3">
@@ -768,10 +1143,10 @@ export default function ResidentDashboard() {
                         <img
                           src={member.profilePhotoUrl}
                           alt={member.name}
-                          className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0"
+                          className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
                         />
                       ) : (
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
                           {member.name
                             ?.split(" ")
                             .map((n) => n[0])
@@ -782,16 +1157,14 @@ export default function ResidentDashboard() {
                       )}
 
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <h3 className="font-bold text-sm text-slate-900 truncate">
-                            {member.name}
-                          </h3>
-                        </div>
-                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${desigColor}`}>
+                        <h3 className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                          {member.name}
+                        </h3>
+                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border mt-0.5 ${desigColor}`}>
                           {member.designation}
                         </span>
                         {(member.flat || member.block) && (
-                          <p className="text-[11px] text-slate-500 mt-0.5 truncate flex items-center gap-1">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate flex items-center gap-1">
                             <FaHome className="text-[9px] text-slate-400 shrink-0" />
                             <span>
                               {member.flat ? `Flat ${member.flat}` : ""}
@@ -804,17 +1177,17 @@ export default function ResidentDashboard() {
                     </div>
                   </div>
 
-                  <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between">
+                  <div className="mt-3.5 pt-3 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
                     {member.phone ? (
                       <a
                         href={`tel:${member.phone}`}
-                        className="text-xs font-semibold text-slate-700 hover:text-blue-600 flex items-center gap-1.5 truncate"
+                        className="text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-blue-600 flex items-center gap-1.5 truncate"
                       >
                         <FaPhone className="text-[10px] text-emerald-600" />
                         <span>{member.phone}</span>
                       </a>
                     ) : (
-                      <span className="text-[11px] text-slate-400 italic">No phone listed</span>
+                      <span className="text-[11px] text-slate-400 italic">No direct phone</span>
                     )}
 
                     {phoneClean && (
@@ -834,38 +1207,28 @@ export default function ResidentDashboard() {
             })}
           </div>
         )}
-
-        {activeCommittee.length > 6 && (
-          <div className="mt-4 pt-3 border-t border-slate-100 text-center">
-            <Link
-              to={`${basePath}/committee`}
-              className="text-xs font-bold text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
-            >
-              View all {activeCommittee.length} committee members <FaArrowRight className="text-[10px]" />
-            </Link>
-          </div>
-        )}
       </div>
 
-      {/* Join GC Request Modal */}
+      {/* ═══════════ Join GC Request Modal ═══════════ */}
       {showJoinModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-2.5 text-emerald-700">
-                <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
-                  <FaRecycle className="text-lg" />
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5 text-emerald-700 dark:text-emerald-400">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-lg">
+                  <FaRecycle />
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg text-gray-800">
-                    Request to Join Garbage Collection
+                  <h3 className="font-bold text-lg text-slate-900 dark:text-white">
+                    Request Doorstep Waste Service
                   </h3>
-                  <p className="text-xs text-gray-400">Door-to-door society service</p>
+                  <p className="text-xs text-slate-400">Society door-to-door garbage collection</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setShowJoinModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition"
               >
                 <FaTimes />
               </button>
@@ -873,18 +1236,18 @@ export default function ResidentDashboard() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Request Message to Admin (Pre-filled default message)
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  Message to Society Admin
                 </label>
                 <textarea
                   value={joinReason}
                   onChange={(e) => setJoinReason(e.target.value)}
                   rows={4}
-                  className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none resize-none text-sm text-gray-800 leading-relaxed"
+                  className="w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-2xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none resize-none text-sm text-slate-900 dark:text-white leading-relaxed"
                   placeholder="Reason / message for joining..."
                 />
-                <p className="text-xs text-gray-400 mt-1.5">
-                  The standard message is pre-filled above. You can customize it or send directly.
+                <p className="text-xs text-slate-400 mt-1.5">
+                  Standard enrollment message is filled above. You can customize it or send directly.
                 </p>
               </div>
             </div>
@@ -893,7 +1256,7 @@ export default function ResidentDashboard() {
               <button
                 type="button"
                 onClick={() => setShowJoinModal(false)}
-                className="px-5 py-2.5 rounded-xl border hover:bg-gray-50 text-sm font-medium transition text-gray-600"
+                className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-semibold transition text-slate-600 dark:text-slate-300"
                 disabled={submittingJoin}
               >
                 Cancel
@@ -934,47 +1297,42 @@ export default function ResidentDashboard() {
    Sub-Components
 ================================ */
 
-function StatCard({ icon, label, value, color }) {
-  const colors = {
-    emerald: "border-emerald-500 text-emerald-600",
-    purple: "border-purple-500 text-purple-600",
-    blue: "border-blue-500 text-blue-600",
-    orange: "border-orange-500 text-orange-600",
-    red: "border-red-500 text-red-600",
+function QuickActionTile({ to, icon, label, desc, color }) {
+  const colorStyles = {
+    blue: "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-900/50 hover:border-blue-300",
+    emerald: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/50 hover:border-emerald-300",
+    purple: "bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border-purple-100 dark:border-purple-900/50 hover:border-purple-300",
+    rose: "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-rose-100 dark:border-rose-900/50 hover:border-rose-300",
+    indigo: "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-900/50 hover:border-indigo-300",
+    green: "bg-green-50 dark:bg-green-950/40 text-green-600 dark:text-green-400 border-green-100 dark:border-green-900/50 hover:border-green-300",
+    sky: "bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 border-sky-100 dark:border-sky-900/50 hover:border-sky-300",
+    amber: "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-100 dark:border-amber-900/50 hover:border-amber-300",
+    teal: "bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 border-teal-100 dark:border-teal-900/50 hover:border-teal-300",
+    pink: "bg-pink-50 dark:bg-pink-950/40 text-pink-600 dark:text-pink-400 border-pink-100 dark:border-pink-900/50 hover:border-pink-300",
   };
 
-  return (
-    <div className={`bg-white rounded-2xl shadow-sm p-4 border-l-4 ${colors[color]}`}>
-      <div className="flex items-center gap-2 mb-2">
-        {icon}
-        <span className="text-xs text-gray-500">{label}</span>
-      </div>
-      <h3 className="text-xl font-bold text-gray-800">{value}</h3>
-    </div>
-  );
-}
-
-function QuickAction({ to, icon, label, color }) {
-  const colors = {
-    blue: "bg-blue-50 text-blue-600 hover:bg-blue-100",
-    emerald: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100",
-    purple: "bg-purple-50 text-purple-600 hover:bg-purple-100",
-    red: "bg-red-50 text-red-600 hover:bg-red-100",
-    indigo: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100",
-    green: "bg-green-50 text-green-600 hover:bg-green-100",
-    sky: "bg-sky-50 text-sky-600 hover:bg-sky-100",
-    amber: "bg-amber-50 text-amber-700 hover:bg-amber-100",
-    teal: "bg-teal-50 text-teal-700 hover:bg-teal-100",
-    rose: "bg-rose-50 text-rose-600 hover:bg-rose-100",
-  };
+  const style = colorStyles[color] || colorStyles.blue;
 
   return (
     <Link
       to={to}
-      className={`rounded-xl p-4 flex flex-col items-center gap-2 text-sm font-medium transition ${colors[color]}`}
+      className={`group relative flex flex-col justify-between p-3.5 sm:p-4 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${style}`}
     >
-      <span className="text-xl">{icon}</span>
-      {label}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xl sm:text-2xl transition-transform group-hover:scale-110">
+          {icon}
+        </span>
+        <FaChevronRight className="text-[9px] text-slate-300 dark:text-slate-600 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 transition-all" />
+      </div>
+
+      <div>
+        <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+          {label}
+        </h4>
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+          {desc}
+        </p>
+      </div>
     </Link>
   );
 }

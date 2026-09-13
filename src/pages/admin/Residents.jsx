@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   FaPlus,
   FaExclamationTriangle,
@@ -14,6 +14,7 @@ import {
   FaBan,
   FaClock,
   FaUnlock,
+  FaPrint,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -24,9 +25,13 @@ import ResidentsTable from "../../components/residents/ResidentsTable";
 import StatsCards from "../../components/residents/StatsCards";
 import MonthSelector from "../../components/common/MonthSelector";
 import PendingDuesModal from "../../components/residents/PendingDuesModal";
+import PrintResidentsModal from "../../components/residents/PrintResidentsModal";
 import PaymentModal from "../../components/collections/PaymentModal";
 import PaymentReceiptSuccessModal from "../../components/collections/PaymentReceiptSuccessModal";
 import { collectResidentPayment } from "../../utils/collectPayment";
+import { subscribeSettings } from "../../services/settingsService";
+import { syncBlockWiseResidents } from "../../utils/reportSyncService";
+import { generateBlockWiseResidentsPDF } from "../../utils/printReportHelper";
 
 import { useResidents } from "../../context/ResidentContext";
 import { usePayments } from "../../context/PaymentContext";
@@ -92,11 +97,20 @@ export default function Residents() {
 
   // Pending Dues & Direct Collection State
   const [showPendingModal, setShowPendingModal] = useState(false);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [societySettings, setSocietySettings] = useState({});
   const [collectTarget, setCollectTarget] = useState(null);
   const [collectMonth, setCollectMonth] = useState("");
   const [collectYear, setCollectYear] = useState(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [successReceipt, setSuccessReceipt] = useState(null);
+
+  useEffect(() => {
+    const unsub = subscribeSettings((data) => {
+      if (data) setSocietySettings(data);
+    });
+    return () => unsub && unsub();
+  }, []);
 
   function handleOpenCollectFromPending(resident, month, year) {
     setCollectTarget(resident);
@@ -480,6 +494,25 @@ export default function Residents() {
     });
   }, [residents, search, filters, gcMonthlyStats]);
 
+  function handleExportPdf() {
+    const syncedData = syncBlockWiseResidents({
+      residents,
+      blocks,
+      bills,
+      garbageBills,
+      payments,
+      month: selectedMonth,
+      year: selectedYear,
+    });
+    generateBlockWiseResidentsPDF({
+      syncedData,
+      settings: societySettings,
+      filterBlock: filters.block === "all" ? "all" : filters.block,
+      filterStatus: filters.status === "all" ? "all" : filters.status.toLowerCase(),
+      filterGc: filters.gcStatus === "all" ? "all" : filters.gcStatus,
+    });
+  }
+
   return (
     <>
       <div className="space-y-6">
@@ -492,7 +525,7 @@ export default function Residents() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={() => setShowPendingModal(true)}
               className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-4 py-3 rounded-xl font-semibold transition shadow-sm text-sm"
@@ -505,6 +538,15 @@ export default function Residents() {
                   {gcMonthlyStats.pendingResidents}
                 </span>
               )}
+            </button>
+
+            <button
+              onClick={() => setShowPrintModal(true)}
+              title="Print All Residents Directory (Block-Wise)"
+              className="flex items-center gap-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-4 py-3 rounded-xl font-semibold transition shadow-xs text-sm"
+            >
+              <FaPrint className="text-purple-600" />
+              <span>Print Register (Block-Wise)</span>
             </button>
 
             <button
@@ -1026,6 +1068,7 @@ export default function Residents() {
         open={drawerOpen}
         resident={editingResident}
         onSave={handleSave}
+        defaultCharge={societySettings?.monthlyCharge || 80}
         onClose={() => {
           setDrawerOpen(false);
           setEditingResident(null);
@@ -1069,6 +1112,20 @@ export default function Residents() {
           onClose={() => setSuccessReceipt(null)}
         />
       )}
+
+      {/* Block-Wise Resident Register Print Modal */}
+      <PrintResidentsModal
+        open={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        residents={residents}
+        blocks={blocks}
+        bills={bills}
+        garbageBills={garbageBills}
+        payments={payments}
+        month={selectedMonth}
+        year={selectedYear}
+        settings={societySettings}
+      />
     </>
   );
 }

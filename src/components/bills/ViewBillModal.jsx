@@ -1,9 +1,14 @@
-import { FaTimes, FaFileInvoiceDollar, FaCheckCircle, FaClock, FaBan, FaCalendarCheck, FaExclamationTriangle } from "react-icons/fa";
+import { FaTimes, FaFileInvoiceDollar, FaCheckCircle, FaClock, FaBan, FaCalendarCheck, FaExclamationTriangle, FaFilePdf } from "react-icons/fa";
+import { generateSingleBillPDF } from "../../utils/printReportHelper";
 
-export default function ViewBillModal({ open, bill, onClose }) {
+export default function ViewBillModal({ open, bill, onClose, settings = {} }) {
   if (!open || !bill) return null;
 
   const status = bill.displayStatus || bill.status;
+
+  function handleDownloadPDF() {
+    generateSingleBillPDF(bill, settings);
+  }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50 p-4">
@@ -107,8 +112,17 @@ export default function ViewBillModal({ open, bill, onClose }) {
         </div>
 
         {/* Footer */}
-        <div className="border-t p-4 bg-gray-50 flex justify-end">
+        <div className="border-t p-4 bg-gray-50 flex items-center justify-between">
           <button
+            type="button"
+            onClick={handleDownloadPDF}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-md shadow-red-600/20 text-sm"
+          >
+            <FaFilePdf />
+            <span>Download PDF Invoice</span>
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-2.5 rounded-xl font-bold transition"
           >

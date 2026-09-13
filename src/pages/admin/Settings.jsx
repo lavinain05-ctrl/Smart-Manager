@@ -27,14 +27,14 @@ import BackupCard from "../../components/settings/BackupCard";
 import { useSettings } from "../../context/SettingsContext";
 import { useAuth } from "../../context/AuthContext";
 import { auth, db } from "../../firebase/firebase";
-import { updateEmail } from "firebase/auth";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import {
-  mobileToAuthEmail,
   writeAuthLookup,
+  deleteAuthLookup,
   normalizeMobile,
   AUTH_EMAIL_DOMAIN,
 } from "../../services/authService";
+import { saveGarbageSettings } from "../../services/garbageService";
 
 const TABS = [
   { key: "general", label: "General", icon: <FaCog /> },
@@ -88,9 +88,15 @@ export default function Settings() {
     googleMapUrl: "",
   });
 
-  // Admin migration state
-  const [migrateMobile, setMigrateMobile] = useState("");
+  // Admin mobile login linking state
+  const [migrateMobile, setMigrateMobile] = useState(() => user?.phone || "");
   const [migrateLoading, setMigrateLoading] = useState(false);
+
+  useEffect(() => {
+    if (user?.phone) {
+      setMigrateMobile(user.phone);
+    }
+  }, [user?.phone]);
 
   // Populate form when settings load from Firestore
   useEffect(() => {
@@ -127,9 +133,15 @@ export default function Settings() {
   async function handleSave() {
     setSaving(true);
     try {
+      const charge = Number(form.monthlyCharge) > 0 ? Number(form.monthlyCharge) : 80;
       await updateSettings({
         ...form,
-        monthlyCharge: Number(form.monthlyCharge) || 0,
+        monthlyCharge: charge,
+      });
+      // Synchronize with Garbage Module Configuration
+      await saveGarbageSettings({
+        defaultCharge: charge,
+        collectionTime: form.collectorTiming || "7:00 AM - 9:00 AM",
       });
     } finally {
       setSaving(false);
@@ -137,7 +149,7 @@ export default function Settings() {
   }
 
   // =============================
-  // Admin Mobile Migration
+  // Admin Mobile Login Linking
   // =============================
   async function handleMigrateToMobile() {
     const cleanMobile = normalizeMobile(migrateMobile);
@@ -150,37 +162,41 @@ export default function Settings() {
     try {
       const currentUser = auth.currentUser;
       if (!currentUser) {
-        toast.error("You must be logged in to migrate.");
+        toast.error("You must be logged in to link your mobile number.");
         setMigrateLoading(false);
         return;
       }
 
-      const newPseudoEmail = mobileToAuthEmail(cleanMobile);
+      // 1. Verify if this mobile number is already linked to another account
+      const lookupSnap = await getDoc(doc(db, "authLookup", cleanMobile));
+      if (lookupSnap.exists()) {
+        const data = lookupSnap.data();
+        if (data.uid && data.uid !== currentUser.uid) {
+          toast.error(`Mobile number +91 ${cleanMobile} is already linked to another account.`);
+          setMigrateLoading(false);
+          return;
+        }
+      }
 
-      // 1. Update Firebase Auth email
-      await updateEmail(currentUser, newPseudoEmail);
+      // 2. Remove old mobile mapping if mobile number changed
+      if (user?.phone && user.phone !== cleanMobile) {
+        await deleteAuthLookup(user.phone);
+      }
 
-      // 2. Update Firestore users/{uid}
+      // 3. Update Firestore users/{uid}
       await updateDoc(doc(db, "users", currentUser.uid), {
         phone: cleanMobile,
-        email: newPseudoEmail,
         updatedAt: serverTimestamp(),
       });
 
-      // 3. Write centralized auth lookup mapping
-      await writeAuthLookup(cleanMobile, newPseudoEmail, currentUser.uid);
+      // 4. Write centralized auth lookup mapping
+      // Maps cleanMobile -> currentUser.email (e.g. dharmendrasngh101@gmail.com)
+      await writeAuthLookup(cleanMobile, currentUser.email, currentUser.uid);
 
-      toast.success(`Admin login migrated! Log out and sign in with mobile ${cleanMobile}.`);
-      setMigrateMobile("");
+      toast.success(`Mobile login active! You can now log in using either +91 ${cleanMobile} or your email.`);
     } catch (error) {
-      console.error("[MigrateAdmin]", error);
-      if (error.code === "auth/requires-recent-login") {
-        toast.error("Please log out and log in again, then try migration immediately.");
-      } else if (error.code === "auth/email-already-in-use") {
-        toast.error("This mobile number is already in use by another account.");
-      } else {
-        toast.error(error.message || "Migration failed.");
-      }
+      console.error("[LinkAdminMobile]", error);
+      toast.error(error.message || "Failed to link mobile number.");
     } finally {
       setMigrateLoading(false);
     }
@@ -238,9 +254,9 @@ export default function Settings() {
     );
   }
 
-  // Check if admin is currently using mobile-based auth
-  const isAlreadyMobile = user?.email?.endsWith(`@${AUTH_EMAIL_DOMAIN}`);
-  const currentMobileNumber = isAlreadyMobile ? user.email.split("@")[0] : null;
+  // Check if admin is currently using mobile-based auth or has mobile linked
+  const linkedPhone = user?.phone || (user?.email?.endsWith(`@${AUTH_EMAIL_DOMAIN}`) ? user.email.split("@")[0] : null);
+  const isMobileLinked = Boolean(linkedPhone);
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -504,9 +520,9 @@ export default function Settings() {
                 </div>
               </div>
 
-              {isAlreadyMobile ? (
+              {isMobileLinked ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <FaCheckCircle className="text-emerald-500" /> Mobile Login Active ({currentMobileNumber})
+                  <FaCheckCircle className="text-emerald-500" /> Mobile & Email Login Active (+91 {linkedPhone})
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
@@ -526,42 +542,40 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Optional switch to mobile login for email users */}
-            {!isAlreadyMobile && (
-              <div className="border-t border-gray-100 pt-4 space-y-3">
-                <div>
-                  <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                    <FaExchangeAlt className="text-emerald-600" /> Switch to Mobile Number Login (Optional)
-                  </h3>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Link your 10-digit mobile number so you can log in using your phone number instead of email. Your password remains unchanged.
-                  </p>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                  <div className="relative flex-1">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-sm">
-                      +91
-                    </span>
-                    <input
-                      type="tel"
-                      placeholder="Enter 10-digit mobile number"
-                      value={migrateMobile}
-                      onChange={(e) => setMigrateMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      className="w-full pl-12 border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                      maxLength={10}
-                    />
-                  </div>
-                  <button
-                    onClick={handleMigrateToMobile}
-                    disabled={migrateLoading || migrateMobile.length !== 10}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white rounded-xl font-semibold text-sm transition whitespace-nowrap"
-                  >
-                    {migrateLoading ? "Updating..." : "Update Login"}
-                  </button>
-                </div>
+            {/* Link or update mobile number */}
+            <div className="border-t border-gray-100 pt-4 space-y-3">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                  <FaExchangeAlt className="text-emerald-600" /> {isMobileLinked ? "Update Linked Mobile Number" : "Link Mobile Number for Login (Optional)"}
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Link your 10-digit mobile number so you can log in using either your mobile number (+91) or your email. Your password remains unchanged.
+                </p>
               </div>
-            )}
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="relative flex-1">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-sm">
+                    +91
+                  </span>
+                  <input
+                    type="tel"
+                    placeholder="Enter 10-digit mobile number"
+                    value={migrateMobile}
+                    onChange={(e) => setMigrateMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    className="w-full pl-12 border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                    maxLength={10}
+                  />
+                </div>
+                <button
+                  onClick={handleMigrateToMobile}
+                  disabled={migrateLoading || migrateMobile.length !== 10}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white rounded-xl font-semibold text-sm transition whitespace-nowrap"
+                >
+                  {migrateLoading ? "Updating..." : (isMobileLinked ? "Update Login" : "Link Mobile")}
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* 2. Theme & Appearance */}

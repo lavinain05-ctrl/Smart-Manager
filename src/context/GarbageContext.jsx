@@ -14,6 +14,7 @@ import {
   where,
   collection,
   doc,
+  addDoc,
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
@@ -580,21 +581,50 @@ export function GarbageProvider({ children }) {
 
   async function recordPayment(billId, paymentData) {
     try {
-      const bill = garbageBills.find((b) => b.id === billId);
-      const resident = getResident(bill?.residentId);
-      const amount = Number(paymentData.amount !== undefined ? paymentData.amount : (bill?.amount || 0));
+      let bill = garbageBills.find((b) => b.id === billId);
+      const isVirtual = billId?.startsWith?.("auto-") || !bill;
+      const residentId = bill?.residentId || (billId?.startsWith?.("auto-") ? billId.replace("auto-", "") : "");
+      const resident = getResident(residentId);
+      const amount = Number(paymentData.amount !== undefined ? paymentData.amount : (bill?.amount || resident?.charge || 80));
       const receiptNo = "REC-" + Date.now();
       const isExempted = paymentData.paymentMethod === "Exempted";
       const newStatus = isExempted ? "Exempted" : "Paid";
       const finalAmount = isExempted ? 0 : amount;
+      let effectiveBillId = billId;
 
-      await updateBillSvc(billId, {
-        status: newStatus,
-        paidAmount: finalAmount,
-        paymentDate: paymentData.paymentDate || new Date().toLocaleDateString("en-IN"),
-        paymentMethod: paymentData.paymentMethod || "Cash",
-        collectedById: paymentData.collectedById || user?.uid || "",
-      });
+      if (isVirtual) {
+        // Create the actual garbage bill first in Firestore
+        effectiveBillId = await addBillSvc({
+          accountId: bill?.accountId || "",
+          residentId,
+          month: bill?.month || selectedMonth,
+          year: Number(bill?.year || selectedYear),
+          amount,
+          status: newStatus,
+          paidAmount: finalAmount,
+          paymentDate: paymentData.paymentDate || new Date().toLocaleDateString("en-IN"),
+          paymentMethod: paymentData.paymentMethod || "Cash",
+          collectedBy: paymentData.collectedBy || user?.name || "Admin",
+          dueDate: `10 ${bill?.month || selectedMonth} ${bill?.year || selectedYear}`,
+        });
+        bill = {
+          id: effectiveBillId,
+          residentId,
+          month: bill?.month || selectedMonth,
+          year: Number(bill?.year || selectedYear),
+          amount,
+          status: newStatus,
+          paidAmount: finalAmount,
+        };
+      } else {
+        await updateBillSvc(billId, {
+          status: newStatus,
+          paidAmount: finalAmount,
+          paymentDate: paymentData.paymentDate || new Date().toLocaleDateString("en-IN"),
+          paymentMethod: paymentData.paymentMethod || "Cash",
+          collectedById: paymentData.collectedById || user?.uid || "",
+        });
+      }
 
       // Synchronize to payments collection if not already recorded
       if (bill?.residentId && bill?.month && bill?.year) {
@@ -932,7 +962,8 @@ export function GarbageProvider({ children }) {
    * 2. Creates missing accounts for participating residents.
    * 3. Links residents to flats.
    */
-  async function reconcileGarbageAccounts() {
+  async function reconcileGarbageAccounts(options = {}) {
+    const isSilent = options?.silent === true;
     let accountsCreated = 0;
     let statusSynced = 0;
     let orphansCleaned = 0;
@@ -1025,18 +1056,69 @@ export function GarbageProvider({ children }) {
       }
     }
 
-    // 2. Create missing accounts for participating residents
+    // 2. Standardize charges and create missing accounts for participating residents
+    let chargesSynced = 0;
+    const effectiveStandardFee =
+      Number(garbageSettings.defaultCharge) > 0
+        ? Number(garbageSettings.defaultCharge)
+        : 80;
+
+    // Auto-fix garbageSettings in Firestore if defaultCharge is 0 or empty
+    if (!garbageSettings.defaultCharge || Number(garbageSettings.defaultCharge) <= 0) {
+      try {
+        await saveSettingsSvc({
+          defaultCharge: effectiveStandardFee,
+          billDueDay: Number(garbageSettings.billDueDay) || 10,
+          collectionTime: garbageSettings.collectionTime || "7:00 AM - 9:00 AM",
+          enableNotifications: garbageSettings.enableNotifications !== false,
+        });
+      } catch (e) {
+        console.warn("[Reconcile] Could not save default garbageSettings:", e);
+      }
+    }
+
     const updatedAccountSnap = await getDocs(collection(db, "garbageAccounts"));
     const currentEnrolledIds = new Set(
       updatedAccountSnap.docs.map((d) => d.data().residentId)
     );
 
+    // Standardize existing accounts if charge is 0
+    for (const d of updatedAccountSnap.docs) {
+      const a = d.data();
+      if (!a.monthlyCharge || Number(a.monthlyCharge) <= 0) {
+        try {
+          await updateAccountSvc(d.id, { monthlyCharge: effectiveStandardFee });
+          chargesSynced++;
+        } catch (e) {
+          console.warn("[Reconcile] Could not update account charge:", e);
+        }
+      }
+    }
+
     for (const resident of participatingResidents) {
+      // Fix charge if 0 or missing in residents collection
+      const existingCharge = Number(resident.charge);
+      const effectiveFee = existingCharge > 0 ? existingCharge : effectiveStandardFee;
+
+      if (!existingCharge || existingCharge <= 0) {
+        try {
+          await updateDoc(doc(db, "residents", resident.id), {
+            charge: effectiveFee,
+            garbageStatus: "participating",
+            updatedAt: serverTimestamp(),
+          });
+          chargesSynced++;
+        } catch (err) {
+          console.warn(`[Reconcile] Could not update charge for resident ${resident.id}:`, err);
+        }
+      }
+
+      // Create missing garbage account if needed
       if (!currentEnrolledIds.has(resident.id)) {
         try {
           await addAccountSvc({
             residentId: resident.id,
-            monthlyCharge: Number(resident.charge || garbageSettings.defaultCharge || 0),
+            monthlyCharge: effectiveFee,
             collectorId: "",
             status: "active",
           });
@@ -1071,20 +1153,185 @@ export function GarbageProvider({ children }) {
       }
     }
 
+    // 4. Synchronize monthly bills in bills and garbageBills collections
+    let billsSynced = 0;
+    try {
+      const bQuery = query(
+        collection(db, "bills"),
+        where("month", "==", selectedMonth),
+        where("year", "==", Number(selectedYear))
+      );
+      const bSnap = await getDocs(bQuery);
+      const existingBillResIds = new Set(bSnap.docs.map((d) => d.data().residentId));
+
+      const gbQuery = query(
+        collection(db, "garbageBills"),
+        where("month", "==", selectedMonth),
+        where("year", "==", Number(selectedYear))
+      );
+      const gbSnap = await getDocs(gbQuery);
+      const existingGbResIds = new Set(gbSnap.docs.map((d) => d.data().residentId));
+
+      const accSnap = await getDocs(collection(db, "garbageAccounts"));
+      const accMap = new Map();
+      accSnap.docs.forEach((d) => accMap.set(d.data().residentId, d.id));
+
+      // 4A. Update existing bills if charge or payment status is out of sync
+      for (const bDoc of bSnap.docs) {
+        const bData = bDoc.data();
+        const resident = residentMapById[bData.residentId];
+        if (resident) {
+          const fee = Number(resident.charge) > 0 ? Number(resident.charge) : effectiveStandardFee;
+          const paymentMatch = (payments || []).find(
+            (p) =>
+              (p.residentId === resident.id || p.residentId === resident.uid || (resident.mobile && p.mobile && p.mobile.includes(resident.mobile.slice(-10)))) &&
+              p.month === selectedMonth &&
+              Number(p.year) === Number(selectedYear)
+          );
+          const isPaid = Boolean(paymentMatch);
+
+          const needsAmountUpdate = Number(bData.amount) <= 0 && fee > 0;
+          const needsPaymentSync = isPaid && bData.status !== "Paid";
+
+          if (needsAmountUpdate || needsPaymentSync) {
+            try {
+              await updateDoc(doc(db, "bills", bDoc.id), {
+                amount: needsAmountUpdate ? fee : bData.amount,
+                status: isPaid ? "Paid" : bData.status,
+                paidAmount: isPaid ? Number(paymentMatch?.amount || fee) : bData.paidAmount || 0,
+                paymentDate: paymentMatch?.paymentDate || bData.paymentDate || "",
+                paymentMethod: paymentMatch?.paymentMethod || bData.paymentMethod || "",
+                paymentId: paymentMatch?.receiptNumber || paymentMatch?.paymentId || bData.paymentId || "",
+                updatedAt: serverTimestamp(),
+              });
+              billsSynced++;
+            } catch (err) {
+              console.warn("[Reconcile] Could not sync bill doc:", err);
+            }
+          }
+        }
+      }
+
+      // 4B. Update existing garbageBills if needed
+      for (const gbDoc of gbSnap.docs) {
+        const gbData = gbDoc.data();
+        const resident = residentMapById[gbData.residentId];
+        if (resident) {
+          const fee = Number(resident.charge) > 0 ? Number(resident.charge) : effectiveStandardFee;
+          const paymentMatch = (payments || []).find(
+            (p) =>
+              (p.residentId === resident.id || p.residentId === resident.uid || (resident.mobile && p.mobile && p.mobile.includes(resident.mobile.slice(-10)))) &&
+              p.month === selectedMonth &&
+              Number(p.year) === Number(selectedYear)
+          );
+          const isPaid = Boolean(paymentMatch);
+
+          const needsAmountUpdate = Number(gbData.amount) <= 0 && fee > 0;
+          const needsPaymentSync = isPaid && gbData.status !== "Paid";
+
+          if (needsAmountUpdate || needsPaymentSync) {
+            try {
+              await updateDoc(doc(db, "garbageBills", gbDoc.id), {
+                amount: needsAmountUpdate ? fee : gbData.amount,
+                status: isPaid ? "Paid" : gbData.status,
+                paidAmount: isPaid ? Number(paymentMatch?.amount || fee) : gbData.paidAmount || 0,
+                paymentDate: paymentMatch?.paymentDate || gbData.paymentDate || "",
+                paymentMethod: paymentMatch?.paymentMethod || gbData.paymentMethod || "",
+                collectedBy: paymentMatch?.collector || gbData.collectedBy || "",
+                updatedAt: serverTimestamp(),
+              });
+            } catch (err) {
+              console.warn("[Reconcile] Could not sync garbageBill doc:", err);
+            }
+          }
+        }
+      }
+
+      // 4C. Create missing bills for current cycle
+      for (const resident of participatingResidents) {
+        const fee = Number(resident.charge) > 0 ? Number(resident.charge) : effectiveStandardFee;
+        const paymentMatch = (payments || []).find(
+          (p) =>
+            (p.residentId === resident.id || p.residentId === resident.uid || (resident.mobile && p.mobile && p.mobile.includes(resident.mobile.slice(-10)))) &&
+            p.month === selectedMonth &&
+            Number(p.year) === Number(selectedYear)
+        );
+        const isPaid = Boolean(paymentMatch);
+
+        // Ensure bill doc exists in bills
+        if (!existingBillResIds.has(resident.id)) {
+          await addDoc(collection(db, "bills"), {
+            residentId: resident.id,
+            residentName: resident.owner || resident.name || "Resident",
+            flat: resident.flat || "",
+            block: resident.block || "General",
+            amount: fee,
+            status: isPaid ? "Paid" : "Pending",
+            paidAmount: isPaid ? Number(paymentMatch.amount || fee) : 0,
+            month: selectedMonth,
+            year: Number(selectedYear),
+            dueDate: `10 ${selectedMonth} ${selectedYear}`,
+            paymentDate: paymentMatch?.paymentDate || "",
+            paymentMethod: paymentMatch?.paymentMethod || "",
+            paymentId: paymentMatch?.receiptNumber || paymentMatch?.paymentId || "",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          billsSynced++;
+        }
+
+        // Ensure bill doc exists in garbageBills
+        if (!existingGbResIds.has(resident.id)) {
+          const accountId = accMap.get(resident.id) || "";
+          await addDoc(collection(db, "garbageBills"), {
+            accountId,
+            residentId: resident.id,
+            month: selectedMonth,
+            year: Number(selectedYear),
+            amount: fee,
+            status: isPaid ? "Paid" : "Pending",
+            paidAmount: isPaid ? Number(paymentMatch.amount || fee) : 0,
+            dueDate: `10 ${selectedMonth} ${selectedYear}`,
+            paymentDate: paymentMatch?.paymentDate || "",
+            paymentMethod: paymentMatch?.paymentMethod || "",
+            collectedBy: paymentMatch?.collector || "",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+    } catch (billSyncErr) {
+      console.warn("[Reconcile] Could not sync missing bills to Firestore:", billSyncErr);
+    }
+
     const messages = [];
     if (accountsCreated > 0) messages.push(`${accountsCreated} accounts created`);
+    if (chargesSynced > 0) messages.push(`${chargesSynced} charges standardized at ₹${effectiveStandardFee}`);
+    if (billsSynced > 0) messages.push(`${billsSynced} monthly bills synchronized`);
     if (statusSynced > 0) messages.push(`${statusSynced} statuses synchronized`);
     if (orphansRelinked > 0) messages.push(`${orphansRelinked} accounts relinked`);
     if (orphansCleaned > 0) messages.push(`${orphansCleaned} orphan records cleaned`);
     if (flatsLinked > 0) messages.push(`${flatsLinked} flats linked`);
 
-    if (messages.length > 0) {
-      toast.success(`Reconciliation complete: ${messages.join(", ")}`);
-    } else {
-      toast.success("All resident and garbage data is fully consistent.");
+    if (!isSilent) {
+      if (messages.length > 0) {
+        toast.success(`Data synchronized: ${messages.join(", ")}`);
+      } else {
+        toast.success("All residents, garbage accounts, and monthly bills are 100% synchronized.");
+      }
     }
 
-    return { accountsCreated, statusSynced, orphansRelinked, orphansCleaned, flatsLinked };
+    return {
+      accountsCreated,
+      chargesSynced,
+      billsSynced,
+      statusSynced,
+      orphansRelinked,
+      orphansCleaned,
+      flatsLinked,
+      totalParticipating: participatingResidents.length,
+      effectiveFee: effectiveStandardFee,
+    };
   }
 
   // =============================================
@@ -1108,8 +1355,8 @@ export function GarbageProvider({ children }) {
     // Mark as ran immediately to prevent re-runs
     reconcileRanRef.current = true;
 
-    // Run reconciliation silently (no toast unless accounts are created)
-    reconcileGarbageAccounts().catch(console.error);
+    // Run reconciliation silently (no toast on startup unless manually initiated)
+    reconcileGarbageAccounts({ silent: true }).catch(console.error);
   }, [user, residents, garbageAccounts]);
 
   // =============================================

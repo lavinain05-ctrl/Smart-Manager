@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { getHomeRouteForRole } from "../../services/authService";
 
 export default function FamilyRoute({ children }) {
   const { user, loading } = useAuth();
@@ -12,8 +13,13 @@ export default function FamilyRoute({ children }) {
     );
   }
 
-  if (!user || user.role !== "family") {
+  if (!user) {
     return <Navigate to="/" replace />;
+  }
+
+  const role = (user?.role || "").toLowerCase();
+  if (role !== "family") {
+    return <Navigate to={getHomeRouteForRole(role)} replace />;
   }
 
   return children;

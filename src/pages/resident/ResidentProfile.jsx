@@ -22,7 +22,8 @@ import {
 
 import { useAuth } from "../../context/AuthContext";
 import { useResidents } from "../../context/ResidentContext";
-import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from "firebase/auth";
+import { terminateAllOtherSessions, getOrCreateSessionId } from "../../services/sessionService";
 import { auth } from "../../firebase/firebase";
 
 import RoleBadge from "../../components/common/RoleBadge";
@@ -80,6 +81,7 @@ export default function ResidentProfile() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPw, setChangingPw] = useState(false);
+  const [sendingResetLink, setSendingResetLink] = useState(false);
 
   // Profile update request
   const [showRequestForm, setShowRequestForm] = useState(false);
@@ -142,7 +144,19 @@ export default function ResidentProfile() {
       const credential = EmailAuthProvider.credential(auth.currentUser.email, currentPassword);
       await reauthenticateWithCredential(auth.currentUser, credential);
       await updatePassword(auth.currentUser, newPassword);
-      toast.success("Password changed successfully");
+
+      try {
+        const currentSessionId = getOrCreateSessionId();
+        await terminateAllOtherSessions(
+          auth.currentUser.uid,
+          currentSessionId,
+          "Your password was changed. You were logged out from other devices."
+        );
+      } catch (sessErr) {
+        console.warn("[ResidentProfile] Failed to terminate other sessions:", sessErr.message);
+      }
+
+      toast.success("Password changed successfully! Other devices have been logged out.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -151,6 +165,23 @@ export default function ResidentProfile() {
       toast.error(error.message || "Failed to change password");
     } finally {
       setChangingPw(false);
+    }
+  }
+
+  async function handleSendProfileResetLink() {
+    if (!displayEmail) {
+      toast.error("No registered email address found. Please request to add an email address above.");
+      return;
+    }
+    setSendingResetLink(true);
+    try {
+      await sendPasswordResetEmail(auth, displayEmail);
+      toast.success(`Password reset email link sent to ${displayEmail}`);
+    } catch (err) {
+      console.error("[ResidentProfile] Reset link error:", err);
+      toast.error(err.message || "Failed to send reset link.");
+    } finally {
+      setSendingResetLink(false);
     }
   }
 
@@ -565,6 +596,38 @@ export default function ResidentProfile() {
             {changingPw ? "Changing..." : "Change Password"}
           </button>
         </form>
+
+        {displayEmail ? (
+          <div className="pt-4 border-t mt-5 max-w-md">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <FaEnvelope className="text-blue-500" /> Forgot Current Password?
+                </p>
+                <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                  Send reset link to: <span className="font-mono text-slate-700">{displayEmail}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSendProfileResetLink}
+                disabled={sendingResetLink}
+                className="shrink-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg text-xs font-semibold transition shadow-xs"
+              >
+                {sendingResetLink ? "Sending..." : "Send Reset Link"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="pt-4 border-t mt-5 max-w-md">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+              <p className="font-medium">⚠️ No Registered Personal Email</p>
+              <p className="text-[11px] text-amber-700 mt-0.5">
+                To receive self-service password reset links, click <strong>"Request Profile Update"</strong> above to add your personal email address, or contact Society Admin.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Request Update & Add Details Modal */}

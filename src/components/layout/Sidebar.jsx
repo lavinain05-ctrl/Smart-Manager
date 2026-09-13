@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import {
   FaHome,
@@ -28,6 +28,8 @@ import {
   FaKey,
   FaHandHoldingHeart,
   FaHeadset,
+  FaLightbulb,
+  FaLaptop,
 } from "react-icons/fa";
 
 // =============================================
@@ -58,7 +60,6 @@ const navSections = [
     label: "Garbage Collection",
     items: [
       { name: "Overview", icon: <FaTachometerAlt />, path: "/admin/garbage/dashboard" },
-      { name: "Accounts", icon: <FaUsers />, path: "/admin/garbage/accounts" },
       { name: "Bills", icon: <FaFileInvoiceDollar />, path: "/admin/bills" },
       { name: "Collections", icon: <FaMoneyBillWave />, path: "/admin/collections" },
       { name: "Payment History", icon: <FaHistory />, path: "/admin/payment-history" },
@@ -80,6 +81,7 @@ const navSections = [
     items: [
       { name: "Notices", icon: <FaBullhorn />, path: "/admin/notices" },
       { name: "Complaints", icon: <FaExclamationCircle />, path: "/admin/complaints" },
+      { name: "Suggestions", icon: <FaLightbulb />, path: "/admin/suggestions" },
       { name: "Events", icon: <FaCalendarAlt />, path: "/admin/events" },
       { name: "Activities", icon: <FaLeaf />, path: "/admin/activities" },
       { name: "Emergency Contacts", icon: <FaPhone />, path: "/admin/emergency-contacts" },
@@ -91,6 +93,7 @@ const navSections = [
     items: [
       { name: "Settings", icon: <FaCog />, path: "/admin/settings" },
       { name: "Activity Logs", icon: <FaHistory />, path: "/admin/activity-logs" },
+      { name: "Active Devices", icon: <FaLaptop />, path: "/admin/devices" },
       { name: "Blocked Accounts", icon: <FaBan />, path: "/admin/blocked-accounts" },
       { name: "Deleted Accounts", icon: <FaUserSlash />, path: "/admin/deleted-accounts" },
     ],
@@ -106,20 +109,25 @@ export default function Sidebar({ onClose }) {
       {/* Logo / Branding */}
       <div className="h-20 flex items-center justify-between px-6 border-b border-slate-700">
 
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center text-xl shadow-lg shadow-emerald-500/30">
+        <Link
+          to="/admin/dashboard"
+          onClick={onClose}
+          title="Go to Dashboard"
+          className="flex items-center gap-3 group cursor-pointer hover:opacity-90 transition"
+        >
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center text-xl shadow-lg shadow-emerald-500/30 group-hover:scale-105 transition-transform">
             <FaBuilding />
           </div>
 
           <div>
-            <h1 className="text-sm font-bold tracking-tight leading-snug">
+            <h1 className="text-sm font-bold tracking-tight leading-snug group-hover:text-emerald-300 transition-colors">
               D BLOCK RWA INDRAPRASTHA
             </h1>
             <p className="text-[10px] text-slate-400 font-medium tracking-wider uppercase">
               Smart Manager
             </p>
           </div>
-        </div>
+        </Link>
 
         <button
           onClick={onClose}

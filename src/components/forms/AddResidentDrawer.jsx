@@ -6,6 +6,7 @@ export default function AddResidentDrawer({
   resident,
   onClose,
   onSave,
+  defaultCharge = 80,
 }) {
   if (!open) return null;
 
@@ -49,6 +50,7 @@ export default function AddResidentDrawer({
             resident={resident}
             onSave={handleSave}
             onClose={onClose}
+            defaultCharge={defaultCharge}
           />
         </div>
 

@@ -26,6 +26,13 @@ import { checkIfMobileBlocked } from "./blockService";
 
 export const AUTH_EMAIL_DOMAIN = "smart-manager-aad4d.firebaseapp.com";
 export const PROTECTED_ADMIN_UID = "92jYvGPlKMexX37WEzs7MaDuc7U2";
+export const ADMIN_EMAILS = ["dharmendrasngh101@gmail.com"];
+
+export function isExactAdminEmail(email) {
+  if (!email) return false;
+  const clean = String(email).trim().toLowerCase();
+  return ADMIN_EMAILS.includes(clean);
+}
 
 // =============================
 // Mobile Number Normalization & Validation
@@ -178,6 +185,124 @@ export async function lookupEmailByMobile(mobile) {
   // 4. Canonical fallback: pseudo-email from mobile
   console.log("[Auth] Falling back to canonical pseudo-email for:", clean);
   return mobileToAuthEmail(clean);
+}
+
+// =============================
+// Resident Personal Email Finder
+// =============================
+
+/**
+ * Look up whether a resident or user has a registered personal email
+ * by either their 10-digit mobile number or their entered email address.
+ * Filters out internal Firebase pseudo-emails.
+ */
+export async function findPersonalEmailForIdentifier(identifier) {
+  const raw = String(identifier || "").trim();
+  if (!raw) return { found: false, error: "Please enter your email or mobile number." };
+
+  // 1. Direct Email entered
+  if (raw.includes("@")) {
+    const emailCandidate = raw.toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailCandidate)) {
+      return { found: false, error: "Please enter a valid email address format." };
+    }
+    if (
+      emailCandidate.includes(`@${AUTH_EMAIL_DOMAIN}`) ||
+      emailCandidate.includes("firebaseapp.com")
+    ) {
+      return { found: false, error: "Please enter a valid personal email address." };
+    }
+    return {
+      found: true,
+      email: emailCandidate,
+      isDirectEmail: true,
+    };
+  }
+
+  // 2. Mobile number entered
+  const cleanMobile = normalizeMobile(raw);
+  if (cleanMobile.length !== 10) {
+    return { found: false, error: "Please enter a valid 10-digit mobile number or email." };
+  }
+
+  // Check authLookup doc (publicly readable)
+  try {
+    const lookupDoc = await getDoc(doc(db, "authLookup", cleanMobile));
+    if (lookupDoc.exists()) {
+      const data = lookupDoc.data();
+      const em = data.personalEmail || data.email;
+      if (
+        em &&
+        !em.includes(`@${AUTH_EMAIL_DOMAIN}`) &&
+        !em.includes("firebaseapp.com")
+      ) {
+        return {
+          found: true,
+          email: em.toLowerCase(),
+          mobile: cleanMobile,
+          uid: data.uid || "",
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("[Auth] authLookup check failed:", err.message);
+  }
+
+  // Check users collection (where phone == cleanMobile)
+  try {
+    const usersQ = query(collection(db, "users"), where("phone", "==", cleanMobile));
+    const usersSnap = await getDocs(usersQ);
+    if (!usersSnap.empty) {
+      const uData = usersSnap.docs[0].data();
+      const em = uData.personalEmail || uData.email;
+      if (
+        em &&
+        !em.includes(`@${AUTH_EMAIL_DOMAIN}`) &&
+        !em.includes("firebaseapp.com")
+      ) {
+        return {
+          found: true,
+          email: em.toLowerCase(),
+          mobile: cleanMobile,
+          uid: usersSnap.docs[0].id,
+          name: uData.name || "",
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("[Auth] users lookup failed:", err.message);
+  }
+
+  // Check residents collection (where mobile == cleanMobile)
+  try {
+    const resQ = query(collection(db, "residents"), where("mobile", "==", cleanMobile));
+    const resSnap = await getDocs(resQ);
+    if (!resSnap.empty) {
+      const rData = resSnap.docs[0].data();
+      const em = rData.email || rData.personalEmail;
+      if (
+        em &&
+        !em.includes(`@${AUTH_EMAIL_DOMAIN}`) &&
+        !em.includes("firebaseapp.com")
+      ) {
+        return {
+          found: true,
+          email: em.toLowerCase(),
+          mobile: cleanMobile,
+          uid: resSnap.docs[0].id,
+          name: rData.owner || "",
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("[Auth] residents lookup failed:", err.message);
+  }
+
+  return {
+    found: false,
+    mobile: cleanMobile,
+    error: "No registered personal email found for this mobile number.",
+  };
 }
 
 // =============================
@@ -641,6 +766,27 @@ export async function syncAllAuthLookups() {
     console.log("[Auth] Full authLookup sync complete!");
   } catch (err) {
     console.warn("[Auth] Failed to sync authLookups:", err.message);
+  }
+}
+
+// =============================
+// Role-Based Home Routes
+// =============================
+
+export function getHomeRouteForRole(role) {
+  switch ((role || "").toLowerCase()) {
+    case "admin":
+      return "/admin/dashboard";
+    case "collector":
+      return "/collector/dashboard";
+    case "committee":
+      return "/committee/dashboard";
+    case "resident":
+      return "/resident/dashboard";
+    case "family":
+      return "/family/dashboard";
+    default:
+      return "/";
   }
 }
 

@@ -1,19 +1,24 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
 import { query, where, collection, getDocs, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../../firebase/firebase";
 
 import { useBills } from "../../context/BillContext";
 import { useBilling } from "../../context/BillingContext";
 import { usePayments } from "../../context/PaymentContext";
+import { useResidents } from "../../context/ResidentContext";
+import { useGarbage } from "../../context/GarbageContext";
+import { useBlockFlat } from "../../context/BlockFlatContext";
 import { useAuth } from "../../context/AuthContext";
 import { collectResidentPayment } from "../../utils/collectPayment";
-import { updateBill, deleteBill } from "../../services/billService";
+import { deleteBill } from "../../services/billService";
 import { getDisplayStatus } from "../../utils/billStatus";
+import { subscribeSettings } from "../../services/settingsService";
+import { isGcParticipating } from "../../services/statisticsService";
+import { syncBlockWiseMonthlyBills } from "../../utils/reportSyncService";
+import { generateBlockWiseMonthlyBillsPDF } from "../../utils/printReportHelper";
 
 import MonthSelector from "../../components/common/MonthSelector";
 import BillSummaryCards from "../../components/bills/BillSummaryCards";
@@ -23,11 +28,15 @@ import PaymentModal from "../../components/payments/PaymentModal";
 import PaymentReceiptSuccessModal from "../../components/collections/PaymentReceiptSuccessModal";
 import ViewBillModal from "../../components/bills/ViewBillModal";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
+import PrintMonthlyBillsModal from "../../components/bills/PrintMonthlyBillsModal";
 
 export default function Bills() {
   const { bills, loading, generateBills } = useBills();
   const { selectedMonth, selectedYear } = useBilling();
-  const { addPayment } = usePayments();
+  const { payments, addPayment } = usePayments();
+  const { residents = [] } = useResidents();
+  const { garbageBills = [] } = useGarbage();
+  const { blocks: rawBlocks = [] } = useBlockFlat();
   const { user } = useAuth();
 
   const [search, setSearch] = useState("");
@@ -37,26 +46,90 @@ export default function Bills() {
   const [selectedViewBill, setSelectedViewBill] = useState(null);
   const [billToDelete, setBillToDelete] = useState(null);
   const [successReceipt, setSuccessReceipt] = useState(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [societySettings, setSocietySettings] = useState({});
 
-  // Derive unique blocks from bills
+  useEffect(() => {
+    const unsub = subscribeSettings((data) => {
+      if (data) setSocietySettings(data);
+    });
+    return () => unsub && unsub();
+  }, []);
+
+  // Derive unique blocks from bills and blockFlat context
   const blocks = useMemo(() => {
     const set = new Set(bills.map((b) => b.block).filter(Boolean));
+    rawBlocks.forEach((b) => {
+      if (b.name) set.add(b.name);
+    });
     return [...set].sort();
-  }, [bills]);
+  }, [bills, rawBlocks]);
 
   const monthlyBills = useMemo(() => {
-    return bills
-      .filter((bill) => {
-        return (
-          bill.month === selectedMonth &&
-          Number(bill.year) === Number(selectedYear)
-        );
-      })
-      .map((bill) => ({
-        ...bill,
-        displayStatus: getDisplayStatus(bill),
-      }));
-  }, [bills, selectedMonth, selectedYear]);
+    const billMap = new Map();
+
+    // 1. Existing bills from Firestore bills collection
+    bills
+      .filter((b) => b.month === selectedMonth && Number(b.year) === Number(selectedYear))
+      .forEach((b) => {
+        billMap.set(b.residentId, {
+          ...b,
+          displayStatus: getDisplayStatus(b),
+        });
+      });
+
+    // 2. Reconcile with active participating residents
+    const activeParticipants = (residents || []).filter(
+      (r) => isGcParticipating(r) && r.status !== "Inactive" && r.status !== "inactive"
+    );
+
+    activeParticipants.forEach((r) => {
+      const paymentMatch = (payments || []).find(
+        (p) =>
+          (p.residentId === r.id || p.residentId === r.uid || (r.mobile && p.mobile && p.mobile.includes(r.mobile.slice(-10)))) &&
+          p.month === selectedMonth &&
+          Number(p.year) === Number(selectedYear)
+      );
+
+      const isPaid = Boolean(paymentMatch);
+      const charge = Number(Number(r.charge) > 0 ? r.charge : 80);
+
+      if (billMap.has(r.id)) {
+        const b = billMap.get(r.id);
+        if (isPaid && b.status !== "Paid" && b.status !== "Exempted") {
+          billMap.set(r.id, {
+            ...b,
+            status: "Paid",
+            displayStatus: "Paid",
+            amount: Number(paymentMatch.amount || b.amount || charge),
+            paymentDate: paymentMatch.paymentDate || b.paymentDate || "",
+            paymentMethod: paymentMatch.paymentMethod || b.paymentMethod || "Cash",
+            paymentId: paymentMatch.receiptNumber || paymentMatch.paymentId || b.paymentId || "",
+          });
+        }
+      } else {
+        billMap.set(r.id, {
+          id: `auto-${r.id}`,
+          residentId: r.id,
+          residentName: r.owner || r.name || "Resident",
+          flat: r.flat || "—",
+          block: r.block || "General",
+          amount: charge,
+          status: isPaid ? "Paid" : "Pending",
+          displayStatus: isPaid ? "Paid" : "Pending",
+          month: selectedMonth,
+          year: Number(selectedYear),
+          dueDate: `10 ${selectedMonth} ${selectedYear}`,
+          paymentDate: paymentMatch?.paymentDate || "",
+          paymentMethod: paymentMatch?.paymentMethod || "",
+          paymentId: paymentMatch?.receiptNumber || paymentMatch?.paymentId || "",
+          _isVirtual: true,
+        });
+      }
+    });
+
+    return Array.from(billMap.values());
+  }, [bills, residents, payments, selectedMonth, selectedYear]);
 
   const filteredBills = useMemo(() => {
     return monthlyBills.filter((bill) => {
@@ -159,44 +232,26 @@ export default function Bills() {
     toast.success("Excel sheet downloaded");
   }
 
-  // Export to PDF
+  // Export to PDF with crystal-clear vector formatting
   function handleExportPdf() {
-    const totalBilled = filteredBills.reduce((s, b) => s + Number(b.amount || 0), 0);
-    const totalPaid = filteredBills
-      .filter((b) => b.displayStatus === "Paid")
-      .reduce((s, b) => s + Number(b.amount || 0), 0);
-    const totalPending = totalBilled - totalPaid;
-
-    const pdf = new jsPDF();
-    pdf.setFontSize(16);
-    pdf.text(`RWA Monthly Bills — ${selectedMonth} ${selectedYear}`, 14, 20);
-    pdf.setFontSize(10);
-    pdf.text(
-      `Total: ₹${totalBilled} | Collected: ₹${totalPaid} | Pending: ₹${totalPending} | Count: ${filteredBills.length}`,
-      14,
-      28
-    );
-
-    const tableData = filteredBills.map((b) => [
-      b.residentName || "—",
-      b.flat || "—",
-      b.block || "—",
-      `₹${b.amount || 0}`,
-      b.displayStatus || b.status,
-      b.dueDate || "—",
-      b.paymentDate || "—",
-    ]);
-
-    pdf.autoTable({
-      startY: 34,
-      head: [["Resident", "Flat", "Block", "Amount", "Status", "Due Date", "Paid Date"]],
-      body: tableData,
-      theme: "striped",
-      headStyles: { fillColor: [16, 185, 129] },
+    const syncedData = syncBlockWiseMonthlyBills({
+      residents,
+      blocks: rawBlocks,
+      bills: monthlyBills,
+      garbageBills,
+      payments,
+      month: selectedMonth,
+      year: selectedYear,
     });
 
-    pdf.save(`Bills_${selectedMonth}_${selectedYear}.pdf`);
-    toast.success("PDF report downloaded");
+    generateBlockWiseMonthlyBillsPDF({
+      syncedData,
+      settings: societySettings,
+      month: selectedMonth,
+      year: selectedYear,
+      filterBlock: blockFilter === "All" ? "all" : blockFilter,
+      filterStatus: statusFilter === "All" ? "all" : statusFilter.toLowerCase(),
+    });
   }
 
   return (
@@ -207,13 +262,15 @@ export default function Bills() {
             <h1 className="text-4xl font-black text-gray-800 tracking-tight">Bills Management</h1>
             <p className="text-gray-500 mt-1 font-medium">Manage Monthly Bills & Collect Payments</p>
           </div>
-          <button
-            onClick={generateBills}
-            disabled={loading}
-            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white px-8 py-3.5 rounded-xl font-bold shadow-lg shadow-emerald-500/30 transition active:scale-95"
-          >
-            {loading ? "Generating Bills..." : "Generate Monthly Bills"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={generateBills}
+              disabled={loading}
+              className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white px-8 py-3.5 rounded-xl font-bold shadow-lg shadow-emerald-500/30 transition active:scale-95 text-sm"
+            >
+              {loading ? "Generating Bills..." : "Generate Monthly Bills"}
+            </button>
+          </div>
         </div>
 
         <MonthSelector />
@@ -228,12 +285,14 @@ export default function Bills() {
           blocks={blocks}
           onExportExcel={handleExportExcel}
           onExportPdf={handleExportPdf}
+          onPrintBills={() => setShowPrintModal(true)}
         />
         <BillTable
           bills={filteredBills}
           onPay={(bill) => setSelectedPayBill(bill)}
           onView={(bill) => setSelectedViewBill(bill)}
           onDelete={handleDeleteBill}
+          settings={societySettings}
         />
       </div>
 
@@ -247,6 +306,7 @@ export default function Bills() {
         open={!!selectedViewBill}
         bill={selectedViewBill}
         onClose={() => setSelectedViewBill(null)}
+        settings={societySettings}
       />
       <ConfirmDialog
         open={!!billToDelete}
@@ -263,6 +323,20 @@ export default function Bills() {
         open={Boolean(successReceipt)}
         receipt={successReceipt}
         onClose={() => setSuccessReceipt(null)}
+      />
+
+      {/* Block-Wise Monthly Bills Register Print Modal */}
+      <PrintMonthlyBillsModal
+        open={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        residents={residents}
+        blocks={rawBlocks}
+        bills={bills}
+        garbageBills={garbageBills}
+        payments={payments}
+        initialMonth={selectedMonth}
+        initialYear={selectedYear}
+        settings={societySettings}
       />
     </>
   );

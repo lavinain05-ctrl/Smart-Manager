@@ -143,7 +143,7 @@ export function calcPaymentStats(payments = [], residents = [], month, year) {
 
   // Expected amount: participating active residents × their configured charge
   const expectedAmount = participatingResidents.reduce(
-    (sum, r) => sum + Number(r.charge || 0), 0
+    (sum, r) => sum + Number(Number(r.charge) > 0 ? r.charge : 80), 0
   );
 
   const pendingAmount = Math.max(0, expectedAmount - collectedAmount);
@@ -251,10 +251,11 @@ export function calcGarbageStats(accounts = [], bills = [], residents = [], mont
     const billMap = new Map();
     monthlyBills.forEach((b) => billMap.set(b.residentId, Number(b.amount || 0)));
     totalBilled = participatingResidents.reduce((s, r) => {
-      return s + (billMap.has(r.id) ? billMap.get(r.id) : Number(r.charge || 0));
+      const charge = Number(Number(r.charge) > 0 ? r.charge : 80);
+      return s + (billMap.has(r.id) ? billMap.get(r.id) : charge);
     }, 0);
   } else {
-    totalBilled = participatingResidents.reduce((s, r) => s + Number(r.charge || 0), 0);
+    totalBilled = participatingResidents.reduce((s, r) => s + Number(Number(r.charge) > 0 ? r.charge : 80), 0);
   }
 
   // Collected = sum of actual paid amounts without double counting
@@ -404,11 +405,12 @@ export function getGarbageMonthlyStats(
     const billMap = new Map();
     monthlyBills.forEach((b) => billMap.set(b.residentId, Number(b.amount || 0)));
     expectedAmount = participatingResidents.reduce((s, r) => {
-      return s + (billMap.has(r.id) ? billMap.get(r.id) : Number(r.charge || 0));
+      const charge = Number(Number(r.charge) > 0 ? r.charge : 80);
+      return s + (billMap.has(r.id) ? billMap.get(r.id) : charge);
     }, 0);
   } else {
     expectedAmount = participatingResidents.reduce(
-      (s, r) => s + Number(r.charge || 0), 0
+      (s, r) => s + Number(Number(r.charge) > 0 ? r.charge : 80), 0
     );
   }
 
@@ -436,7 +438,7 @@ export function getGarbageMonthlyStats(
     // Fallback to resident charge
     const res = participatingResidents.find((r) => r.id === resId);
     if (res) {
-      collectedAmount += Number(res.charge || 0);
+      collectedAmount += Number(Number(res.charge) > 0 ? res.charge : 80);
     }
   });
 

@@ -27,6 +27,9 @@ const defaultSettings = {
   societyRules: "",
   codeOfConduct: "",
   googleMapUrl: "",
+  // Submission Toggles
+  enableSuggestions: true,
+  enableComplaints: true,
 };
 
 export function subscribeSettings(callback) {

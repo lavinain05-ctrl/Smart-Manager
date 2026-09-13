@@ -7,6 +7,7 @@ import {
   FaShieldAlt,
   FaUserCheck,
   FaMobileAlt,
+  FaLaptop,
   FaHome,
   FaReceipt,
   FaMoneyBillWave,
@@ -14,11 +15,22 @@ import {
 } from "react-icons/fa";
 
 export default function ImpersonationBanner() {
-  const { isImpersonating, impersonatedUser, stopImpersonating } = useAuth();
+  const {
+    isImpersonating,
+    impersonatedUser,
+    stopImpersonating,
+    impersonatedDeviceMode,
+    setImpersonatedDeviceMode,
+  } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  if (!isImpersonating || !impersonatedUser) return null;
+  const isInsideFrame =
+    typeof window !== "undefined" &&
+    (window.self !== window.top ||
+      new URLSearchParams(location.search).has("simulated_frame"));
+
+  if (!isImpersonating || !impersonatedUser || isInsideFrame) return null;
 
   const role = (impersonatedUser.role || "resident").toLowerCase();
 
@@ -115,8 +127,38 @@ export default function ImpersonationBanner() {
           })}
         </div>
 
-        {/* Right: Exit Simulation Button */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Right: Device Switcher & Exit Button */}
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          {/* Device Switcher */}
+          <div className="flex items-center bg-black/30 p-1 rounded-xl border border-white/20 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setImpersonatedDeviceMode("desktop")}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                impersonatedDeviceMode === "desktop"
+                  ? "bg-white text-slate-900 shadow-sm font-bold"
+                  : "text-amber-100 hover:text-white"
+              }`}
+              title="View full desktop portal screen"
+            >
+              <FaLaptop className="text-xs" />
+              <span className="hidden sm:inline">Desktop</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setImpersonatedDeviceMode("mobile")}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                impersonatedDeviceMode === "mobile"
+                  ? "bg-emerald-500 text-white shadow-sm font-bold"
+                  : "text-amber-100 hover:text-white"
+              }`}
+              title="View as simulated mobile device screen"
+            >
+              <FaMobileAlt className="text-xs" />
+              <span>Mobile Screen</span>
+            </button>
+          </div>
+
           <button
             onClick={handleExit}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-red-800 hover:bg-red-900 active:scale-95 text-white font-bold rounded-xl shadow transition border border-red-400 text-xs"

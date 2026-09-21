@@ -1,5 +1,5 @@
 // Service Worker for Smart Manager RWA PWA & Web Push Notifications
-const CACHE_NAME = 'smart-manager-v4';
+const CACHE_NAME = 'smart-manager-v5';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

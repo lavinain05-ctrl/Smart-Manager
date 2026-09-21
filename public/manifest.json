@@ -1,29 +1,29 @@
 {
   "short_name": "D Block RWA",
   "name": "D Block RWA Indraprastha",
-  "id": "/?v=4",
+  "id": "/?v=5",
   "description": "D Block RWA Indraprastha Society & Resident Management Portal",
   "icons": [
     {
-      "src": "/icon-192.png?v=4",
+      "src": "/icon-192.png?v=5",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png?v=4",
+      "src": "/icon-512.png?v=5",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "any"
     },
     {
-      "src": "/icon-maskable-192.png?v=4",
+      "src": "/icon-maskable-192.png?v=5",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "maskable"
     },
     {
-      "src": "/icon-maskable-512.png?v=4",
+      "src": "/icon-maskable-512.png?v=5",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"
@@ -35,7 +35,7 @@
       "purpose": "any"
     }
   ],
-  "start_url": "/?v=4",
+  "start_url": "/?v=5",
   "background_color": "#047857",
   "theme_color": "#059669",
   "display": "standalone",

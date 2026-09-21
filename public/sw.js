@@ -1,12 +1,23 @@
 // Service Worker for Smart Manager RWA PWA & Web Push Notifications
-const CACHE_NAME = 'smart-manager-v3';
+const CACHE_NAME = 'smart-manager-v4';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            console.log('[SW] Deleting old cache:', key);
+            return caches.delete(key);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
 });
 
 // Listen for message from main app to show notification

@@ -174,8 +174,8 @@ export async function addResidentWithAccount({
     createdAt: serverTimestamp(),
   });
 
-  // Write authLookup for fast, direct mobile login
-  await writeAuthLookup(cleanMobile, authEmail, uid);
+  // Write authLookup for fast, direct mobile login & password recovery
+  await writeAuthLookup(cleanMobile, authEmail, uid, (email || "").trim(), flat, owner);
 
   // Sign out the secondary instance (admin's session untouched)
   await signOut(secondaryAuth);
@@ -188,10 +188,24 @@ export async function addResidentToFirestore(resident) {
 }
 
 export async function updateResidentInFirestore(id, resident) {
-  return await updateDoc(
+  const result = await updateDoc(
     doc(db, "residents", id),
     resident
   );
+  if (resident.mobile) {
+    const cleanMob = normalizeMobile(resident.mobile);
+    if (cleanMob.length === 10) {
+      writeAuthLookup(
+        cleanMob,
+        mobileToAuthEmail(cleanMob),
+        id,
+        (resident.email || "").trim(),
+        resident.flat || resident.flatNumber || "",
+        resident.owner || ""
+      ).catch(() => {});
+    }
+  }
+  return result;
 }
 
 export async function deleteResidentFromFirestore(id) {

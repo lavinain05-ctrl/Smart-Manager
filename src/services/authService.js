@@ -102,8 +102,9 @@ export function mobileToAuthEmail(mobile) {
 
 /**
  * Write or update a mobile → auth identity mapping in authLookup/{mobile}.
+ * Also creates flat-based lookup in authLookup/flat_{flat} for fast recovery.
  */
-export async function writeAuthLookup(mobile, email, uid, personalEmail = "") {
+export async function writeAuthLookup(mobile, email, uid, personalEmail = "", flat = "", name = "") {
   const clean = normalizeMobile(mobile);
   if (!clean || clean.length !== 10) return;
 
@@ -117,22 +118,43 @@ export async function writeAuthLookup(mobile, email, uid, personalEmail = "") {
     if (personalEmail && !personalEmail.includes(`@${AUTH_EMAIL_DOMAIN}`)) {
       updateData.personalEmail = personalEmail.toLowerCase().trim();
     }
+    if (flat) {
+      updateData.flat = String(flat).replace(/[\s-]/g, "").toUpperCase();
+    }
+    if (name) {
+      updateData.name = String(name).trim();
+    }
+
     await setDoc(doc(db, "authLookup", clean), updateData, { merge: true });
-    console.log("[Auth] authLookup written for mobile:", clean);
+
+    // Also write flat lookup for fast recovery by flat number
+    if (flat) {
+      const cleanFlat = String(flat).replace(/[\s-]/g, "").toUpperCase();
+      await setDoc(doc(db, "authLookup", `flat_${cleanFlat}`), {
+        ...updateData,
+        flatKey: cleanFlat,
+      }, { merge: true });
+    }
+
+    console.log("[Auth] authLookup written for mobile:", clean, flat ? `flat: ${flat}` : "");
   } catch (err) {
     console.warn("[Auth] Failed to write authLookup:", err.message);
   }
 }
 
 /**
- * Delete a mobile mapping from authLookup/{mobile}.
+ * Delete a mobile mapping from authLookup/{mobile} and optional flat mapping.
  */
-export async function deleteAuthLookup(mobile) {
+export async function deleteAuthLookup(mobile, flat = "") {
   const clean = normalizeMobile(mobile);
   if (!clean) return;
 
   try {
     await deleteDoc(doc(db, "authLookup", clean));
+    if (flat) {
+      const cleanFlat = String(flat).replace(/[\s-]/g, "").toUpperCase();
+      await deleteDoc(doc(db, "authLookup", `flat_${cleanFlat}`));
+    }
     console.log("[Auth] authLookup deleted for mobile:", clean);
   } catch (err) {
     console.warn("[Auth] Failed to delete authLookup:", err.message);
@@ -196,17 +218,45 @@ export async function lookupEmailByMobile(mobile) {
 // =============================
 
 /**
+ * Detect and correct common email domain typos (e.g. .cm instead of .com, @gmai.com instead of @gmail.com)
+ */
+export function correctEmailTypo(email) {
+  if (!email || !email.includes("@")) return { email, wasCorrected: false, original: email };
+  const original = email.toLowerCase().trim();
+  let candidate = original;
+
+  candidate = candidate
+    .replace(/@gmail\.cm$/i, "@gmail.com")
+    .replace(/@gmai\.com$/i, "@gmail.com")
+    .replace(/@gmial\.com$/i, "@gmail.com")
+    .replace(/@gamil\.com$/i, "@gmail.com")
+    .replace(/@yahoo\.cm$/i, "@yahoo.com")
+    .replace(/@yaho\.com$/i, "@yahoo.com")
+    .replace(/@hotmial\.com$/i, "@hotmail.com")
+    .replace(/@outlok\.com$/i, "@outlook.com")
+    .replace(/\.cm$/i, ".com");
+
+  return {
+    email: candidate,
+    wasCorrected: original !== candidate,
+    original,
+  };
+}
+
+/**
  * Look up whether a resident or user has a registered personal email
- * by either their 10-digit mobile number or their entered email address.
+ * by their 10-digit mobile number, flat number (e.g. D571), or direct email address.
  * Filters out internal Firebase pseudo-emails.
  */
 export async function findPersonalEmailForIdentifier(identifier) {
   const raw = String(identifier || "").trim();
-  if (!raw) return { found: false, error: "Please enter your email or mobile number." };
+  if (!raw) return { found: false, error: "Please enter your email, 10-digit mobile, or flat number." };
 
   // 1. Direct Email entered
   if (raw.includes("@")) {
-    const emailCandidate = raw.toLowerCase();
+    const typoCheck = correctEmailTypo(raw);
+    const emailCandidate = typoCheck.email;
+
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailCandidate)) {
       return { found: false, error: "Please enter a valid email address format." };
     }
@@ -220,92 +270,143 @@ export async function findPersonalEmailForIdentifier(identifier) {
       found: true,
       email: emailCandidate,
       isDirectEmail: true,
+      wasCorrected: typoCheck.wasCorrected,
+      correctedFrom: typoCheck.wasCorrected ? typoCheck.original : null,
     };
   }
 
-  // 2. Mobile number entered
+  // 2. Mobile number entered (10 digits)
   const cleanMobile = normalizeMobile(raw);
-  if (cleanMobile.length !== 10) {
-    return { found: false, error: "Please enter a valid 10-digit mobile number or email." };
+  if (cleanMobile.length === 10) {
+    // Check authLookup doc (publicly readable for unauthenticated users)
+    try {
+      const lookupDoc = await getDoc(doc(db, "authLookup", cleanMobile));
+      if (lookupDoc.exists()) {
+        const data = lookupDoc.data();
+        const em = data.personalEmail || data.email;
+        if (
+          em &&
+          !em.includes(`@${AUTH_EMAIL_DOMAIN}`) &&
+          !em.includes("firebaseapp.com")
+        ) {
+          return {
+            found: true,
+            email: em.toLowerCase(),
+            mobile: cleanMobile,
+            flat: data.flat || "",
+            name: data.name || "",
+            uid: data.uid || "",
+            matchedBy: "mobile",
+          };
+        }
+      }
+    } catch (err) {
+      console.warn("[Auth] authLookup check failed:", err.message);
+    }
+
+    // Check users collection (where phone == cleanMobile) if readable
+    try {
+      const usersQ = query(collection(db, "users"), where("phone", "==", cleanMobile));
+      const usersSnap = await getDocs(usersQ);
+      if (!usersSnap.empty) {
+        const uData = usersSnap.docs[0].data();
+        const em = uData.personalEmail || uData.email;
+        if (
+          em &&
+          !em.includes(`@${AUTH_EMAIL_DOMAIN}`) &&
+          !em.includes("firebaseapp.com")
+        ) {
+          return {
+            found: true,
+            email: em.toLowerCase(),
+            mobile: cleanMobile,
+            flat: uData.flat || uData.flatNumber || "",
+            uid: usersSnap.docs[0].id,
+            name: uData.name || "",
+            matchedBy: "mobile",
+          };
+        }
+      }
+    } catch (err) {
+      console.warn("[Auth] users lookup failed:", err.message);
+    }
+
+    // Check residents collection (where mobile == cleanMobile) if readable
+    try {
+      const resQ = query(collection(db, "residents"), where("mobile", "==", cleanMobile));
+      const resSnap = await getDocs(resQ);
+      if (!resSnap.empty) {
+        const rData = resSnap.docs[0].data();
+        const em = rData.email || rData.personalEmail;
+        if (
+          em &&
+          !em.includes(`@${AUTH_EMAIL_DOMAIN}`) &&
+          !em.includes("firebaseapp.com")
+        ) {
+          return {
+            found: true,
+            email: em.toLowerCase(),
+            mobile: cleanMobile,
+            flat: rData.flat || rData.flatNumber || "",
+            uid: resSnap.docs[0].id,
+            name: rData.owner || "",
+            matchedBy: "mobile",
+          };
+        }
+      }
+    } catch (err) {
+      console.warn("[Auth] residents lookup failed:", err.message);
+    }
+
+    return {
+      found: false,
+      mobile: cleanMobile,
+      error: `No registered account found with mobile number "${cleanMobile}".`,
+      tip: "Please check if you mistyped any digits, or try searching by Flat Number (e.g. D571).",
+    };
   }
 
-  // Check authLookup doc (publicly readable)
-  try {
-    const lookupDoc = await getDoc(doc(db, "authLookup", cleanMobile));
-    if (lookupDoc.exists()) {
-      const data = lookupDoc.data();
-      const em = data.personalEmail || data.email;
-      if (
-        em &&
-        !em.includes(`@${AUTH_EMAIL_DOMAIN}`) &&
-        !em.includes("firebaseapp.com")
-      ) {
-        return {
-          found: true,
-          email: em.toLowerCase(),
-          mobile: cleanMobile,
-          uid: data.uid || "",
-        };
-      }
-    }
-  } catch (err) {
-    console.warn("[Auth] authLookup check failed:", err.message);
+  // 3. Flat Number Lookup (e.g. "D571", "571", "D-571", "d571")
+  const cleanFlat = raw.replace(/[\s-]/g, "").toUpperCase();
+  const flatCandidates = [
+    `flat_${cleanFlat}`,
+    cleanFlat,
+  ];
+  if (!/^[A-Z]/.test(cleanFlat)) {
+    flatCandidates.push(`flat_D${cleanFlat}`);
   }
 
-  // Check users collection (where phone == cleanMobile)
-  try {
-    const usersQ = query(collection(db, "users"), where("phone", "==", cleanMobile));
-    const usersSnap = await getDocs(usersQ);
-    if (!usersSnap.empty) {
-      const uData = usersSnap.docs[0].data();
-      const em = uData.personalEmail || uData.email;
-      if (
-        em &&
-        !em.includes(`@${AUTH_EMAIL_DOMAIN}`) &&
-        !em.includes("firebaseapp.com")
-      ) {
-        return {
-          found: true,
-          email: em.toLowerCase(),
-          mobile: cleanMobile,
-          uid: usersSnap.docs[0].id,
-          name: uData.name || "",
-        };
+  for (const fKey of flatCandidates) {
+    try {
+      const fDoc = await getDoc(doc(db, "authLookup", fKey));
+      if (fDoc.exists()) {
+        const fData = fDoc.data();
+        const em = fData.personalEmail || fData.email;
+        if (
+          em &&
+          !em.includes(`@${AUTH_EMAIL_DOMAIN}`) &&
+          !em.includes("firebaseapp.com")
+        ) {
+          return {
+            found: true,
+            email: em.toLowerCase(),
+            mobile: fData.mobile || "",
+            flat: fData.flat || cleanFlat,
+            name: fData.name || "",
+            uid: fData.uid || "",
+            matchedBy: "flat",
+          };
+        }
       }
+    } catch (fErr) {
+      console.warn("[Auth] Flat lookup error:", fErr.message);
     }
-  } catch (err) {
-    console.warn("[Auth] users lookup failed:", err.message);
-  }
-
-  // Check residents collection (where mobile == cleanMobile)
-  try {
-    const resQ = query(collection(db, "residents"), where("mobile", "==", cleanMobile));
-    const resSnap = await getDocs(resQ);
-    if (!resSnap.empty) {
-      const rData = resSnap.docs[0].data();
-      const em = rData.email || rData.personalEmail;
-      if (
-        em &&
-        !em.includes(`@${AUTH_EMAIL_DOMAIN}`) &&
-        !em.includes("firebaseapp.com")
-      ) {
-        return {
-          found: true,
-          email: em.toLowerCase(),
-          mobile: cleanMobile,
-          uid: resSnap.docs[0].id,
-          name: rData.owner || "",
-        };
-      }
-    }
-  } catch (err) {
-    console.warn("[Auth] residents lookup failed:", err.message);
   }
 
   return {
     found: false,
-    mobile: cleanMobile,
-    error: "No registered personal email found for this mobile number.",
+    error: `No registered account found matching "${raw}".`,
+    tip: "Please enter your 10-digit mobile number, Flat number (e.g. D571), or registered email address.",
   };
 }
 

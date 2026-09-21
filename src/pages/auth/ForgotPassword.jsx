@@ -51,6 +51,7 @@ import {
   normalizeMobile,
   isExactAdminEmail,
   findPersonalEmailForIdentifier,
+  correctEmailTypo,
 } from "../../services/authService";
 import { terminateAllOtherSessions } from "../../services/sessionService";
 
@@ -168,6 +169,7 @@ export default function ForgotPassword() {
   const [residentEmailLoading, setResidentEmailLoading] = useState(false);
   const [residentEmailSent, setResidentEmailSent] = useState(false);
   const [residentSentToEmail, setResidentSentToEmail] = useState("");
+  const [residentMatchedInfo, setResidentMatchedInfo] = useState(null);
   const [residentResendCooldown, setResidentResendCooldown] = useState(0);
   const [residentNoEmailWarning, setResidentNoEmailWarning] = useState(null);
 
@@ -258,7 +260,7 @@ export default function ForgotPassword() {
     if (e) e.preventDefault();
     const raw = (residentIdentifier || "").trim();
     if (!raw) {
-      toast.error("Please enter your registered email address or 10-digit mobile number.");
+      toast.error("Please enter your registered email address, 10-digit mobile number, or flat number.");
       return;
     }
 
@@ -269,23 +271,34 @@ export default function ForgotPassword() {
       const result = await findPersonalEmailForIdentifier(raw);
 
       if (!result.found) {
-        if (result.mobile) {
-          setResidentNoEmailWarning({
-            mobile: result.mobile,
-            message: "No registered personal email address was found for this mobile number.",
-          });
-        } else {
-          toast.error(result.error || "No account found matching this identifier.");
-        }
+        setResidentNoEmailWarning({
+          mobile: result.mobile || (normalizeMobile(raw).length === 10 ? normalizeMobile(raw) : ""),
+          identifier: raw,
+          message: result.error || `No registered account found for "${raw}".`,
+          tip: result.tip || "Please check your input or try searching by Flat Number (e.g. D571).",
+        });
         return;
       }
 
       const targetEmail = result.email.toLowerCase();
 
+      if (result.wasCorrected) {
+        toast(`Autocorrected typo: "${result.correctedFrom}" → "${targetEmail}"`, {
+          icon: "ℹ️",
+          duration: 4500,
+        });
+      }
+
       // Send password reset email via Firebase Auth
       await sendPasswordResetEmail(auth, targetEmail);
 
       setResidentSentToEmail(targetEmail);
+      setResidentMatchedInfo({
+        flat: result.flat || "",
+        name: result.name || "",
+        mobile: result.mobile || "",
+        matchedBy: result.matchedBy || "",
+      });
       setResidentEmailSent(true);
       setResidentResendCooldown(45);
       toast.success(`Password reset email sent to ${targetEmail}`);
@@ -935,6 +948,11 @@ export default function ForgotPassword() {
                       </div>
                       <div>
                         <h3 className="font-bold text-gray-900 text-lg">Password Reset Link Sent!</h3>
+                        {residentMatchedInfo?.name && (
+                          <p className="text-xs font-semibold text-emerald-800 mt-1">
+                            Resident: {residentMatchedInfo.name} {residentMatchedInfo.flat ? `(Flat ${residentMatchedInfo.flat})` : ""}
+                          </p>
+                        )}
                         <p className="text-xs text-gray-500 mt-1">
                           We sent an official password reset email link to:
                         </p>
@@ -993,63 +1011,85 @@ export default function ForgotPassword() {
                           onClick={() => {
                             setResidentEmailSent(false);
                             setResidentIdentifier("");
+                            setResidentMatchedInfo(null);
                             setResidentNoEmailWarning(null);
                           }}
                           className="text-gray-500 hover:text-gray-700"
                         >
-                          Use different email / mobile
+                          Use different email / mobile / flat
                         </button>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  /* Form to enter Email or Mobile */
+                  /* Form to enter Email, Mobile, or Flat */
                   <form onSubmit={handleSendResidentReset} className="space-y-4">
                     <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-800 flex items-start gap-2.5">
                       <FaBolt className="text-emerald-600 mt-0.5 shrink-0 text-base" />
                       <div className="leading-relaxed">
                         <span className="font-bold block text-emerald-900">Instant Password Reset via Email</span>
-                        If you have an email registered with your resident account, enter it below (or enter your registered mobile). We'll send an instant password reset link to your email.
+                        Enter your registered 10-digit mobile number, flat number (e.g. D571), or email. We'll find your account and send an instant password reset link to your email.
                       </div>
                     </div>
 
-                    {/* Warning if no email linked to mobile */}
+                    {/* Warning if account not found */}
                     {residentNoEmailWarning && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 space-y-2 animate-in fade-in">
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 space-y-2.5 animate-in fade-in">
                         <div className="flex items-start gap-2">
                           <FaExclamationTriangle className="text-amber-600 mt-0.5 shrink-0 text-sm" />
-                          <div>
-                            <p className="font-semibold text-amber-950">No Registered Email Found</p>
-                            <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                          <div className="space-y-1">
+                            <p className="font-bold text-amber-950">Account / Email Not Found</p>
+                            <p className="text-[11px] text-amber-800 leading-relaxed">
                               {residentNoEmailWarning.message}
+                            </p>
+                            <p className="text-[11px] text-amber-700 font-medium">
+                              💡 {residentNoEmailWarning.tip || "If you mistyped your mobile number, check your digits or try searching by Flat Number (e.g. D571)."}
                             </p>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (residentNoEmailWarning.mobile) {
-                              setMobile(residentNoEmailWarning.mobile);
-                            }
-                            setResidentMode("admin_request");
-                          }}
-                          className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-xs"
-                        >
-                          <FaUserShield className="text-xs" />
-                          <span>Request Admin Permission Instead</span>
-                        </button>
+
+                        <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setResidentIdentifier("");
+                              setResidentNoEmailWarning(null);
+                              const inputEl = document.getElementById("resident-identifier-input");
+                              if (inputEl) inputEl.focus();
+                            }}
+                            className="flex-1 py-2 px-3 bg-white border border-amber-300 hover:bg-amber-100/50 text-amber-900 rounded-lg font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-xs"
+                          >
+                            <FaHome className="text-xs text-amber-600" />
+                            <span>Try Flat Number (e.g. D571)</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (residentNoEmailWarning.mobile) {
+                                setMobile(residentNoEmailWarning.mobile);
+                              }
+                              setResidentMode("admin_request");
+                            }}
+                            className="flex-1 py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-xs"
+                          >
+                            <FaUserShield className="text-xs" />
+                            <span>Request Admin Permission</span>
+                          </button>
+                        </div>
                       </div>
                     )}
 
                     <div>
                       <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-gray-700">
-                        Registered Email or 10-Digit Mobile <span className="text-red-500">*</span>
+                        Registered Mobile, Flat No., or Email <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
                         <FaEnvelope className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                         <input
+                          id="resident-identifier-input"
                           type="text"
-                          placeholder="e.g. name@example.com or 9876543210"
+                          placeholder="e.g. 9876543210, D571, or name@gmail.com"
                           value={residentIdentifier}
                           onChange={(e) => {
                             setResidentIdentifier(e.target.value);
@@ -1060,6 +1100,26 @@ export default function ForgotPassword() {
                           autoFocus
                         />
                       </div>
+
+                      {/* Real-time typo helper for email typos like .cm or @gmai.com */}
+                      {(() => {
+                        if (residentIdentifier && residentIdentifier.includes("@")) {
+                          const check = correctEmailTypo(residentIdentifier);
+                          if (check.wasCorrected) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setResidentIdentifier(check.email)}
+                                className="mt-1.5 text-[11px] text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition font-medium text-left"
+                              >
+                                <FaExclamationTriangle className="text-amber-500 shrink-0 text-[10px]" />
+                                <span>Typo detected. Did you mean <strong>{check.email}</strong>? (Click to apply)</span>
+                              </button>
+                            );
+                          }
+                        }
+                        return null;
+                      })()}
                     </div>
 
                     <div className="pt-2 space-y-2.5">
@@ -1461,16 +1521,18 @@ export default function ForgotPassword() {
           </form>
         )}
 
-        {/* Back to Login */}
-        <div className="text-center mt-6 pt-5 border-t border-gray-100">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-700 font-semibold transition"
-          >
-            <FaArrowLeft />
-            Back to Login
-          </Link>
-        </div>
+        {/* Back to Login (Only show if not already showing the success confirmation back button) */}
+        {!residentEmailSent && !adminEmailSent && !resetSuccess && (
+          <div className="text-center mt-6 pt-5 border-t border-gray-100">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-700 font-semibold transition"
+            >
+              <FaArrowLeft />
+              Back to Login
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );

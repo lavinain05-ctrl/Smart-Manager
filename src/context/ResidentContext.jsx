@@ -55,6 +55,26 @@ export function ResidentProvider({ children }) {
 
     const unsubscribe = subscribeResidents((data) => {
       setResidents(data);
+
+      // Self-heal and synchronize authLookup for loaded residents so password recovery works instantly
+      if (Array.isArray(data) && data.length > 0) {
+        data.forEach((r) => {
+          const clean = normalizeMobile(r.mobile);
+          if (clean && clean.length === 10) {
+            const em = (r.email || r.personalEmail || "").trim();
+            const fl = r.flatNumber || r.flat || "";
+            const ow = r.owner || r.name || "";
+            writeAuthLookup(
+              clean,
+              mobileToAuthEmail(clean),
+              r.id || r.uid,
+              em,
+              fl,
+              ow
+            ).catch(() => {});
+          }
+        });
+      }
     });
 
     return () => unsubscribe();
@@ -280,7 +300,7 @@ export function ResidentProvider({ children }) {
           blockId: data.blockId || "",
           updatedAt: serverTimestamp(),
         });
-        await writeAuthLookup(cleanMobile, authEmail, id);
+        await writeAuthLookup(cleanMobile, authEmail, id, data.email, data.flat, data.owner);
       } else if (data.enablePortalLogin && data.password) {
         // Enabling portal login for an existing resident who didn't have one
         const authEmail = mobileToAuthEmail(cleanMobile);
@@ -302,7 +322,7 @@ export function ResidentProvider({ children }) {
             status: "active",
             createdAt: serverTimestamp(),
           });
-          await writeAuthLookup(cleanMobile, authEmail, id);
+          await writeAuthLookup(cleanMobile, authEmail, id, data.email, data.flat, data.owner);
           toast.success("Portal login enabled for resident");
         } catch (credErr) {
           console.warn("[updateResident] Could not create portal auth:", credErr.message);

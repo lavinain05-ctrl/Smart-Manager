@@ -43,12 +43,19 @@ export async function getCollectors() {
 // Creates the Firebase Auth account using Mobile Number + Password
 // (via the secondary app instance, so the admin's session is untouched).
 // Links users/{uid} and collectors/{uid} with matching uid.
+// =============================
+// Create Collector + Login Account
+// =============================
+//
+// Creates the Firebase Auth account using Mobile Number + Password
+// (via the secondary app instance, so the admin's session is untouched).
+// Links users/{uid} and collectors/{uid} with matching uid.
 export async function createCollectorAccount({
   name,
   mobile,
   area,
   vehicle,
-  status,
+  status = "Active",
   email,
   password,
   mustChangePassword = true,
@@ -65,73 +72,175 @@ export async function createCollectorAccount({
     throw new Error("Password must be at least 6 characters.");
   }
 
-  // Check duplicate in authLookup
+  const authEmail = mobileToAuthEmail(cleanMobile);
+
+  // 1. Check duplicate in authLookup — with Self-Healing for orphaned records
   try {
     const lookupDoc = await getDoc(doc(db, "authLookup", cleanMobile));
     if (lookupDoc.exists()) {
-      throw new Error("This mobile number is already registered.");
+      const existingData = lookupDoc.data();
+      const existingUid = existingData.uid;
+
+      // Check if this number belongs to an active resident or committee member
+      let isLegitimateExistingUser = false;
+      let existingRole = "user";
+
+      if (existingUid) {
+        try {
+          const [uDoc, rDoc, commDoc] = await Promise.all([
+            getDoc(doc(db, "users", existingUid)),
+            getDoc(doc(db, "residents", existingUid)),
+            getDoc(doc(db, "committee", existingUid)),
+          ]);
+
+          if (rDoc.exists()) {
+            isLegitimateExistingUser = true;
+            existingRole = "resident";
+          } else if (commDoc.exists()) {
+            isLegitimateExistingUser = true;
+            existingRole = "committee member";
+          } else if (uDoc.exists()) {
+            const uData = uDoc.data();
+            if (uData.role === "admin") {
+              isLegitimateExistingUser = true;
+              existingRole = "admin";
+            } else if (uData.role === "collector") {
+              // It's a collector profile — we will update/re-activate it below
+              isLegitimateExistingUser = false;
+            } else if (uData.status && uData.status.toLowerCase() !== "deleted") {
+              isLegitimateExistingUser = true;
+              existingRole = uData.role || "resident";
+            }
+          }
+        } catch (checkErr) {
+          console.warn("[createCollectorAccount] Existing profile check warning:", checkErr.message);
+        }
+      }
+
+      if (isLegitimateExistingUser) {
+        throw new Error(`This mobile number (${cleanMobile}) is already registered to an active ${existingRole}.`);
+      }
+
+      // If it's an orphaned lookup record (e.g. from manual Firebase Console deletion), clean it up!
+      console.warn("[createCollectorAccount] Cleaning up orphaned authLookup for:", cleanMobile);
+      await deleteDoc(doc(db, "authLookup", cleanMobile)).catch(() => {});
     }
   } catch (err) {
-    if (err.message === "This mobile number is already registered.") throw err;
+    if (err.message?.includes("already registered to an active")) {
+      throw err;
+    }
   }
 
-  const authEmail = mobileToAuthEmail(cleanMobile);
+  let uid = null;
 
-  let credential;
   try {
-    credential = await createUserWithEmailAndPassword(
-      secondaryAuth,
-      authEmail,
-      password
-    );
-  } catch (authError) {
-    if (authError.code === "auth/email-already-in-use") {
-      throw new Error("This mobile number is already registered.");
+    // 2. Create Firebase Auth user on secondaryAuth
+    let credential = null;
+    try {
+      credential = await createUserWithEmailAndPassword(
+        secondaryAuth,
+        authEmail,
+        password
+      );
+      uid = credential.user.uid;
+    } catch (authError) {
+      if (authError.code === "auth/email-already-in-use") {
+        console.warn("[createCollectorAccount] Auth email already in use, attempting self-healing cleanup or password sync...");
+        
+        // Step A: Attempt to delete stale/orphaned Auth account via deleteFirebaseAuthAccount
+        let deletedOldAuth = false;
+        try {
+          const delRes = await deleteFirebaseAuthAccount({
+            phone: cleanMobile,
+            email: authEmail,
+          });
+          if (delRes?.success) {
+            deletedOldAuth = true;
+            console.log("[createCollectorAccount] Old Auth account deleted. Retrying creation...");
+            // Retry creation now that old auth is removed
+            credential = await createUserWithEmailAndPassword(
+              secondaryAuth,
+              authEmail,
+              password
+            );
+            uid = credential.user.uid;
+          }
+        } catch (delErr) {
+          console.warn("[createCollectorAccount] Auto-delete of stale auth failed:", delErr.message);
+        }
+
+        // Step B: If delete wasn't possible, try signing in with the provided password to re-link
+        if (!deletedOldAuth && !credential) {
+          try {
+            const signInRes = await signInWithEmailAndPassword(
+              secondaryAuth,
+              authEmail,
+              password
+            );
+            uid = signInRes.user.uid;
+            console.log("[createCollectorAccount] Successfully re-linked existing Auth account UID:", uid);
+          } catch (signInErr) {
+            console.warn("[createCollectorAccount] Sign-in with provided password failed:", signInErr.code);
+            throw new Error(
+              `This mobile number (${cleanMobile}) already has a login account in Firebase. ` +
+              `If you previously deleted users in Firebase Console, please reset their password or remove the user from Firebase Auth.`
+            );
+          }
+        }
+      } else if (authError.code === "auth/weak-password") {
+        throw new Error("Password is too weak. Use at least 6 characters.");
+      } else {
+        throw authError;
+      }
     }
-    if (authError.code === "auth/weak-password") {
-      throw new Error("Password is too weak. Use at least 6 characters.");
+
+    if (!uid) {
+      throw new Error("Failed to initialize collector authentication ID.");
     }
-    throw authError;
+
+    // 3. Write users/{uid} for authentication, role, and module permissions
+    await setDoc(doc(db, "users", uid), {
+      role: "collector",
+      name: name.trim(),
+      phone: cleanMobile,
+      email: (email || "").trim() || authEmail,
+      area: area || "",
+      vehicle: vehicle || "",
+      status: status || "Active",
+      mustChangePassword: mustChangePassword === true,
+      assignedModules: Array.isArray(assignedModules) && assignedModules.length > 0 ? assignedModules : ["garbage"],
+      assignedCampaigns: Array.isArray(assignedCampaigns) ? assignedCampaigns : [],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    // 4. Write collectors/{uid} for admin operations
+    await setDoc(doc(db, "collectors", uid), {
+      name: name.trim(),
+      mobile: cleanMobile,
+      area: area || "",
+      vehicle: vehicle || "",
+      status: status || "Active",
+      email: (email || "").trim(),
+      mustChangePassword: mustChangePassword === true,
+      assignedModules: Array.isArray(assignedModules) && assignedModules.length > 0 ? assignedModules : ["garbage"],
+      assignedCampaigns: Array.isArray(assignedCampaigns) ? assignedCampaigns : [],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    // 5. Write centralized auth lookup for mobile login
+    await writeAuthLookup(cleanMobile, authEmail, uid);
+
+    return uid;
+  } finally {
+    // 6. ALWAYS sign out secondary instance immediately in finally block
+    try {
+      await signOut(secondaryAuth);
+    } catch {
+      // secondary instance cleanup
+    }
   }
-
-  const uid = credential.user.uid;
-
-  // users/{uid} for role, permissions, and authentication
-  await setDoc(doc(db, "users", uid), {
-    role: "collector",
-    name,
-    phone: cleanMobile,
-    email: (email || "").trim() || authEmail,
-    area: area || "",
-    vehicle: vehicle || "",
-    status: status || "Active",
-    mustChangePassword: mustChangePassword === true,
-    assignedModules: Array.isArray(assignedModules) && assignedModules.length > 0 ? assignedModules : ["garbage"],
-    assignedCampaigns: Array.isArray(assignedCampaigns) ? assignedCampaigns : [],
-    createdAt: serverTimestamp(),
-  });
-
-  // collectors/{uid} for admin operations
-  await setDoc(doc(db, "collectors", uid), {
-    name,
-    mobile: cleanMobile,
-    area: area || "",
-    vehicle: vehicle || "",
-    status: status || "Active",
-    email: (email || "").trim(),
-    mustChangePassword: mustChangePassword === true,
-    assignedModules: Array.isArray(assignedModules) && assignedModules.length > 0 ? assignedModules : ["garbage"],
-    assignedCampaigns: Array.isArray(assignedCampaigns) ? assignedCampaigns : [],
-    createdAt: serverTimestamp(),
-  });
-
-  // Write centralized auth lookup for mobile login
-  await writeAuthLookup(cleanMobile, authEmail, uid);
-
-  // Sign out secondary instance immediately
-  await signOut(secondaryAuth);
-
-  return uid;
 }
 
 export async function updateCollectorInFirestore(id, collector) {

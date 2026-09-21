@@ -4,6 +4,7 @@ import {
   FaCheck,
   FaTimes,
   FaFilter,
+  FaSpinner,
 } from "react-icons/fa";
 
 import { useGarbage } from "../../context/GarbageContext";
@@ -12,6 +13,7 @@ export default function GarbageRequests() {
   const { garbageRequests, approveRequest, rejectRequest } = useGarbage();
 
   const [statusFilter, setStatusFilter] = useState("pending");
+  const [processingId, setProcessingId] = useState(null);
 
   const filtered = useMemo(() => {
     if (statusFilter === "all") return garbageRequests;
@@ -19,6 +21,24 @@ export default function GarbageRequests() {
   }, [garbageRequests, statusFilter]);
 
   const pendingCount = garbageRequests.filter((r) => r.status === "pending").length;
+
+  const handleApprove = async (id) => {
+    setProcessingId(id);
+    try {
+      await approveRequest(id);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleReject = async (id) => {
+    setProcessingId(id);
+    try {
+      await rejectRequest(id);
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -99,16 +119,28 @@ export default function GarbageRequests() {
               {req.status === "pending" && (
                 <div className="flex gap-2 shrink-0">
                   <button
-                    onClick={() => approveRequest(req.id)}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm transition"
+                    disabled={processingId === req.id}
+                    onClick={() => handleApprove(req.id)}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm transition disabled:opacity-50"
                   >
-                    <FaCheck /> Approve
+                    {processingId === req.id ? (
+                      <FaSpinner className="animate-spin" />
+                    ) : (
+                      <FaCheck />
+                    )}
+                    Approve
                   </button>
                   <button
-                    onClick={() => rejectRequest(req.id)}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium text-sm transition"
+                    disabled={processingId === req.id}
+                    onClick={() => handleReject(req.id)}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium text-sm transition disabled:opacity-50"
                   >
-                    <FaTimes /> Reject
+                    {processingId === req.id ? (
+                      <FaSpinner className="animate-spin" />
+                    ) : (
+                      <FaTimes />
+                    )}
+                    Reject
                   </button>
                 </div>
               )}

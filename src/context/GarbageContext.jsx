@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import {
+  getDoc,
   getDocs,
   query,
   where,
@@ -117,7 +118,11 @@ export function GarbageProvider({ children }) {
 
   const residentsMap = useMemo(() => {
     const map = {};
-    (residents || []).forEach((r) => { map[r.id] = r; });
+    (residents || []).forEach((r) => {
+      if (r.id) map[r.id] = r;
+      if (r.userId) map[r.userId] = r;
+      if (r.uid) map[r.uid] = r;
+    });
     return map;
   }, [residents]);
 
@@ -823,35 +828,103 @@ export function GarbageProvider({ children }) {
 
   async function approveRequest(id) {
     try {
-      const req = garbageRequests.find((r) => r.id === id);
-      const resident = getResident(req?.residentId);
-      await updateRequestSvc(id, {
-        status: "approved",
-        processedBy: user?.name || user?.email || "",
-      });
+      let req = garbageRequests.find((r) => r.id === id);
+      if (!req) {
+        const reqSnap = await getDoc(doc(db, "garbageRequests", id));
+        if (reqSnap.exists()) {
+          req = { id: reqSnap.id, ...reqSnap.data() };
+        }
+      }
+      if (!req) {
+        toast.error("Request not found");
+        return false;
+      }
 
-      // If opt-in, create account + set garbageStatus. If opt-out, deactivate + set status.
-      if (req?.requestType === "opt_in" && req.residentId) {
-        await addAccountSvc({
-          residentId: req.residentId,
-          monthlyCharge: garbageSettings.defaultCharge || 0,
-          collectorId: "",
-          status: "active",
-        });
-        await updateGarbageStatus(req.residentId, "participating");
-      } else if (req?.requestType === "opt_out" && req.residentId) {
-        const acc = garbageAccounts.find((a) => a.residentId === req.residentId);
+      const resident =
+        getResident(req.residentId) ||
+        (residents || []).find(
+          (r) =>
+            r.id === req.residentId ||
+            r.userId === req.residentId ||
+            r.uid === req.residentId
+        ) ||
+        null;
+      const residentId = resident?.id || req.residentId;
+
+      // 1. Process account updates based on request type
+      if (req.requestType === "opt_in" && residentId) {
+        // Look for existing account in memory or in Firestore
+        let existingAcc = garbageAccounts.find((a) => a.residentId === residentId);
+        if (!existingAcc) {
+          try {
+            existingAcc = await getGarbageAccountByResidentId(residentId);
+          } catch (e) {
+            console.warn("Could not check existing GC account:", e);
+          }
+        }
+
+        const effectiveCharge =
+          Number(resident?.charge) > 0
+            ? Number(resident?.charge)
+            : Number(garbageSettings?.defaultCharge) > 0
+            ? Number(garbageSettings?.defaultCharge)
+            : 80;
+
+        if (existingAcc) {
+          // Account already exists — reactivate and update monthly charge
+          await updateAccountSvc(existingAcc.id, {
+            status: "active",
+            monthlyCharge: effectiveCharge,
+          });
+        } else {
+          // No account exists — create a new one
+          try {
+            await addAccountSvc({
+              residentId,
+              monthlyCharge: effectiveCharge,
+              collectorId: "",
+              status: "active",
+            });
+          } catch (addErr) {
+            console.warn("addAccount error, checking existing fallback:", addErr);
+            const fallback = await getGarbageAccountByResidentId(residentId);
+            if (fallback) {
+              await updateAccountSvc(fallback.id, {
+                status: "active",
+                monthlyCharge: effectiveCharge,
+              });
+            }
+          }
+        }
+
+        // Synchronize master resident garbageStatus
+        await updateGarbageStatus(residentId, "participating");
+      } else if (req.requestType === "opt_out" && residentId) {
+        const acc =
+          garbageAccounts.find((a) => a.residentId === residentId) ||
+          (await getGarbageAccountByResidentId(residentId).catch(() => null));
         if (acc) {
           await updateAccountSvc(acc.id, { status: "inactive" });
         }
-        await updateGarbageStatus(req.residentId, "not_participating");
+        await updateGarbageStatus(residentId, "not_participating");
       }
 
-      log("Request Approved", `${req?.requestType} request approved for ${resident?.owner || ""}`, id, resident?.owner || "");
+      // 2. Mark request document as approved
+      await updateRequestSvc(id, {
+        status: "approved",
+        processedBy: user?.name || user?.email || "Admin",
+      });
 
-      if (garbageSettings.enableNotifications && req?.residentId) {
+      log(
+        "Request Approved",
+        `${req.requestType === "opt_in" ? "Opt-in" : "Opt-out"} request approved for ${resident?.owner || "Resident"}`,
+        id,
+        resident?.owner || ""
+      );
+
+      if (garbageSettings.enableNotifications && residentId) {
         createNotification({
-          userId: req.residentId,
+          userId: residentId,
           title: "Garbage Request Approved",
           message: `Your ${req.requestType === "opt_in" ? "enrollment" : "opt-out"} request has been approved.`,
           type: "success",
@@ -862,26 +935,52 @@ export function GarbageProvider({ children }) {
       toast.success("Request approved");
       return true;
     } catch (error) {
-      console.error(error);
-      toast.error("Failed to approve request");
+      console.error("[GarbageContext] Failed to approve request:", error);
+      toast.error(error.message || "Failed to approve request");
       return false;
     }
   }
 
   async function rejectRequest(id) {
     try {
-      const req = garbageRequests.find((r) => r.id === id);
-      const resident = getResident(req?.residentId);
+      let req = garbageRequests.find((r) => r.id === id);
+      if (!req) {
+        const reqSnap = await getDoc(doc(db, "garbageRequests", id));
+        if (reqSnap.exists()) {
+          req = { id: reqSnap.id, ...reqSnap.data() };
+        }
+      }
+      if (!req) {
+        toast.error("Request not found");
+        return false;
+      }
+
+      const resident =
+        getResident(req.residentId) ||
+        (residents || []).find(
+          (r) =>
+            r.id === req.residentId ||
+            r.userId === req.residentId ||
+            r.uid === req.residentId
+        ) ||
+        null;
+      const residentId = resident?.id || req.residentId;
+
       await updateRequestSvc(id, {
         status: "rejected",
-        processedBy: user?.name || user?.email || "",
+        processedBy: user?.name || user?.email || "Admin",
       });
 
-      log("Request Rejected", `${req?.requestType} request rejected for ${resident?.owner || ""}`, id, resident?.owner || "");
+      log(
+        "Request Rejected",
+        `${req?.requestType === "opt_in" ? "Opt-in" : "Opt-out"} request rejected for ${resident?.owner || "Resident"}`,
+        id,
+        resident?.owner || ""
+      );
 
-      if (garbageSettings.enableNotifications && req?.residentId) {
+      if (garbageSettings.enableNotifications && residentId) {
         createNotification({
-          userId: req.residentId,
+          userId: residentId,
           title: "Garbage Request Rejected",
           message: `Your ${req?.requestType === "opt_in" ? "enrollment" : "opt-out"} request has been rejected.`,
           type: "warning",
@@ -892,8 +991,8 @@ export function GarbageProvider({ children }) {
       toast.success("Request rejected");
       return true;
     } catch (error) {
-      console.error(error);
-      toast.error("Failed to reject request");
+      console.error("[GarbageContext] Failed to reject request:", error);
+      toast.error(error.message || "Failed to reject request");
       return false;
     }
   }

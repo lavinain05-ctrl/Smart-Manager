@@ -642,10 +642,10 @@ export default function Collectors() {
   const filteredCollectors = allCollectors.filter((collector) => {
     const value = search.toLowerCase();
     return (
-      collector.name.toLowerCase().includes(value) ||
-      (collector.mobile || "").includes(value) ||
-      (collector.area || "").toLowerCase().includes(value) ||
-      (collector.designation || "").toLowerCase().includes(value)
+      (collector?.name || "").toLowerCase().includes(value) ||
+      (collector?.mobile || "").includes(value) ||
+      (collector?.area || "").toLowerCase().includes(value) ||
+      (collector?.designation || "").toLowerCase().includes(value)
     );
   });
 

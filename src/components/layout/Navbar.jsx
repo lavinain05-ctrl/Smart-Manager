@@ -64,44 +64,38 @@ export default function Navbar({ onToggleSidebar }) {
   }, [location.pathname]);
 
   return (
-    <header className="sticky top-0 z-30 h-20 bg-white border-b border-gray-200 shadow-sm flex items-center justify-between px-4 md:px-6">
+    <header className="sticky top-0 z-30 min-h-[3.75rem] h-16 sm:h-20 bg-white border-b border-gray-200 shadow-sm flex items-center justify-between px-3 sm:px-6">
 
       {/* Left */}
-
-      <div className="flex items-center gap-4">
-
+      <div className="flex items-center gap-2.5 sm:gap-4 min-w-0 flex-1 mr-2">
         <button
           onClick={onToggleSidebar}
-          className="lg:hidden text-2xl text-gray-600 hover:text-emerald-600 transition"
+          className="lg:hidden p-1.5 rounded-lg text-xl sm:text-2xl text-gray-600 hover:text-emerald-600 hover:bg-gray-100 transition shrink-0"
+          aria-label="Toggle navigation menu"
         >
           <FaBars />
         </button>
 
-        <div>
-
-          <h1 className="text-2xl font-bold text-gray-800">
+        <div className="min-w-0">
+          <h1 className="text-sm xs:text-base sm:text-xl lg:text-2xl font-bold text-gray-800 truncate leading-tight">
             {pageInfo.title}
           </h1>
 
-          <p className="text-sm text-gray-500">
+          <p className="text-xs sm:text-sm text-gray-500 truncate hidden xs:block mt-0.5">
             {pageInfo.subtitle}
           </p>
-
         </div>
-
       </div>
 
       {/* Right */}
-
-      <div className="flex items-center gap-3">
-
+      <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
         {/* Global Search */}
         <GlobalSearch isAdmin={user?.role === "admin"} />
 
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-lg bg-gray-100 hover:bg-gray-200 transition"
+          className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-sm sm:text-lg bg-gray-100 hover:bg-gray-200 transition shrink-0"
           title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
         >
           {darkMode ? <FaSun className="text-yellow-500" /> : <FaMoon className="text-gray-600" />}
@@ -115,13 +109,10 @@ export default function Navbar({ onToggleSidebar }) {
         )}
 
         {/* Notification */}
-
         <NotificationBell />
 
         {/* Profile */}
-
         <ProfileMenu />
-
       </div>
 
     </header>

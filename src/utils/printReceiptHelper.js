@@ -12,11 +12,11 @@ export function printPaymentReceipt(receipt) {
     receipt.collectionType === "special"
   );
 
-  const receiptNo = receipt.receiptNumber || receipt.receiptNo || "RWA-" + Date.now();
-  const residentName = receipt.residentName || receipt.contributorName || "Resident";
+  const receiptNo = receipt.receiptNumber || receipt.receiptNo || receipt.paymentId || "RWA-" + Date.now();
+  const residentName = receipt.residentName || receipt.contributorName || receipt.owner || receipt.name || "Resident";
   const flat = receipt.flat || receipt.flatNumber || "—";
   const block = receipt.block || "";
-  const amount = Number(receipt.totalPaidAmount || receipt.amount || 0).toLocaleString("en-IN");
+  const amount = Number(receipt.totalPaidAmount || receipt.paidAmount || receipt.amount || 0).toLocaleString("en-IN");
   const mode = receipt.paymentMethod || receipt.paymentMode || receipt.method || "Cash";
   const date = receipt.paymentDate || receipt.date || new Date().toLocaleDateString("en-IN");
   const time = receipt.paymentTime || receipt.time || "";
@@ -228,8 +228,8 @@ export function printPaymentReceipt(receipt) {
           <div class="watermark">PAID</div>
 
           <div class="header">
-            <div class="society-title">Smart Manager RWA</div>
-            <div class="society-subtitle">Resident Welfare Association Official Desk</div>
+            <div class="society-title">D Block RWA</div>
+            <div class="society-subtitle">Resident Welfare Association — Indraprastha</div>
             <div class="receipt-badge">${isSpecial ? "Special Collection Receipt" : "Maintenance Fee Receipt"}</div>
           </div>
 
@@ -287,7 +287,7 @@ export function printPaymentReceipt(receipt) {
           </div>
 
           <div class="footer-note">
-            This is an official computer-generated receipt from Smart Manager RWA. Thank you!
+            This is an official computer-generated receipt from D Block RWA. Thank you!
           </div>
         </div>
       </body>

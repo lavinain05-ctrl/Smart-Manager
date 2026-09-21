@@ -8,13 +8,18 @@ import {
   FaTimes,
   FaTrashAlt,
   FaHandHoldingHeart,
+  FaPrint,
+  FaReceipt,
 } from "react-icons/fa";
+import toast from "react-hot-toast";
 
 import { useAuth } from "../../context/AuthContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useResidents } from "../../context/ResidentContext";
 import { useBills } from "../../context/BillContext";
 import { useSettings } from "../../context/SettingsContext";
+
+import { printPaymentReceipt } from "../../utils/printReceiptHelper";
 
 import ResidentForm from "../../components/forms/ResidentForm";
 import { isGcParticipating } from "../../services/statisticsService";
@@ -102,6 +107,40 @@ export default function CollectorDashboard() {
     mySpecialPaymentsToday
       .filter((p) => p.paymentMethod === "UPI" || p.paymentMethod === "Offline UPI")
       .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+  // All unified payments collected today
+  const allPaymentsToday = useMemo(() => {
+    const list = [];
+    myGarbagePaymentsToday.forEach((p) => {
+      list.push({
+        id: p.id,
+        module: "garbage",
+        title: `Flat ${p.flat || "—"} • ${p.residentName || "Resident"}`,
+        subtitle: `Garbage Maintenance • ${p.month || ""} ${p.year || ""}`,
+        amount: Number(p.amount || 0),
+        paymentMethod: p.paymentMethod || "Cash",
+        paymentTime: p.paymentTime || "",
+        receiptNumber: p.receiptNumber || p.receiptNo || "—",
+        raw: p,
+      });
+    });
+
+    mySpecialPaymentsToday.forEach((p) => {
+      list.push({
+        id: p.id,
+        module: "special",
+        title: `${p.flatNumber ? `Flat ${p.flatNumber} • ` : ""}${p.contributorName || "Contributor"}`,
+        subtitle: p.collectionName || "Special Collection",
+        amount: Number(p.amount || 0),
+        paymentMethod: p.paymentMethod || "Cash",
+        paymentTime: p.paymentTime || "",
+        receiptNumber: p.receiptNumber || p.receiptNo || "—",
+        raw: p,
+      });
+    });
+
+    return list;
+  }, [myGarbagePaymentsToday, mySpecialPaymentsToday]);
 
   // Residents with no bill yet this month, or a bill still Pending.
   // Only count participating residents.
@@ -227,6 +266,75 @@ export default function CollectorDashboard() {
 
         ))}
 
+      </div>
+
+      {/* Today's Collections & Resident Receipts */}
+      <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm">
+              <FaReceipt />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900 text-base">Today's Collections & Receipts</h3>
+              <p className="text-xs text-gray-400">Instantly print official payment receipts</p>
+            </div>
+          </div>
+          <span className="text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full">
+            {allPaymentsToday.length} {allPaymentsToday.length === 1 ? "Receipt" : "Receipts"}
+          </span>
+        </div>
+
+        {allPaymentsToday.length === 0 ? (
+          <div className="py-8 text-center text-gray-400 text-xs">
+            No collections recorded today yet. Use the Collect tab to record payments.
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {allPaymentsToday.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50/70 hover:bg-emerald-50/40 border border-gray-100 transition"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-gray-900">{p.title}</span>
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        p.module === "special"
+                          ? "bg-indigo-100 text-indigo-800"
+                          : "bg-emerald-100 text-emerald-800"
+                      }`}
+                    >
+                      {p.module === "special" ? "Special" : "Garbage"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">{p.subtitle}</p>
+                  <p className="text-[11px] font-mono text-gray-400">{p.receiptNumber} • {p.paymentMethod}</p>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span className="font-extrabold text-sm text-emerald-700">
+                    ₹{p.amount.toLocaleString("en-IN")}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      printPaymentReceipt(p.raw);
+                      toast.success(`Printing receipt ${p.receiptNumber}...`);
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-xs active:scale-95 cursor-pointer"
+                    title="Print Official Payment Receipt"
+                  >
+                    <FaPrint className="text-[11px]" />
+                    <span>Print Receipt</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Add Resident Drawer */}

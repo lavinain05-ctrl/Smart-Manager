@@ -272,6 +272,8 @@ export async function deleteResidentFromFirestore(id) {
 ================================ */
 
 export async function updateGarbageStatus(residentId, status) {
+  if (!residentId) return;
+
   const isNotParticipating =
     status === "not_participating" ||
     status === "inactive" ||
@@ -285,11 +287,44 @@ export async function updateGarbageStatus(residentId, status) {
   if (isNotParticipating) {
     updatePayload.charge = 0;
   }
-  await updateDoc(doc(db, "residents", residentId), updatePayload);
+
+  let canonicalDocId = residentId;
+  const resDocRef = doc(db, "residents", residentId);
+  const directSnap = await getDoc(resDocRef);
+
+  if (directSnap.exists()) {
+    if (!isNotParticipating && (!directSnap.data().charge || Number(directSnap.data().charge) <= 0)) {
+      updatePayload.charge = 80;
+    }
+    await updateDoc(resDocRef, updatePayload);
+  } else {
+    // Try finding by userId or uid if residentId is an auth UID
+    let foundDoc = null;
+    const qUser = query(collection(db, "residents"), where("userId", "==", residentId));
+    const snapUser = await getDocs(qUser);
+    if (!snapUser.empty) {
+      foundDoc = snapUser.docs[0];
+    } else {
+      const qUid = query(collection(db, "residents"), where("uid", "==", residentId));
+      const snapUid = await getDocs(qUid);
+      if (!snapUid.empty) {
+        foundDoc = snapUid.docs[0];
+      }
+    }
+
+    if (foundDoc) {
+      canonicalDocId = foundDoc.id;
+      if (!isNotParticipating && (!foundDoc.data().charge || Number(foundDoc.data().charge) <= 0)) {
+        updatePayload.charge = 80;
+      }
+      await updateDoc(doc(db, "residents", canonicalDocId), updatePayload);
+    }
+  }
 
   // 2. Synchronize garbageAccounts collection
   try {
-    const accQ = query(collection(db, "garbageAccounts"), where("residentId", "==", residentId));
+    const candidateIds = Array.from(new Set([residentId, canonicalDocId].filter(Boolean)));
+    const accQ = query(collection(db, "garbageAccounts"), where("residentId", "in", candidateIds));
     const snap = await getDocs(accQ);
     const targetStatus = status === "participating" ? "active" : "inactive";
 
@@ -302,10 +337,10 @@ export async function updateGarbageStatus(residentId, status) {
       }
     } else if (status === "participating") {
       // Auto-create account if resident opted in but has no account yet
-      const resSnap = await getDoc(doc(db, "residents", residentId));
+      const resSnap = await getDoc(doc(db, "residents", canonicalDocId));
       const resData = resSnap.exists() ? resSnap.data() : {};
       await addDoc(collection(db, "garbageAccounts"), {
-        residentId,
+        residentId: canonicalDocId,
         monthlyCharge: Number(resData.charge || 80),
         collectorId: "",
         status: "active",

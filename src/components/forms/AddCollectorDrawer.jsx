@@ -9,8 +9,8 @@ export default function AddCollectorDrawer({
 }) {
   if (!open) return null;
 
-  function handleSave(data) {
-    onSave(data);
+  async function handleSave(data) {
+    return await onSave(data);
   }
 
   return (

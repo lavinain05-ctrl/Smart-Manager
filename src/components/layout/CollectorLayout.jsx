@@ -74,7 +74,7 @@ export default function CollectorLayout() {
 
           <div>
             <h1 className="font-bold leading-tight">
-              Smart Manager
+              D Block RWA
             </h1>
 
             <p className="text-xs text-emerald-200">

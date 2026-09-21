@@ -27,7 +27,10 @@ import {
   FaShieldAlt,
   FaLightbulb,
   FaChevronRight,
+  FaBell,
 } from "react-icons/fa";
+
+import toast from "react-hot-toast";
 
 import { useAuth } from "../../context/AuthContext";
 import { useResidents } from "../../context/ResidentContext";
@@ -238,7 +241,15 @@ export default function ResidentDashboard() {
       .sort((a, b) => Number(a.order || 99) - Number(b.order || 99));
   }, [committee]);
 
-  const { notifications = [] } = useNotifications();
+  const {
+    notifications = [],
+    phonePermission,
+    requestPhonePermission,
+  } = useNotifications();
+
+  const [phoneBannerDismissed, setPhoneBannerDismissed] = useState(() => {
+    return localStorage.getItem("rwa_dismiss_phone_notif_banner") === "true";
+  });
 
   // Active special drives to display
   const activeSpecialDrives = useMemo(() => {
@@ -378,17 +389,62 @@ export default function ResidentDashboard() {
   const basePath = `/resident`;
 
   return (
-    <div className="space-y-6 sm:space-y-7 pb-12">
+    <div className="space-y-4 sm:space-y-6 sm:space-y-7 pb-12">
+      {/* ═══════════ Phone Notification Bar Activation Banner ═══════════ */}
+      {phonePermission === "default" && !phoneBannerDismissed && (
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 text-white flex items-center justify-center text-lg shrink-0 shadow-xs">
+              <FaBell className="animate-bounce" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-white">
+                Get Phone Bar Notifications
+              </h3>
+              <p className="text-xs text-emerald-100 mt-0.5">
+                Stay updated with bill reminders, payment receipts, and society announcements in your phone's notification bar.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setPhoneBannerDismissed(true);
+                localStorage.setItem("rwa_dismiss_phone_notif_banner", "true");
+              }}
+              className="px-3 py-1.5 text-xs text-emerald-100 hover:text-white transition"
+            >
+              Later
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                const perm = await requestPhonePermission();
+                if (perm === "granted") {
+                  toast.success("Phone notifications activated! 🔔");
+                } else if (perm === "denied") {
+                  toast.error("Permission denied. You can enable it in browser settings.");
+                }
+              }}
+              className="px-4 py-2 bg-white text-emerald-800 hover:bg-emerald-50 text-xs font-black rounded-xl shadow-md transition active:scale-95 flex items-center gap-1.5"
+            >
+              <FaBell className="text-emerald-600 text-xs" /> Enable Alerts
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ═══════════ Hero Card: Resident & Society Profile ═══════════ */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 text-white p-6 sm:p-8 shadow-xl border border-slate-800/80">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 text-white p-4 sm:p-6 md:p-8 shadow-xl border border-slate-800/80">
         {/* Glow ambient effects */}
         <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 -ml-20 -mb-20 w-72 h-72 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-start sm:items-center gap-4 sm:gap-5">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
+          <div className="flex items-start sm:items-center gap-3.5 sm:gap-5">
             {/* Avatar container */}
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-2xl sm:text-3xl font-black shrink-0 shadow-lg shadow-blue-500/30 border border-white/20">
+            <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-xl sm:text-3xl font-black shrink-0 shadow-lg shadow-blue-500/30 border border-white/20">
               {resident.owner
                 ?.split(" ")
                 .map((n) => n[0])
@@ -397,31 +453,31 @@ export default function ResidentDashboard() {
                 .toUpperCase() || <FaUser />}
             </div>
 
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-400/30">
-                  <FaShieldAlt className="text-[9px]" /> Verified Resident
+            <div className="space-y-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                <span className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                  <FaShieldAlt className="text-[8px] sm:text-[9px]" /> Verified Resident
                 </span>
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${gcCfg.badgeClass}`}>
+                <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider border ${gcCfg.badgeClass}`}>
                   {gcCfg.icon} {gcCfg.label}
                 </span>
               </div>
 
-              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight truncate">
                 {resident.owner}
               </h1>
 
-              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs text-slate-300">
-                <span className="inline-flex items-center gap-1 bg-white/10 px-2.5 py-1 rounded-lg font-semibold text-white border border-white/10">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-0.5 text-xs text-slate-300">
+                <span className="inline-flex items-center gap-1 bg-white/10 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg font-semibold text-white border border-white/10 text-xs">
                   <FaHome className="text-emerald-400" /> Flat {resident.flat}
                 </span>
                 {resident.block && (
-                  <span className="bg-white/10 px-2 py-1 rounded-lg font-medium border border-white/10">
+                  <span className="bg-white/10 px-2 py-0.5 sm:py-1 rounded-lg font-medium border border-white/10 text-xs">
                     Block {resident.block}
                   </span>
                 )}
                 {resident.floor && (
-                  <span className="bg-white/10 px-2 py-1 rounded-lg font-medium border border-white/10">
+                  <span className="bg-white/10 px-2 py-0.5 sm:py-1 rounded-lg font-medium border border-white/10 text-xs">
                     Floor {resident.floor}
                   </span>
                 )}
@@ -431,10 +487,10 @@ export default function ResidentDashboard() {
           </div>
 
           {/* Quick Header Shortcuts */}
-          <div className="flex items-center gap-2.5 self-start md:self-center shrink-0 flex-wrap">
+          <div className="flex items-center gap-2 self-start md:self-center shrink-0 flex-wrap">
             <Link
               to="/resident/support"
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 transition backdrop-blur-sm"
+              className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 transition backdrop-blur-sm"
               title="Help & FAQs"
             >
               <FaQuestionCircle className="text-amber-400 text-xs" />
@@ -447,10 +503,10 @@ export default function ResidentDashboard() {
       {/* ═══════════ Billing Status / Payment Notice Card ═══════════ */}
       {isParticipating ? (
         !isCurrentMonthPaid ? (
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-amber-500/10 border border-amber-300/80 dark:border-amber-700/50 p-6 sm:p-7 shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-2xl shrink-0 shadow-lg shadow-amber-500/30">
+          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-amber-500/10 border border-amber-300/80 dark:border-amber-700/50 p-4 sm:p-6 md:p-7 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
+              <div className="flex items-start gap-3 sm:gap-4">
+                <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-xl sm:text-2xl shrink-0 shadow-lg shadow-amber-500/30">
                   <FaMoneyBillWave />
                 </div>
                 <div className="space-y-1.5">

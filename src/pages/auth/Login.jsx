@@ -88,23 +88,26 @@ export default function Login() {
         return;
       }
 
-      if (loggedInUser.status === "pending") {
+      const userStatus = (loggedInUser.status || "").toLowerCase();
+      const userRole = (loggedInUser.role || "").toLowerCase();
+
+      if (userStatus === "pending" || userRole === "pending_registration" || userStatus === "rejected") {
         navigate("/pending-approval", { replace: true });
         return;
       }
 
-      if (loggedInUser.role === "admin") {
+      if (userRole === "admin") {
         navigate("/admin/dashboard", { replace: true });
-      } else if (loggedInUser.role === "collector") {
+      } else if (userRole === "collector") {
         navigate("/collector/dashboard", { replace: true });
-      } else if (loggedInUser.role === "resident") {
+      } else if (userRole === "resident") {
         navigate("/resident/dashboard", { replace: true });
-      } else if (loggedInUser.role === "family") {
+      } else if (userRole === "family") {
         navigate("/family/dashboard", { replace: true });
-      } else if (loggedInUser.role === "committee") {
+      } else if (userRole === "committee") {
         navigate("/committee/dashboard", { replace: true });
       } else {
-        alert("Invalid user role.");
+        toast.error("Invalid user role. Please contact Admin.");
       }
     } catch (error) {
       console.error(error);
@@ -128,41 +131,41 @@ export default function Login() {
   if (user) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-700 via-emerald-600 to-blue-700 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-700 via-emerald-600 to-blue-700 flex items-center justify-center p-3.5 sm:p-6 py-6 sm:py-10">
 
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8">
+      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-md p-5 sm:p-8">
 
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="relative mx-auto w-24 h-24 mb-4 flex items-center justify-center">
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="relative mx-auto w-20 h-20 sm:w-24 sm:h-24 mb-3 sm:mb-4 flex items-center justify-center">
             {/* Ambient soft glow */}
-            <div className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 blur-lg opacity-35 transform scale-95" />
+            <div className="absolute inset-0 rounded-2xl sm:rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 blur-lg opacity-35 transform scale-95" />
             {/* Badge */}
-            <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 text-white flex flex-col items-center justify-center shadow-xl shadow-emerald-900/25 border border-emerald-300/40 p-2">
+            <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 text-white flex flex-col items-center justify-center shadow-xl shadow-emerald-900/25 border border-emerald-300/40 p-2">
               <div className="relative flex items-center justify-center">
-                <FaCity className="text-4xl text-white drop-shadow-md" />
-                <span className="absolute -bottom-1.5 -right-2 bg-white text-emerald-700 rounded-full p-1 text-[11px] shadow-md border border-emerald-100 flex items-center justify-center">
+                <FaCity className="text-3xl sm:text-4xl text-white drop-shadow-md" />
+                <span className="absolute -bottom-1 -right-1.5 bg-white text-emerald-700 rounded-full p-0.5 sm:p-1 text-[9px] sm:text-[11px] shadow-md border border-emerald-100 flex items-center justify-center">
                   <FaShieldAlt />
                 </span>
               </div>
-              <div className="mt-1.5 px-2 py-0.5 rounded-full bg-emerald-950/40 text-[9px] font-extrabold tracking-widest text-emerald-200 uppercase border border-emerald-400/30">
+              <div className="mt-1 px-2 py-0.5 rounded-full bg-emerald-950/40 text-[8px] sm:text-[9px] font-extrabold tracking-widest text-emerald-200 uppercase border border-emerald-400/30">
                 RWA
               </div>
             </div>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-800">D BLOCK RWA</h1>
-          <p className="text-sm font-medium text-slate-500 mt-1">Society Management System</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-800">D BLOCK RWA</h1>
+          <p className="text-xs sm:text-sm font-medium text-slate-500 mt-1">Society Management System</p>
         </div>
 
         {/* Login Form */}
-        <form onSubmit={handleLogin} className="space-y-5">
+        <form onSubmit={handleLogin} className="space-y-4 sm:space-y-5">
           {(() => {
             const isAdminEmailEntered = isExactAdminEmail(identifier);
 
             return (
               <>
                 <div>
-                  <label className="block mb-2 font-medium">
+                  <label className="block mb-1.5 sm:mb-2 text-sm font-medium text-slate-700">
                     {isAdminEmailEntered ? "Admin Email Address" : "Mobile Number"}
                   </label>
                   <div className="relative">
@@ -176,7 +179,7 @@ export default function Login() {
                       placeholder="Enter 10-digit mobile or admin email"
                       value={identifier}
                       onChange={handleIdentifierChange}
-                      className="w-full pl-10 pr-4 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+                      className="w-full pl-10 pr-4 border rounded-xl p-3 text-base sm:text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition"
                       required
                       autoComplete="username"
                     />
@@ -184,7 +187,7 @@ export default function Login() {
                 </div>
 
                 <div>
-                  <label className="block mb-2 font-medium">Password</label>
+                  <label className="block mb-1.5 sm:mb-2 text-sm font-medium text-slate-700">Password</label>
                   <div className="relative">
                     <FaLock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
@@ -192,7 +195,7 @@ export default function Login() {
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-10 pr-11 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+                      className="w-full pl-10 pr-11 border rounded-xl p-3 text-base sm:text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition"
                       required
                       autoComplete="current-password"
                     />
@@ -209,7 +212,7 @@ export default function Login() {
                 </div>
 
                 {/* Forgot Password Links */}
-                <div className="flex items-center justify-between text-xs pt-0.5 min-h-[28px]">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-0.5 min-h-[28px]">
                   {isAdminEmailEntered ? (
                     <Link
                       to={`/forgot-password?tab=admin&email=${encodeURIComponent(identifier.trim())}`}
@@ -240,15 +243,15 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold transition"
+            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold text-sm sm:text-base transition shadow-sm"
           >
             {loading ? "Signing In..." : "Login"}
           </button>
         </form>
 
         {/* Register Link */}
-        <div className="text-center mt-6 pt-6 border-t">
-          <p className="text-gray-500 text-sm">
+        <div className="text-center mt-5 sm:mt-6 pt-5 sm:pt-6 border-t">
+          <p className="text-gray-500 text-xs sm:text-sm">
             Don't have an account?{" "}
             <Link
               to="/register"

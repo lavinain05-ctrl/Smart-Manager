@@ -5,6 +5,7 @@ import {
   useState,
   useMemo,
   useCallback,
+  useRef,
 } from "react";
 
 import { useAuth } from "./AuthContext";
@@ -15,11 +16,30 @@ import {
   markAllNotificationsRead as markAllReadService,
 } from "../services/notificationService";
 
+import {
+  isNotificationSupported,
+  getNotificationPermission,
+  registerServiceWorker,
+  requestNotificationPermission,
+  showPhoneNotification,
+  sendTestNotification,
+} from "../services/pushNotificationService";
+
 const NotificationContext = createContext();
 
 export function NotificationProvider({ children }) {
   const { user } = useAuth();
   const [rawNotifications, setRawNotifications] = useState([]);
+  const [phonePermission, setPhonePermission] = useState(() => getNotificationPermission());
+  const isFirstLoadRef = useRef(true);
+  const seenNotificationIdsRef = useRef(new Set());
+
+  // Register service worker on mount and track permission
+  useEffect(() => {
+    registerServiceWorker();
+    setPhonePermission(getNotificationPermission());
+  }, []);
+
   const [localReadIds, setLocalReadIds] = useState(() => {
     if (!user?.uid) return new Set();
     try {
@@ -48,16 +68,40 @@ export function NotificationProvider({ children }) {
   useEffect(() => {
     if (!user?.uid) {
       setRawNotifications([]);
+      isFirstLoadRef.current = true;
+      seenNotificationIdsRef.current.clear();
       return;
     }
 
+    isFirstLoadRef.current = true;
+
     const unsubscribe = subscribeNotifications(
       user.uid,
-      setRawNotifications,
+      (incoming) => {
+        setRawNotifications(incoming);
+
+        if (isFirstLoadRef.current) {
+          incoming.forEach((item) => {
+            if (item?.id) seenNotificationIdsRef.current.add(item.id);
+          });
+          isFirstLoadRef.current = false;
+        } else {
+          incoming.forEach((item) => {
+            if (item?.id && !seenNotificationIdsRef.current.has(item.id)) {
+              seenNotificationIdsRef.current.add(item.id);
+            }
+          });
+        }
+      },
       user.role || "resident"
     );
+
     return () => unsubscribe();
   }, [user?.uid, user?.role]);
+
+  // Phone status bar alerts disabled by design to prevent Chrome spam detection
+  const requestPhonePermission = useCallback(async () => "default", []);
+  const triggerTestNotification = useCallback(async () => false, []);
 
   // Combine Firestore status + local read status for broadcasts
   const notifications = useMemo(() => {
@@ -137,6 +181,10 @@ export function NotificationProvider({ children }) {
         unreadCount,
         markRead,
         markAllRead,
+        phonePermission,
+        requestPhonePermission,
+        triggerTestNotification,
+        showPhoneNotification,
       }}
     >
       {children}
@@ -147,3 +195,4 @@ export function NotificationProvider({ children }) {
 export function useNotifications() {
   return useContext(NotificationContext);
 }
+

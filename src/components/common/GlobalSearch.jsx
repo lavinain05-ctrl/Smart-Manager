@@ -285,11 +285,13 @@ export default function GlobalSearch({ isAdmin = false }) {
       {/* Trigger Button */}
       <button
         onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 100); }}
-        className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-500 text-sm transition"
+        className="flex items-center justify-center gap-2 w-8 h-8 sm:w-auto px-0 sm:px-3.5 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-500 text-sm transition shrink-0"
+        title="Search (Ctrl+K)"
+        aria-label="Global Search"
       >
-        <FaSearch className="text-xs" />
-        <span className="hidden sm:inline">Search...</span>
-        <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-white rounded border font-mono">
+        <FaSearch className="text-xs shrink-0" />
+        <span className="hidden sm:inline text-xs font-medium">Search...</span>
+        <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-white rounded border font-mono text-gray-400">
           Ctrl+K
         </kbd>
       </button>

@@ -476,7 +476,7 @@ export default function ManageSupport() {
                 type="text"
                 value={helpdeskConfig.officeAddress || ""}
                 onChange={(e) => handleConfigChange("officeAddress", e.target.value)}
-                placeholder="Community Center, D Block, Indraprastha Society, Delhi"
+                placeholder="Community Center, D Block, Indraprastha Society"
                 className="w-full bg-white border rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-rose-500"
                 required
               />

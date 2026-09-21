@@ -72,15 +72,15 @@ export default function Dashboard() {
   const gcMonthlyStats = useMemo(() => getGarbageMonthlyStats(residents, garbageBills, selectedMonth, selectedYear, payments), [residents, garbageBills, selectedMonth, selectedYear, payments]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5 sm:space-y-8">
 
       {/* Billing Period Selector */}
       <MonthSelector />
 
       {/* ═══════════ Row 1: Society Overview ═══════════ */}
       <div>
-        <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">D BLOCK RWA INDRAPRASTHA — Society Overview</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+        <h2 className="text-xs sm:text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 sm:mb-4 truncate">D BLOCK RWA INDRAPRASTHA — Society Overview</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
           <SummaryCard
             title="Total Residents"
             value={residentStats.total}
@@ -121,8 +121,8 @@ export default function Dashboard() {
 
       {/* ═══════════ Row 2: Financial Overview ═══════════ */}
       <div>
-        <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Maintenance Collection — {selectedMonth} {selectedYear}</h2>
-        <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <h2 className="text-xs sm:text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 sm:mb-4 truncate">Maintenance Collection — {selectedMonth} {selectedYear}</h2>
+        <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           <SummaryCard
             title="Collected"
             value={`₹${paymentStats.collectedAmount.toLocaleString()}`}
@@ -155,34 +155,34 @@ export default function Dashboard() {
       </div>
 
       {/* ═══════════ Row 3: Today's Breakdown ═══════════ */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-green-500">
-          <div className="flex items-center gap-3 text-green-600 mb-2">
-            <FaWallet />
-            <span className="text-sm font-medium text-gray-500">Cash</span>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm p-3.5 sm:p-5 border-l-4 border-green-500 min-w-0">
+          <div className="flex items-center gap-2 text-green-600 mb-1.5 sm:mb-2">
+            <FaWallet className="text-sm shrink-0" />
+            <span className="text-xs sm:text-sm font-medium text-gray-500 truncate">Cash</span>
           </div>
-          <h3 className="text-2xl font-bold">₹{paymentStats.todayCash.toLocaleString()}</h3>
+          <h3 className="text-lg xs:text-xl sm:text-2xl font-bold truncate">₹{paymentStats.todayCash.toLocaleString()}</h3>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-purple-500">
-          <div className="flex items-center gap-3 text-purple-600 mb-2">
-            <FaMobileAlt />
-            <span className="text-sm font-medium text-gray-500">UPI</span>
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm p-3.5 sm:p-5 border-l-4 border-purple-500 min-w-0">
+          <div className="flex items-center gap-2 text-purple-600 mb-1.5 sm:mb-2">
+            <FaMobileAlt className="text-sm shrink-0" />
+            <span className="text-xs sm:text-sm font-medium text-gray-500 truncate">UPI</span>
           </div>
-          <h3 className="text-2xl font-bold">₹{paymentStats.todayUPI.toLocaleString()}</h3>
+          <h3 className="text-lg xs:text-xl sm:text-2xl font-bold truncate">₹{paymentStats.todayUPI.toLocaleString()}</h3>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-blue-500">
-          <div className="flex items-center gap-3 text-blue-600 mb-2">
-            <FaUniversity />
-            <span className="text-sm font-medium text-gray-500">Bank Transfer</span>
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm p-3.5 sm:p-5 border-l-4 border-blue-500 min-w-0">
+          <div className="flex items-center gap-2 text-blue-600 mb-1.5 sm:mb-2">
+            <FaUniversity className="text-sm shrink-0" />
+            <span className="text-xs sm:text-sm font-medium text-gray-500 truncate">Bank Transfer</span>
           </div>
-          <h3 className="text-2xl font-bold">₹{paymentStats.todayBank.toLocaleString()}</h3>
+          <h3 className="text-lg xs:text-xl sm:text-2xl font-bold truncate">₹{paymentStats.todayBank.toLocaleString()}</h3>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-orange-500">
-          <div className="flex items-center gap-3 text-orange-600 mb-2">
-            <FaReceipt />
-            <span className="text-sm font-medium text-gray-500">Total Receipts</span>
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm p-3.5 sm:p-5 border-l-4 border-orange-500 min-w-0">
+          <div className="flex items-center gap-2 text-orange-600 mb-1.5 sm:mb-2">
+            <FaReceipt className="text-sm shrink-0" />
+            <span className="text-xs sm:text-sm font-medium text-gray-500 truncate">Total Receipts</span>
           </div>
-          <h3 className="text-2xl font-bold">{paymentStats.totalReceipts}</h3>
+          <h3 className="text-lg xs:text-xl sm:text-2xl font-bold truncate">{paymentStats.totalReceipts}</h3>
         </div>
       </div>
 
@@ -203,18 +203,18 @@ export default function Dashboard() {
 
       {/* ═══════════ Row 4: Module Summaries ═══════════ */}
       <div>
-        <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Module Status</h2>
-        <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <h2 className="text-xs sm:text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 sm:mb-4 truncate">Module Status</h2>
+        <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
 
           {/* Garbage Collection */}
-          <div className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm p-3.5 sm:p-5 hover:shadow-md transition min-w-0">
+            <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 text-sm sm:text-base">
                 <FaRecycle />
               </div>
-              <h3 className="font-bold text-gray-800">Garbage</h3>
+              <h3 className="font-bold text-gray-800 text-xs sm:text-base truncate">Garbage</h3>
             </div>
-            <div className="space-y-1.5 text-sm">
+            <div className="space-y-1 text-xs sm:text-sm">
               <div className="flex justify-between"><span className="text-gray-500">Billed</span><span className="font-semibold">₹{gcMonthlyStats.expectedAmount.toLocaleString()}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Collected</span><span className="font-semibold text-emerald-600">₹{gcMonthlyStats.collectedAmount.toLocaleString()}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Pending</span><span className="font-semibold text-red-600">₹{gcMonthlyStats.pendingAmount.toLocaleString()}</span></div>
@@ -223,14 +223,14 @@ export default function Dashboard() {
           </div>
 
           {/* Complaints */}
-          <div className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm p-3.5 sm:p-5 hover:shadow-md transition min-w-0">
+            <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 text-sm sm:text-base">
                 <FaExclamationCircle />
               </div>
-              <h3 className="font-bold text-gray-800">Complaints</h3>
+              <h3 className="font-bold text-gray-800 text-xs sm:text-base truncate">Complaints</h3>
             </div>
-            <div className="space-y-1.5 text-sm">
+            <div className="space-y-1 text-xs sm:text-sm">
               <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-semibold">{complaintStats.total}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Open</span><span className="font-semibold text-red-600">{complaintStats.open}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">In Progress</span><span className="font-semibold text-yellow-600">{complaintStats.inProgress}</span></div>
@@ -239,14 +239,14 @@ export default function Dashboard() {
           </div>
 
           {/* Events & Notices */}
-          <div className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm p-3.5 sm:p-5 hover:shadow-md transition min-w-0">
+            <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 text-sm sm:text-base">
                 <FaCalendarAlt />
               </div>
-              <h3 className="font-bold text-gray-800">Events & Notices</h3>
+              <h3 className="font-bold text-gray-800 text-xs sm:text-base truncate">Events & Notices</h3>
             </div>
-            <div className="space-y-1.5 text-sm">
+            <div className="space-y-1 text-xs sm:text-sm">
               <div className="flex justify-between"><span className="text-gray-500">Total Events</span><span className="font-semibold">{eventStats.total}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Upcoming</span><span className="font-semibold text-blue-600">{eventStats.upcoming}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Notices</span><span className="font-semibold">{noticeStats.total}</span></div>
@@ -254,14 +254,14 @@ export default function Dashboard() {
           </div>
 
           {/* Quick Stats */}
-          <div className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm p-3.5 sm:p-5 hover:shadow-md transition min-w-0">
+            <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0 text-sm sm:text-base">
                 <FaUserPlus />
               </div>
-              <h3 className="font-bold text-gray-800">Quick Stats</h3>
+              <h3 className="font-bold text-gray-800 text-xs sm:text-base truncate">Quick Stats</h3>
             </div>
-            <div className="space-y-1.5 text-sm">
+            <div className="space-y-1 text-xs sm:text-sm">
               <div className="flex justify-between"><span className="text-gray-500">GC Accounts</span><span className="font-semibold">{gcMonthlyStats.participants}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">GC Paid</span><span className="font-semibold text-emerald-600">{gcMonthlyStats.paidResidents}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">GC Pending</span><span className="font-semibold text-red-600">{gcMonthlyStats.pendingResidents}</span></div>

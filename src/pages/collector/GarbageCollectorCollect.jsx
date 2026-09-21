@@ -3,10 +3,14 @@ import {
   FaMoneyBillWave,
   FaSearch,
   FaRecycle,
+  FaPrint,
 } from "react-icons/fa";
+import toast from "react-hot-toast";
 
 import { useAuth } from "../../context/AuthContext";
 import { useGarbage } from "../../context/GarbageContext";
+import { printPaymentReceipt } from "../../utils/printReceiptHelper";
+import PaymentReceiptSuccessModal from "../../components/collections/PaymentReceiptSuccessModal";
 
 export default function GarbageCollectorCollect() {
   const { user } = useAuth();
@@ -19,6 +23,7 @@ export default function GarbageCollectorCollect() {
   const [search, setSearch] = useState("");
   const [payModal, setPayModal] = useState(null);
   const [payForm, setPayForm] = useState({ amount: "", paymentMethod: "Cash" });
+  const [successReceipt, setSuccessReceipt] = useState(null);
 
   const currentMonth = new Date().toLocaleString("default", { month: "long" });
   const currentYear = new Date().getFullYear();
@@ -50,15 +55,33 @@ export default function GarbageCollectorCollect() {
     const bill = getBill(payModal.id);
     if (!bill) return;
 
+    const paidAmt = Number(payForm.amount || bill.amount);
     const success = await recordPayment(bill.id, {
-      amount: payForm.amount || bill.amount,
+      amount: paidAmt,
       paymentMethod: payForm.paymentMethod,
       collectedById: user?.uid,
+      collectedBy: user?.name || "Collector",
     });
 
     if (success) {
+      const receiptData = {
+        ...bill,
+        residentName: payModal.residentName,
+        flat: payModal.flat,
+        block: payModal.block,
+        amount: paidAmt,
+        totalPaidAmount: paidAmt,
+        paymentMethod: payForm.paymentMethod,
+        paymentDate: new Date().toLocaleDateString("en-IN"),
+        receiptNumber: success?.receiptNumber || ("REC-" + Date.now()),
+        collector: user?.name || "Collector",
+        month: currentMonth,
+        year: currentYear,
+      };
       setPayModal(null);
       setPayForm({ amount: "", paymentMethod: "Cash" });
+      setSuccessReceipt(receiptData);
+      toast.success(`Payment recorded for Flat ${payModal.flat}!`);
     }
   }
 
@@ -126,9 +149,28 @@ export default function GarbageCollectorCollect() {
                   )}
 
                   {paid && (
-                    <span className="px-4 py-2 rounded-xl bg-gray-100 text-gray-500 text-sm">
-                      Done
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        printPaymentReceipt({
+                          ...bill,
+                          residentName: acc.residentName,
+                          flat: acc.flat,
+                          block: acc.block,
+                          totalPaidAmount: bill.paidAmount || bill.amount,
+                          paymentMethod: bill.paymentMethod || "Cash",
+                          paymentDate: bill.paymentDate || new Date().toLocaleDateString("en-IN"),
+                          receiptNumber: bill.paymentId || ("REC-" + bill.id),
+                          collector: user?.name || "Collector",
+                        });
+                        toast.success(`Printing receipt for Flat ${acc.flat}...`);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+                      title="Print Official Payment Receipt"
+                    >
+                      <FaPrint className="text-xs" />
+                      Print Receipt
+                    </button>
                   )}
                 </div>
               </div>
@@ -194,6 +236,15 @@ export default function GarbageCollectorCollect() {
           </div>
         </div>
       )}
+
+      {/* Official Receipt Success Modal (with immediate Print Receipt) */}
+      <PaymentReceiptSuccessModal
+        open={Boolean(successReceipt)}
+        receipt={successReceipt}
+        onClose={() => setSuccessReceipt(null)}
+        title="Garbage Collection Recorded!"
+        subtitle="Official RWA payment receipt is ready to print or download."
+      />
     </>
   );
 }

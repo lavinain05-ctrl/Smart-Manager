@@ -29,7 +29,7 @@ export function generateSpecialCollectionReceipt(data) {
 
   doc.setFontSize(11);
   doc.setTextColor(100);
-  doc.text("Smart Manager — Special Collection & Contribution Receipt", 105, 26, {
+  doc.text("D Block RWA — Special Collection & Contribution Receipt", 105, 26, {
     align: "center",
   });
 
@@ -110,7 +110,7 @@ export function generateSpecialCollectionReceipt(data) {
     align: "center",
   });
   doc.text(
-    `Issued via RWA Smart Manager on ${new Date().toLocaleDateString("en-IN")}`,
+    `Issued via D Block RWA on ${new Date().toLocaleDateString("en-IN")}`,
     105,
     finalY + 14,
     { align: "center" }

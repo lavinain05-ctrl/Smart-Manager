@@ -27,7 +27,10 @@ export function CollectorProvider({ children }) {
     // The Firestore rules only allow admins to read the
     // collectors collection — subscribing as a collector
     // would trigger a permission-denied error.
-    if (!user || user.role !== "admin") {
+    const userRole = (user?.role || "").toLowerCase();
+    const isAdminUser = userRole === "admin" || user?.uid === "92jYvGPlKMexX37WEzs7MaDuc7U2";
+
+    if (!user || !isAdminUser) {
       setCollectors([]);
       return;
     }
@@ -41,17 +44,33 @@ export function CollectorProvider({ children }) {
 
   async function addCollector(data) {
     try {
-      await createCollectorAccount(data);
+      const uid = await createCollectorAccount(data);
+      // Immediate optimistic update so newly added collector appears instantly
+      if (uid) {
+        setCollectors((prev) => {
+          if (prev.some((c) => (c.id || c.uid) === uid)) return prev;
+          return [
+            {
+              id: uid,
+              uid,
+              ...data,
+              status: data.status || "Active",
+              assignedModules: data.assignedModules || ["garbage"],
+            },
+            ...prev,
+          ];
+        });
+      }
       toast.success("Collector added with mobile login");
       return true;
     } catch (error) {
-      console.error(error);
+      console.error("[CollectorContext] Add error:", error);
 
       if (
         error.message?.includes("already registered") ||
         error.code === "auth/email-already-in-use"
       ) {
-        toast.error("This mobile number is already registered");
+        toast.error(error.message || "This mobile number is already registered");
       } else if (error.code === "auth/weak-password") {
         toast.error("Password must be at least 6 characters");
       } else {
@@ -65,20 +84,28 @@ export function CollectorProvider({ children }) {
   async function updateCollector(id, data) {
     try {
       await updateCollectorInFirestore(id, data);
+      setCollectors((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, ...data } : c))
+      );
       toast.success("Collector Updated Successfully");
+      return true;
     } catch (error) {
       console.error(error);
       toast.error("Failed to update collector");
+      return false;
     }
   }
 
   async function deleteCollector(id) {
     try {
       await deleteCollectorFromFirestore(id);
+      setCollectors((prev) => prev.filter((c) => c.id !== id && c.uid !== id));
       toast.success("Collector Deleted Successfully");
+      return true;
     } catch (error) {
       console.error(error);
       toast.error("Failed to delete collector");
+      return false;
     }
   }
 

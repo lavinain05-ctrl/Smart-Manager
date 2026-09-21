@@ -41,7 +41,7 @@ export default function BillTable({
     const status = (bill.displayStatus || bill.status || "Pending").toUpperCase();
     const isPaid = status === "PAID";
     const societyName = settings.societyName || "D BLOCK RWA INDRAPRASTHA";
-    const societyAddress = settings.address || "D Block, Indraprastha, New Delhi";
+    const societyAddress = settings.address || "D Block, Indraprastha";
     const societyContact = settings.contactNumber || settings.supportPhone || "";
     const printWindow = window.open("", "_blank");
 

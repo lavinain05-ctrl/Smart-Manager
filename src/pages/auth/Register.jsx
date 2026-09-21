@@ -204,33 +204,33 @@ export default function Register() {
   // ========== RENDER ==========
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-700 via-emerald-600 to-blue-700 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-700 via-emerald-600 to-blue-700 flex items-center justify-center p-3 sm:p-6">
 
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8 max-h-[95vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl w-full max-w-2xl p-4 sm:p-8 max-h-[96vh] overflow-y-auto">
 
         {/* Back to Login */}
         <Link
           to="/"
-          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition"
+          className="flex items-center gap-2 text-xs sm:text-sm text-gray-500 hover:text-gray-700 mb-4 sm:mb-6 transition"
         >
           <FaArrowLeft /> Back to Login
         </Link>
 
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-3xl shadow-lg">
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-2xl sm:text-3xl shadow-lg">
             <FaBuilding />
           </div>
-          <h1 className="text-3xl font-bold mt-4">Resident Registration</h1>
-          <p className="text-gray-500 mt-2">
+          <h1 className="text-2xl sm:text-3xl font-bold mt-3 sm:mt-4">Resident Registration</h1>
+          <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-2">
             Register for your society management account
           </p>
         </div>
 
-        <form onSubmit={handleSubmitRegistration} className="space-y-5">
+        <form onSubmit={handleSubmitRegistration} className="space-y-4 sm:space-y-5">
 
           {/* Account Credentials */}
-          <div className="bg-gray-50 rounded-2xl p-5 space-y-4">
+          <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 sm:space-y-4">
             <h3 className="font-semibold text-gray-700 flex items-center gap-2">
               <FaLock className="text-emerald-600" /> Account Credentials
             </h3>
@@ -314,7 +314,7 @@ export default function Register() {
           </div>
 
           {/* Personal Information */}
-          <div className="bg-gray-50 rounded-2xl p-5 space-y-4">
+          <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 sm:space-y-4">
             <h3 className="font-semibold text-gray-700 flex items-center gap-2">
               <FaUser className="text-emerald-600" /> Personal Information
             </h3>
@@ -408,7 +408,7 @@ export default function Register() {
           </div>
 
           {/* Flat Information */}
-          <div className="bg-gray-50 rounded-2xl p-5 space-y-4">
+          <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 sm:space-y-4">
             <h3 className="font-semibold text-gray-700 flex items-center gap-2">
               <FaHome className="text-emerald-600" /> Flat Information
             </h3>
@@ -515,43 +515,43 @@ export default function Register() {
           </div>
 
           {/* Garbage Collection */}
-          <div className="bg-gray-50 rounded-2xl p-5 space-y-4">
+          <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 sm:space-y-4">
             <h3 className="font-semibold text-gray-700 flex items-center gap-2">
               <FaLeaf className="text-emerald-600" /> Garbage Collection
             </h3>
 
-            <p className="text-sm text-gray-500">
+            <p className="text-xs sm:text-sm text-gray-500">
               Do you want to participate in the society's garbage collection service?
             </p>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
               <button
                 type="button"
                 onClick={() => setGarbageParticipation("participating")}
-                className={`p-4 rounded-xl border-2 text-center transition font-medium ${
+                className={`p-3 sm:p-4 rounded-xl border-2 text-center transition font-semibold flex items-center justify-center sm:flex-col gap-2 ${
                   garbageParticipation === "participating"
-                    ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                    ? "border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm"
                     : "border-gray-200 hover:border-gray-300 text-gray-500"
                 }`}
               >
-                <FaCheckCircle className={`mx-auto text-2xl mb-2 ${
+                <FaCheckCircle className={`text-xl sm:text-2xl shrink-0 ${
                   garbageParticipation === "participating" ? "text-emerald-500" : "text-gray-300"
                 }`} />
-                Participating
+                <span className="text-xs sm:text-sm">Participating</span>
               </button>
               <button
                 type="button"
                 onClick={() => setGarbageParticipation("not_participating")}
-                className={`p-4 rounded-xl border-2 text-center transition font-medium ${
+                className={`p-3 sm:p-4 rounded-xl border-2 text-center transition font-semibold flex items-center justify-center sm:flex-col gap-2 ${
                   garbageParticipation === "not_participating"
-                    ? "border-orange-500 bg-orange-50 text-orange-700"
+                    ? "border-orange-500 bg-orange-50 text-orange-700 shadow-sm"
                     : "border-gray-200 hover:border-gray-300 text-gray-500"
                 }`}
               >
-                <FaCheckCircle className={`mx-auto text-2xl mb-2 ${
+                <FaCheckCircle className={`text-xl sm:text-2xl shrink-0 ${
                   garbageParticipation === "not_participating" ? "text-orange-500" : "text-gray-300"
                 }`} />
-                Not Participating
+                <span className="text-xs sm:text-sm">Not Participating</span>
               </button>
             </div>
           </div>

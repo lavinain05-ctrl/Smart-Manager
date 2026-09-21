@@ -103,17 +103,21 @@ export function mobileToAuthEmail(mobile) {
 /**
  * Write or update a mobile → auth identity mapping in authLookup/{mobile}.
  */
-export async function writeAuthLookup(mobile, email, uid) {
+export async function writeAuthLookup(mobile, email, uid, personalEmail = "") {
   const clean = normalizeMobile(mobile);
   if (!clean || clean.length !== 10) return;
 
   try {
-    await setDoc(doc(db, "authLookup", clean), {
+    const updateData = {
       mobile: clean,
       email: email,
       uid: uid || "",
       updatedAt: serverTimestamp(),
-    }, { merge: true });
+    };
+    if (personalEmail && !personalEmail.includes(`@${AUTH_EMAIL_DOMAIN}`)) {
+      updateData.personalEmail = personalEmail.toLowerCase().trim();
+    }
+    await setDoc(doc(db, "authLookup", clean), updateData, { merge: true });
     console.log("[Auth] authLookup written for mobile:", clean);
   } catch (err) {
     console.warn("[Auth] Failed to write authLookup:", err.message);
@@ -315,7 +319,7 @@ export async function findPersonalEmailForIdentifier(identifier) {
  * committee, collectors, and registrationRequests to eliminate the
  * "No account found" error.
  */
-async function fetchUserProfile(firebaseUser) {
+export async function fetchUserProfile(firebaseUser) {
   if (!firebaseUser) return null;
 
   const uid = firebaseUser.uid;
@@ -340,6 +344,8 @@ async function fetchUserProfile(firebaseUser) {
         uid,
         email: firebaseUser.email,
         ...data,
+        mobile: data.mobile || data.phone || "",
+        phone: data.phone || data.mobile || "",
         mustChangePassword: data.mustChangePassword === true,
       };
     }
@@ -444,7 +450,11 @@ async function fetchUserProfile(firebaseUser) {
         phone: cData.mobile || possibleMobile,
         email: firebaseUser.email || cData.email || "",
         area: cData.area || "",
-        status: "active",
+        vehicle: cData.vehicle || "",
+        status: cData.status || "Active",
+        mustChangePassword: cData.mustChangePassword === true,
+        assignedModules: Array.isArray(cData.assignedModules) && cData.assignedModules.length > 0 ? cData.assignedModules : ["garbage"],
+        assignedCampaigns: Array.isArray(cData.assignedCampaigns) ? cData.assignedCampaigns : [],
         createdAt: serverTimestamp(),
       };
       await setDoc(doc(db, "users", uid), repairedUser, { merge: true });
@@ -576,12 +586,39 @@ export async function login(identifier, password) {
       credential = await signInWithEmailAndPassword(auth, authEmail, password);
     } catch (primaryErr) {
       // Self-Healing Recovery:
-      // If primary email sign-in failed, test canonical pseudo-email and known fallbacks
+      // If primary email sign-in failed, test canonical pseudo-email, personal email lookups, and known fallbacks
       const candidates = [];
       if (normalized.length === 10) {
         const pseudo = mobileToAuthEmail(normalized);
         if (pseudo.toLowerCase() !== (authEmail || "").toLowerCase()) {
           candidates.push(pseudo);
+        }
+      } else if (raw.includes("@")) {
+        // If resident entered their personal email, look up their linked mobile number
+        try {
+          const cleanEmail = raw.trim().toLowerCase();
+          const uSnap = await getDocs(query(collection(db, "users"), where("email", "==", cleanEmail)));
+          if (!uSnap.empty) {
+            const uData = uSnap.docs[0].data();
+            const mob = normalizeMobile(uData.phone || uData.mobile || "");
+            if (mob.length === 10) candidates.push(mobileToAuthEmail(mob));
+          } else {
+            const rSnap = await getDocs(query(collection(db, "residents"), where("email", "==", cleanEmail)));
+            if (!rSnap.empty) {
+              const rData = rSnap.docs[0].data();
+              const mob = normalizeMobile(rData.mobile || "");
+              if (mob.length === 10) candidates.push(mobileToAuthEmail(mob));
+            } else {
+              const reqSnap = await getDocs(query(collection(db, "registrationRequests"), where("email", "==", cleanEmail)));
+              if (!reqSnap.empty) {
+                const reqData = reqSnap.docs[0].data();
+                const mob = normalizeMobile(reqData.mobile || "");
+                if (mob.length === 10) candidates.push(mobileToAuthEmail(mob));
+              }
+            }
+          }
+        } catch (emailLookupErr) {
+          console.warn("[Auth] Personal email candidate lookup failed:", emailLookupErr.message);
         }
       }
       if (normalized === "9643445720") {

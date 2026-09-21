@@ -90,7 +90,7 @@ export default function ResidentReceipts() {
 
   function downloadPDF(payment) {
     const doc = new jsPDF();
-    const society = settings?.societyName || "Smart Manager";
+    const society = settings?.societyName || "D Block RWA";
 
     doc.setFontSize(20);
     doc.text(society, 105, 18, { align: "center" });

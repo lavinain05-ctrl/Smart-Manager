@@ -123,8 +123,8 @@ export default function Sidebar({ onClose }) {
             <h1 className="text-sm font-bold tracking-tight leading-snug group-hover:text-emerald-300 transition-colors">
               D BLOCK RWA INDRAPRASTHA
             </h1>
-            <p className="text-[10px] text-slate-400 font-medium tracking-wider uppercase">
-              Smart Manager
+            <p className="text-[10px] text-emerald-400 font-medium tracking-wider uppercase">
+              Society Portal
             </p>
           </div>
         </Link>

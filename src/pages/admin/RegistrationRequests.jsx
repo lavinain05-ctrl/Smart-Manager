@@ -16,6 +16,7 @@ import {
   FaCalendarAlt,
   FaShieldAlt,
   FaExclamationTriangle,
+  FaTrash,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -23,6 +24,7 @@ import toast from "react-hot-toast";
 import {
   subscribeRegistrationRequests,
   approveRegistration,
+  rejectRegistration,
   rejectAndDeleteRegistration,
 } from "../../services/registrationService";
 
@@ -92,21 +94,51 @@ export default function RegistrationRequests() {
   // Duplicate detection — uses block + floor + flat
   function getDuplicateWarnings(req) {
     const warnings = [];
+    const reqUid = req.uid || req.id;
 
-    const dupFlat = residents.find(
-      (r) =>
-        r.flat === req.flat &&
-        r.block === req.block &&
-        (r.floor || "") === (req.floor || "") &&
-        r.status !== "rejected"
-    );
-    if (dupFlat) warnings.push(`Flat ${req.flat} Floor ${req.floor || "—"} Block ${req.block} already assigned to ${dupFlat.owner}`);
+    // Flat duplicate check (only if flat and block are provided)
+    const reqFlat = (req.flat || "").trim().toUpperCase();
+    const reqBlock = (req.block || "").trim().toUpperCase();
+    const reqFloor = (req.floor || "").trim().toUpperCase();
+    if (reqFlat && reqBlock) {
+      const dupFlat = residents.find(
+        (r) =>
+          r.id !== reqUid &&
+          (r.flat || "").trim().toUpperCase() === reqFlat &&
+          (r.block || "").trim().toUpperCase() === reqBlock &&
+          ((r.floor || "").trim().toUpperCase() === reqFloor || (!r.floor && !reqFloor)) &&
+          (r.status || "").toLowerCase() !== "rejected"
+      );
+      if (dupFlat) {
+        warnings.push(`Flat ${req.flat} Floor ${req.floor || "—"} Block ${req.block} already assigned to ${dupFlat.owner || dupFlat.name || "another resident"}`);
+      }
+    }
 
-    const dupMobile = residents.find((r) => r.mobile === req.mobile);
-    if (dupMobile) warnings.push(`Mobile ${req.mobile} already belongs to ${dupMobile.owner}`);
+    // Mobile duplicate check (only if mobile is provided)
+    const reqMobile = (req.mobile || "").trim();
+    if (reqMobile) {
+      const dupMobile = residents.find(
+        (r) =>
+          r.id !== reqUid &&
+          (r.mobile || "").trim() === reqMobile
+      );
+      if (dupMobile) {
+        warnings.push(`Mobile ${req.mobile} already belongs to ${dupMobile.owner || dupMobile.name || "another resident"}`);
+      }
+    }
 
-    const dupEmail = residents.find((r) => r.email === req.email);
-    if (dupEmail) warnings.push(`Email ${req.email} already belongs to ${dupEmail.owner}`);
+    // Email duplicate check (ONLY if email is provided and non-empty)
+    const reqEmail = (req.email || "").trim().toLowerCase();
+    if (reqEmail) {
+      const dupEmail = residents.find(
+        (r) =>
+          r.id !== reqUid &&
+          (r.email || "").trim().toLowerCase() === reqEmail
+      );
+      if (dupEmail) {
+        warnings.push(`Email ${req.email} already belongs to ${dupEmail.owner || dupEmail.name || "another resident"}`);
+      }
+    }
 
     return warnings;
   }
@@ -190,25 +222,44 @@ export default function RegistrationRequests() {
     if (!rejectModal) return;
     setLoadingId(rejectModal.id);
     try {
-      const result = await rejectAndDeleteRegistration({
-        requestId: rejectModal.id,
-        requestData: rejectModal,
-        reason: rejectReason,
-        adminName: user?.name || "Admin",
-        adminUid: user?.uid || "",
-      });
+      await rejectRegistration(
+        rejectModal.id || rejectModal.uid,
+        rejectModal,
+        rejectReason,
+        {
+          uid: user?.uid || "",
+          name: user?.name || "Admin",
+          role: user?.role || "admin",
+        }
+      );
 
-      if (result.authDeleted) {
-        toast.success("Registration rejected — registered phone number & login details permanently deleted from Firebase");
-      } else {
-        toast.success("Registration request and phone number mapping removed");
-      }
-
+      toast.success("Registration rejected — saved to Rejected list");
       setRejectModal(null);
       setRejectReason("");
     } catch (error) {
+      console.error("[handleReject] Error:", error);
+      toast.error(error?.message ? `Failed to reject: ${error.message}` : "Failed to reject registration");
+    }
+    setLoadingId(null);
+  }
+
+  async function handlePermanentDelete(req) {
+    if (!window.confirm(`Permanently delete the registration record for ${req.name}? This cannot be undone.`)) {
+      return;
+    }
+    setLoadingId(req.id);
+    try {
+      await rejectAndDeleteRegistration({
+        requestId: req.id,
+        requestData: req,
+        reason: req.rejectionReason || "Admin permanently removed rejected request",
+        adminName: user?.name || "Admin",
+        adminUid: user?.uid || "",
+      });
+      toast.success("Registration record permanently deleted");
+    } catch (error) {
       console.error(error);
-      toast.error("Failed to reject registration");
+      toast.error("Failed to delete registration record");
     }
     setLoadingId(null);
   }
@@ -407,13 +458,24 @@ export default function RegistrationRequests() {
                             <FaTimes /> Reject
                           </button>
                         </>
-                      ) : (
-                        <span className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 ${
-                          req.status === "approved" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                        }`}>
-                          {req.status === "approved" ? <FaCheckCircle /> : <FaTimesCircle />}
-                          {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                      ) : req.status === "approved" ? (
+                        <span className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 bg-green-100 text-green-700">
+                          <FaCheckCircle /> Approved
                         </span>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 bg-red-100 text-red-700">
+                            <FaTimesCircle /> Rejected
+                          </span>
+                          <button
+                            onClick={() => handlePermanentDelete(req)}
+                            disabled={loadingId === req.id}
+                            title="Permanently remove rejected record"
+                            className="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 transition text-xs"
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>

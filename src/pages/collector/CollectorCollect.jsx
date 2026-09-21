@@ -12,11 +12,13 @@ import {
   FaFilter,
   FaPhone,
   FaCalendarAlt,
+  FaPrint,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import PaymentModal from "../../components/collections/PaymentModal";
 import PaymentReceiptSuccessModal from "../../components/collections/PaymentReceiptSuccessModal";
+import ResidentReceiptsListModal from "../../components/collections/ResidentReceiptsListModal";
 import ResidentForm from "../../components/forms/ResidentForm";
 
 import { useAuth } from "../../context/AuthContext";
@@ -33,6 +35,7 @@ import {
   recordOfflineSpecialCollectionPayment,
 } from "../../services/specialCollectionService";
 import { generateSpecialCollectionReceipt } from "../../utils/specialCollectionReceiptGenerator";
+import { printPaymentReceipt } from "../../utils/printReceiptHelper";
 
 export default function CollectorCollect() {
   const { user } = useAuth();
@@ -83,6 +86,55 @@ export default function CollectorCollect() {
          (payment.isAdvance && Array.isArray(payment.coveredMonths) &&
           payment.coveredMonths.some((cm) => cm.month === currentMonth && Number(cm.year) === Number(currentYear))))
     );
+  }
+
+  // Resident Receipts Modal State
+  const [receiptsModalResident, setReceiptsModalResident] = useState(null);
+
+  function getResidentGarbagePayments(resident) {
+    if (!resident) return [];
+    return payments.filter(
+      (p) =>
+        (resident.id && p.residentId === resident.id) ||
+        (resident.flat && p.flat && String(p.flat).toLowerCase() === String(resident.flat).toLowerCase()) ||
+        (resident.flatNumber && p.flat && String(p.flat).toLowerCase() === String(resident.flatNumber).toLowerCase())
+    );
+  }
+
+  function getResidentCurrentPayment(resident) {
+    const list = getResidentGarbagePayments(resident);
+    return list.find(
+      (p) =>
+        (p.month === currentMonth && Number(p.year) === Number(currentYear)) ||
+        (p.isAdvance && Array.isArray(p.coveredMonths) &&
+         p.coveredMonths.some((cm) => cm.month === currentMonth && Number(cm.year) === Number(currentYear)))
+    ) || list[0];
+  }
+
+  function getResidentSpecialPayments(resident) {
+    if (!resident) return [];
+    return specialPayments.filter(
+      (p) =>
+        p.status === "confirmed" &&
+        ((resident.id && p.residentId === resident.id) ||
+         (resident.flatNumber && p.flatNumber && String(p.flatNumber).toLowerCase() === String(resident.flatNumber).toLowerCase()) ||
+         (resident.flat && p.flatNumber && String(p.flatNumber).toLowerCase() === String(resident.flat).toLowerCase()))
+    );
+  }
+
+  function handlePrintGarbageReceipt(resident) {
+    const payment = getResidentCurrentPayment(resident);
+    if (payment) {
+      printPaymentReceipt({
+        ...payment,
+        residentName: resident.name || resident.owner || payment.residentName || "Resident",
+        flat: resident.flat || resident.flatNumber || payment.flat || "—",
+        block: resident.block || payment.block || "",
+      });
+      toast.success(`Printing receipt for Flat ${resident.flat || resident.flatNumber || "—"}...`);
+    } else {
+      toast.error("No receipt found for this resident.");
+    }
   }
 
   async function handleAddResident(formData) {
@@ -449,10 +501,12 @@ export default function CollectorCollect() {
             <div className="space-y-2.5">
               {filteredGarbageResidents.map((resident) => {
                 const paid = isGarbagePaid(resident.id);
+                const resGarbagePayments = getResidentGarbagePayments(resident);
+
                 return (
                   <div
                     key={resident.id}
-                    className="bg-white rounded-2xl shadow-sm p-4 flex items-center justify-between gap-3 border border-gray-100 hover:border-emerald-200 transition"
+                    className="bg-white rounded-2xl shadow-sm p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-gray-100 hover:border-emerald-200 transition"
                   >
                     <div>
                       <div className="flex items-center gap-2">
@@ -471,7 +525,7 @@ export default function CollectorCollect() {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 flex-wrap self-end sm:self-auto">
                       <span
                         className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                           paid
@@ -482,21 +536,55 @@ export default function CollectorCollect() {
                         {paid ? "Paid" : "Pending"}
                       </span>
 
-                      <button
-                        disabled={paid}
-                        onClick={() => {
-                          setSelectedResident(resident);
-                          setOpenGarbageModal(true);
-                        }}
-                        className={`px-4 py-2 rounded-xl text-white flex items-center gap-1.5 text-xs font-bold shadow-xs transition ${
-                          paid
-                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                            : "bg-emerald-600 hover:bg-emerald-700"
-                        }`}
-                      >
-                        <FaMoneyBillWave />
-                        {paid ? "Collected" : "Collect"}
-                      </button>
+                      {paid ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handlePrintGarbageReceipt(resident)}
+                            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+                            title="Print Official Payment Receipt"
+                          >
+                            <FaPrint className="text-xs" />
+                            Print Receipt
+                          </button>
+
+                          {resGarbagePayments.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setReceiptsModalResident(resident)}
+                              className="p-2.5 rounded-xl bg-gray-100 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 transition text-xs cursor-pointer"
+                              title={`View All Receipts (${resGarbagePayments.length})`}
+                            >
+                              <FaReceipt />
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => {
+                              setSelectedResident(resident);
+                              setOpenGarbageModal(true);
+                            }}
+                            className="px-4 py-2 rounded-xl text-white flex items-center gap-1.5 text-xs font-bold shadow-xs transition bg-emerald-600 hover:bg-emerald-700 cursor-pointer active:scale-95"
+                          >
+                            <FaMoneyBillWave />
+                            Collect
+                          </button>
+
+                          {resGarbagePayments.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setReceiptsModalResident(resident)}
+                              className="px-2.5 py-2 rounded-xl bg-gray-100 hover:bg-emerald-50 text-gray-500 hover:text-emerald-700 transition text-xs cursor-pointer flex items-center gap-1"
+                              title={`View ${resGarbagePayments.length} Past Receipts`}
+                            >
+                              <FaReceipt className="text-[10px]" />
+                              <span className="text-[11px] font-semibold">Receipts ({resGarbagePayments.length})</span>
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -652,10 +740,14 @@ export default function CollectorCollect() {
                 <div className="space-y-2.5">
                   {filteredSpecialResidents.map((resident) => {
                     const contribution = getResidentContribution(resident);
+                    const resSpecialPayments = getResidentSpecialPayments(resident);
+                    const resGarbagePayments = getResidentGarbagePayments(resident);
+                    const hasAnyReceipts = resSpecialPayments.length > 0 || resGarbagePayments.length > 0;
+
                     return (
                       <div
                         key={resident.id}
-                        className="bg-white rounded-2xl shadow-sm p-4 flex items-center justify-between gap-3 border border-gray-100 hover:border-indigo-200 transition"
+                        className="bg-white rounded-2xl shadow-sm p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-gray-100 hover:border-indigo-200 transition"
                       >
                         <div>
                           <div className="flex items-center gap-2">
@@ -674,37 +766,84 @@ export default function CollectorCollect() {
                           </p>
                         </div>
 
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-2 flex-wrap self-end sm:self-auto">
                           {contribution ? (
-                            <div className="flex items-center gap-2">
+                            <>
                               <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full text-xs">
                                 <FaCheckCircle className="text-emerald-600 text-[10px]" />
                                 Contributed ₹{contribution.amount}
                               </span>
+
                               <button
+                                type="button"
+                                onClick={() =>
+                                  printPaymentReceipt({
+                                    ...contribution,
+                                    collectionName: currentCampaign?.name || "Special Collection",
+                                    purpose: currentCampaign?.purpose || "Special Contribution",
+                                    contributorType: "Resident",
+                                    residentName: resident.name || resident.owner || contribution.contributorName || "Resident",
+                                    flat: resident.flatNumber || resident.flat || contribution.flatNumber || "—",
+                                    block: resident.block || contribution.block || "",
+                                  })
+                                }
+                                title="Print Official Payment Receipt"
+                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs active:scale-95 cursor-pointer"
+                              >
+                                <FaPrint className="text-xs" />
+                                Print Receipt
+                              </button>
+
+                              <button
+                                type="button"
                                 onClick={() =>
                                   generateSpecialCollectionReceipt({
                                     ...contribution,
-                                    collectionName: currentCampaign.name,
-                                    purpose: currentCampaign.purpose,
+                                    collectionName: currentCampaign?.name,
+                                    purpose: currentCampaign?.purpose,
                                     contributorType: "Resident",
                                   })
                                 }
                                 title="Download PDF Receipt"
-                                className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs transition"
+                                className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs transition cursor-pointer"
                               >
                                 <FaFileDownload />
                               </button>
-                            </div>
+
+                              {hasAnyReceipts && (
+                                <button
+                                  type="button"
+                                  onClick={() => setReceiptsModalResident(resident)}
+                                  className="p-2 rounded-xl bg-gray-100 hover:bg-indigo-50 text-gray-600 hover:text-indigo-700 transition text-xs cursor-pointer"
+                                  title="View All Resident Receipts"
+                                >
+                                  <FaReceipt />
+                                </button>
+                              )}
+                            </>
                           ) : (
-                            <button
-                              onClick={() => handleOpenSpecialCollect(resident)}
-                              className="px-4 py-2 rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1.5 text-xs font-bold shadow-xs transition"
-                            >
-                              <FaMoneyBillWave />
-                              Collect
-                              {currentCampaign.amountType === "fixed" ? ` ₹${currentCampaign.fixedAmount}` : ""}
-                            </button>
+                            <>
+                              <button
+                                onClick={() => handleOpenSpecialCollect(resident)}
+                                className="px-4 py-2 rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1.5 text-xs font-bold shadow-xs transition cursor-pointer active:scale-95"
+                              >
+                                <FaMoneyBillWave />
+                                Collect
+                                {currentCampaign?.amountType === "fixed" ? ` ₹${currentCampaign?.fixedAmount}` : ""}
+                              </button>
+
+                              {hasAnyReceipts && (
+                                <button
+                                  type="button"
+                                  onClick={() => setReceiptsModalResident(resident)}
+                                  className="px-2.5 py-2 rounded-xl bg-gray-100 hover:bg-indigo-50 text-gray-500 hover:text-indigo-700 transition text-xs cursor-pointer flex items-center gap-1"
+                                  title="Past Receipts"
+                                >
+                                  <FaReceipt className="text-[10px]" />
+                                  <span className="text-[11px] font-semibold">Receipts ({resSpecialPayments.length + resGarbagePayments.length})</span>
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
@@ -893,6 +1032,15 @@ export default function CollectorCollect() {
         open={Boolean(successReceipt)}
         receipt={successReceipt}
         onClose={() => setSuccessReceipt(null)}
+      />
+
+      {/* ─── 6. ALL RESIDENT RECEIPTS HISTORY MODAL ─── */}
+      <ResidentReceiptsListModal
+        open={Boolean(receiptsModalResident)}
+        resident={receiptsModalResident}
+        garbagePayments={receiptsModalResident ? getResidentGarbagePayments(receiptsModalResident) : []}
+        specialPayments={receiptsModalResident ? getResidentSpecialPayments(receiptsModalResident) : []}
+        onClose={() => setReceiptsModalResident(null)}
       />
       {/* Add Resident Drawer */}
       {showAddResident && (

@@ -14,7 +14,7 @@ export const DEFAULT_HELPDESK_CONFIG = {
   helplineNote: "Available 24/7 for urgent matters",
   officialEmail: "rwa.dblock@indraprastha.org",
   emailNote: "Responses within 24 hours",
-  officeAddress: "Community Center, D Block, Indraprastha Society, Delhi",
+  officeAddress: "Community Center, D Block, Indraprastha Society",
 };
 
 export const DEFAULT_SUPPORT_FAQS = [

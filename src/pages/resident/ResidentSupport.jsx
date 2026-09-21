@@ -614,7 +614,7 @@ export default function ResidentSupport() {
             <div>
               <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">RWA Office</p>
               <h4 className="font-bold text-sm text-gray-800 mt-0.5 leading-snug">
-                {helpdeskConfig.officeAddress || "Community Center, D Block, Indraprastha Society, Delhi"}
+                {helpdeskConfig.officeAddress || "Community Center, D Block, Indraprastha Society"}
               </h4>
             </div>
           </div>

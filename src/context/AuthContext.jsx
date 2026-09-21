@@ -7,10 +7,13 @@ import {
 
 import toast from "react-hot-toast";
 
+import { doc, onSnapshot } from "firebase/firestore";
+import { auth, db } from "../firebase/firebase";
 import {
   login as loginService,
   logout as logoutService,
   subscribeAuth,
+  fetchUserProfile,
 } from "../services/authService";
 import { ensureActiveSessionLogged } from "../services/loginTrackerService";
 import {
@@ -57,12 +60,23 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let sessionUnsubscribe = null;
     let touchInterval = null;
+    let userDocUnsub = null;
+    let regDocUnsub = null;
 
     const unsubscribe = subscribeAuth((currentUser) => {
       setUser(currentUser);
       setLoading(false);
 
-      if (currentUser) {
+      if (userDocUnsub) {
+        userDocUnsub();
+        userDocUnsub = null;
+      }
+      if (regDocUnsub) {
+        regDocUnsub();
+        regDocUnsub = null;
+      }
+
+      if (currentUser?.uid) {
         ensureActiveSessionLogged(currentUser);
 
         // Register active device session & listen for remote logout
@@ -89,6 +103,53 @@ export function AuthProvider({ children }) {
         touchInterval = setInterval(() => {
           touchSession(currentSessionId);
         }, 5 * 60 * 1000);
+
+        // Real-time Firestore profile listener on users/{uid}
+        // Guarantees immediate UI sync when admin approves registration, activates account, or changes role
+        userDocUnsub = onSnapshot(doc(db, "users", currentUser.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUser((prev) => {
+              if (!prev) return null;
+              return {
+                ...prev,
+                ...data,
+                role: (data.role || prev.role || "").toLowerCase(),
+                status: (data.status || prev.status || "active").toLowerCase(),
+                mobile: data.mobile || data.phone || prev.mobile || prev.phone || "",
+                phone: data.phone || data.mobile || prev.phone || prev.mobile || "",
+                mustChangePassword: data.mustChangePassword === true,
+              };
+            });
+          }
+        }, (err) => {
+          // If users doc doesn't exist yet (e.g. pending request), ignore permission warning
+        });
+
+        // If user is pending registration, also listen to registrationRequests/{uid}
+        if (currentUser.role === "pending_registration" || currentUser.status === "pending") {
+          regDocUnsub = onSnapshot(doc(db, "registrationRequests", currentUser.uid), async (docSnap) => {
+            if (docSnap.exists()) {
+              const regData = docSnap.data();
+              if (regData.status === "approved") {
+                console.log("[AuthContext] Real-time approval detected for:", currentUser.uid);
+                if (auth.currentUser) {
+                  const refreshed = await fetchUserProfile(auth.currentUser);
+                  if (refreshed) {
+                    setUser(refreshed);
+                    toast.success("🎉 Your registration has been approved!");
+                  }
+                }
+              } else if (regData.status === "rejected") {
+                setUser((prev) => prev ? ({
+                  ...prev,
+                  status: "rejected",
+                  rejectionReason: regData.rejectionReason || "",
+                }) : null);
+              }
+            }
+          }, () => {});
+        }
 
         // Only actual admins are allowed to have an active impersonation session
         if (currentUser.role !== "admin") {
@@ -117,6 +178,8 @@ export function AuthProvider({ children }) {
       unsubscribe();
       if (sessionUnsubscribe) sessionUnsubscribe();
       if (touchInterval) clearInterval(touchInterval);
+      if (userDocUnsub) userDocUnsub();
+      if (regDocUnsub) regDocUnsub();
     };
   }, []);
 
@@ -127,6 +190,8 @@ export function AuthProvider({ children }) {
   async function login(identifier, password) {
     try {
       const user = await loginService(identifier, password);
+      // Synchronously set in context immediately to avoid navigation race condition
+      setUser(user);
 
       if (user.mustChangePassword) {
         toast("You must set a new password to continue", { icon: "🔐" });
@@ -227,6 +292,17 @@ export function AuthProvider({ children }) {
     }
   }
 
+  async function refreshUser() {
+    if (auth.currentUser) {
+      const refreshed = await fetchUserProfile(auth.currentUser);
+      if (refreshed) {
+        setUser(refreshed);
+        return refreshed;
+      }
+    }
+    return null;
+  }
+
   // Effective user: if admin is viewing as another user, return that user profile
   const effectiveUser = impersonatedUser || user;
 
@@ -245,6 +321,7 @@ export function AuthProvider({ children }) {
         login,
         logout,
         setUser,
+        refreshUser,
         clearMustChangePassword,
       }}
     >

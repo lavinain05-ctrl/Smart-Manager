@@ -3,10 +3,13 @@ import {
   FaHistory,
   FaSearch,
   FaRecycle,
+  FaPrint,
 } from "react-icons/fa";
+import toast from "react-hot-toast";
 
 import { useAuth } from "../../context/AuthContext";
 import { useGarbage } from "../../context/GarbageContext";
+import { printPaymentReceipt } from "../../utils/printReceiptHelper";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -90,15 +93,37 @@ export default function GarbageCollectorHistory() {
       {/* List */}
       <div className="space-y-3">
         {myCollections.map((b) => (
-          <div key={b.id} className="bg-white rounded-2xl shadow-sm p-4 flex items-center justify-between">
+          <div key={b.id} className="bg-white rounded-2xl shadow-sm p-4 flex items-center justify-between gap-3">
             <div>
               <h3 className="font-bold">{b.residentName}</h3>
               <p className="text-gray-500 text-sm">{b.flat} • {b.block}</p>
               <p className="text-gray-400 text-xs">{b.month} {b.year}</p>
             </div>
-            <div className="text-right">
-              <p className="font-bold text-emerald-700">₹{Number(b.paidAmount || b.amount || 0).toLocaleString()}</p>
-              <p className="text-xs text-gray-400">{b.paymentMethod} • {b.paymentDate}</p>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="font-bold text-emerald-700">₹{Number(b.paidAmount || b.amount || 0).toLocaleString()}</p>
+                <p className="text-xs text-gray-400">{b.paymentMethod} • {b.paymentDate}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  printPaymentReceipt({
+                    ...b,
+                    totalPaidAmount: b.paidAmount || b.amount,
+                    paymentMethod: b.paymentMethod || "Cash",
+                    paymentDate: b.paymentDate || new Date().toLocaleDateString("en-IN"),
+                    receiptNumber: b.paymentId || ("REC-" + b.id),
+                    collector: user?.name || "Collector",
+                  });
+                  toast.success(`Printing receipt for Flat ${b.flat}...`);
+                }}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-xs active:scale-95 cursor-pointer shrink-0"
+                title="Print Official Payment Receipt"
+              >
+                <FaPrint className="text-[11px]" />
+                <span className="hidden sm:inline">Print Receipt</span>
+              </button>
             </div>
           </div>
         ))}

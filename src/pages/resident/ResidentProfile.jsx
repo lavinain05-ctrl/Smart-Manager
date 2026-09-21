@@ -100,6 +100,17 @@ export default function ResidentProfile() {
     return () => unsubscribe();
   }, [user?.uid]);
 
+  // Set of field keys that currently have a pending request
+  const pendingFieldsSet = useMemo(() => {
+    const set = new Set();
+    (myRequests || []).forEach((r) => {
+      if (r.status === "pending" && r.changes?.field) {
+        set.add(r.changes.field);
+      }
+    });
+    return set;
+  }, [myRequests]);
+
   // Auto-fill current value when field is selected
   const displayEmail = getDisplayEmail(resident, user);
 
@@ -118,8 +129,26 @@ export default function ResidentProfile() {
     }
   }, [requestField, resident, displayEmail]);
 
+  // Check if current action is adding a new missing detail vs updating an existing detail
+  const isAddingDetail = useMemo(() => {
+    if (!requestField) return false;
+    const val = requestCurrentValue;
+    return (
+      !val ||
+      val === "—" ||
+      val === "Not provided" ||
+      val === "null" ||
+      val === "undefined" ||
+      String(val).trim() === ""
+    );
+  }, [requestField, requestCurrentValue]);
+
   function openRequestForField(fieldKey) {
     if (!canRequest) return;
+    if (pendingFieldsSet.has(fieldKey)) {
+      toast.error(`A request for ${fieldKey} is already pending admin approval.`);
+      return;
+    }
     setRequestField(fieldKey);
     setRequestNewValue("");
     setRequestReason("");
@@ -187,17 +216,19 @@ export default function ResidentProfile() {
 
   async function handleSubmitRequest(e) {
     e.preventDefault();
-    if (!requestField || !requestNewValue.trim() || !requestReason.trim()) {
-      toast.error("All fields including reason are mandatory");
+    if (!requestField || !requestNewValue.trim()) {
+      toast.error("Please enter the required details");
+      return;
+    }
+
+    if (!isAddingDetail && !requestReason.trim()) {
+      toast.error("Reason is mandatory when updating existing details");
       return;
     }
 
     // Check if there's already a pending request for this field
-    const hasPending = myRequests.some(
-      (r) => r.status === "pending" && r.changes?.field === requestField
-    );
-    if (hasPending) {
-      toast.error(`You already have a pending request for ${requestField}`);
+    if (pendingFieldsSet.has(requestField)) {
+      toast.error(`A request for ${requestField} is already pending admin approval`);
       return;
     }
 
@@ -214,21 +245,27 @@ export default function ResidentProfile() {
           field: requestField,
           currentValue: requestCurrentValue || "Not provided",
           newValue: requestNewValue.trim(),
-          reason: requestReason.trim(),
+          reason: isAddingDetail
+            ? (requestReason.trim() || "Providing missing profile details")
+            : requestReason.trim(),
         },
       });
 
       // Create notification for the resident
       await addDoc(collection(db, "notifications"), {
         userId: user.uid,
-        title: "Profile Request Submitted",
+        title: isAddingDetail ? "Profile Detail Submitted" : "Profile Update Requested",
         message: `Your request for ${requestField} has been submitted and is pending admin approval.`,
         type: "profile_request",
         read: false,
         createdAt: serverTimestamp(),
       });
 
-      toast.success("Profile request submitted — awaiting admin approval");
+      toast.success(
+        isAddingDetail
+          ? "Profile details submitted — awaiting admin approval"
+          : "Profile update request submitted — awaiting admin approval"
+      );
       setShowRequestForm(false);
       setRequestField("");
       setRequestNewValue("");
@@ -421,6 +458,7 @@ export default function ResidentProfile() {
             value={resident?.owner || user?.name}
             onEdit={() => openRequestForField("Name")}
             canRequest={canRequest}
+            isPending={pendingFieldsSet.has("Name")}
           />
           <LockedField
             icon={<FaEnvelope />}
@@ -428,6 +466,7 @@ export default function ResidentProfile() {
             value={displayEmail}
             onEdit={() => openRequestForField("Email")}
             canRequest={canRequest}
+            isPending={pendingFieldsSet.has("Email")}
           />
           <LockedField
             icon={<FaPhone />}
@@ -435,6 +474,7 @@ export default function ResidentProfile() {
             value={resident?.mobile || user?.phone}
             onEdit={() => openRequestForField("Mobile Number")}
             canRequest={canRequest}
+            isPending={pendingFieldsSet.has("Mobile Number")}
           />
           <LockedField
             icon={<FaPhone />}
@@ -442,6 +482,7 @@ export default function ResidentProfile() {
             value={resident?.alternateMobile}
             onEdit={() => openRequestForField("Alternate Mobile")}
             canRequest={canRequest}
+            isPending={pendingFieldsSet.has("Alternate Mobile")}
           />
           <LockedField
             icon={<FaCalendarAlt />}
@@ -449,6 +490,7 @@ export default function ResidentProfile() {
             value={resident?.dob}
             onEdit={() => openRequestForField("Date of Birth")}
             canRequest={canRequest}
+            isPending={pendingFieldsSet.has("Date of Birth")}
           />
           <LockedField
             icon={<FaVenusMars />}
@@ -456,6 +498,7 @@ export default function ResidentProfile() {
             value={resident?.gender}
             onEdit={() => openRequestForField("Gender")}
             canRequest={canRequest}
+            isPending={pendingFieldsSet.has("Gender")}
           />
           <LockedField
             icon={<FaBriefcase />}
@@ -463,6 +506,7 @@ export default function ResidentProfile() {
             value={resident?.occupation}
             onEdit={() => openRequestForField("Occupation")}
             canRequest={canRequest}
+            isPending={pendingFieldsSet.has("Occupation")}
           />
           <LockedField
             icon={<FaUserFriends />}
@@ -470,16 +514,16 @@ export default function ResidentProfile() {
             value={resident?.emergencyContact}
             onEdit={() => openRequestForField("Emergency Contact")}
             canRequest={canRequest}
+            isPending={pendingFieldsSet.has("Emergency Contact")}
           />
-          {resident?.fatherHusbandName && (
-            <LockedField
-              icon={<FaUser />}
-              label="Father/Husband Name"
-              value={resident.fatherHusbandName}
-              onEdit={() => openRequestForField("Father/Husband Name")}
-              canRequest={canRequest}
-            />
-          )}
+          <LockedField
+            icon={<FaUser />}
+            label="Father/Husband Name"
+            value={resident?.fatherHusbandName}
+            onEdit={() => openRequestForField("Father/Husband Name")}
+            canRequest={canRequest}
+            isPending={pendingFieldsSet.has("Father/Husband Name")}
+          />
           {user?.relation && (
             <LockedField icon={<FaUser />} label="Relation" value={user.relation} />
           )}
@@ -648,17 +692,22 @@ export default function ResidentProfile() {
                 </label>
                 <select
                   value={requestField}
-                  onChange={(e) => { setRequestField(e.target.value); setRequestNewValue(""); }}
+                  onChange={(e) => {
+                    setRequestField(e.target.value);
+                    setRequestNewValue("");
+                    setRequestReason("");
+                  }}
                   className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                   required
                 >
                   <option value="">Select field...</option>
                   {UPDATABLE_FIELDS.map((f) => {
                     const currentVal = f.key === "Email" ? displayEmail : (f.residentField ? resident?.[f.residentField] : null);
-                    const isMissing = !currentVal || currentVal === "—";
+                    const isMissing = !currentVal || currentVal === "—" || currentVal === "Not provided";
+                    const isFieldPending = pendingFieldsSet.has(f.key);
                     return (
-                      <option key={f.key} value={f.key}>
-                        {f.key} {isMissing ? "(Add Missing Details)" : "(Update)"}
+                      <option key={f.key} value={f.key} disabled={isFieldPending}>
+                        {f.key} {isFieldPending ? "⏳ (Pending Approval)" : isMissing ? "(Add Missing Details)" : "(Update)"}
                       </option>
                     );
                   })}
@@ -667,8 +716,17 @@ export default function ResidentProfile() {
 
               {requestField && (
                 <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80">
-                  <p className="text-xs text-slate-500 font-medium">Current Value</p>
-                  <p className={`text-sm mt-0.5 ${!requestCurrentValue ? "text-slate-400 italic" : "font-semibold text-slate-800"}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs text-slate-500 font-medium">Current Value</p>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      isAddingDetail
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-purple-100 text-purple-700"
+                    }`}>
+                      {isAddingDetail ? "+ Adding Details" : "✏️ Updating Details"}
+                    </span>
+                  </div>
+                  <p className={`text-sm mt-0.5 ${isAddingDetail ? "text-slate-400 italic" : "font-semibold text-slate-800"}`}>
                     {requestCurrentValue || "Not provided (Add new detail)"}
                   </p>
                 </div>
@@ -676,7 +734,7 @@ export default function ResidentProfile() {
 
               <div>
                 <label className="block mb-2 font-medium text-sm text-slate-700">
-                  {requestCurrentValue ? "New Value" : "Enter Details"} <span className="text-red-500">*</span>
+                  {isAddingDetail ? "Enter Details" : "New Value"} <span className="text-red-500">*</span>
                 </label>
                 {requestField === "Gender" ? (
                   <select
@@ -716,19 +774,21 @@ export default function ResidentProfile() {
                 )}
               </div>
 
-              <div>
-                <label className="block mb-2 font-medium text-sm text-slate-700">
-                  Reason <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  placeholder="Why do you need this change or why are you adding this detail? (Mandatory for admin review)"
-                  value={requestReason}
-                  onChange={(e) => setRequestReason(e.target.value)}
-                  rows={2}
-                  className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
-                  required
-                />
-              </div>
+              {!isAddingDetail && (
+                <div>
+                  <label className="block mb-2 font-medium text-sm text-slate-700">
+                    Reason for Update <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    placeholder="Why do you need this change? (Mandatory for admin review)"
+                    value={requestReason}
+                    onChange={(e) => setRequestReason(e.target.value)}
+                    rows={2}
+                    className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                    required
+                  />
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
@@ -740,14 +800,14 @@ export default function ResidentProfile() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submittingRequest}
+                  disabled={submittingRequest || (requestField && pendingFieldsSet.has(requestField))}
                   className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold transition text-sm shadow-md shadow-blue-500/20"
                 >
                   {submittingRequest
                     ? "Submitting..."
-                    : requestCurrentValue
-                    ? "Submit Update Request"
-                    : "Submit Details"}
+                    : isAddingDetail
+                    ? "Submit Details"
+                    : "Submit Update Request"}
                 </button>
               </div>
             </form>
@@ -762,7 +822,7 @@ export default function ResidentProfile() {
    LockedField — Always Read-Only
 ================================ */
 
-function LockedField({ icon, label, value, onEdit, canRequest }) {
+function LockedField({ icon, label, value, onEdit, canRequest, isPending }) {
   const isEmpty = !value || value === "—" || value === "null" || value === "undefined";
 
   return (
@@ -772,7 +832,14 @@ function LockedField({ icon, label, value, onEdit, canRequest }) {
           {icon} {label}
         </span>
         <div className="flex items-center gap-1.5">
-          {canRequest && onEdit && (
+          {isPending ? (
+            <span
+              className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-amber-100 text-amber-800 border border-amber-300/80 flex items-center gap-1 shadow-2xs cursor-not-allowed select-none"
+              title="A request for this field has already been sent and is pending admin approval"
+            >
+              <FaClock className="text-[9px]" /> Pending
+            </span>
+          ) : canRequest && onEdit ? (
             <button
               type="button"
               onClick={onEdit}
@@ -785,7 +852,7 @@ function LockedField({ icon, label, value, onEdit, canRequest }) {
             >
               {isEmpty ? "+ Add" : "Update"}
             </button>
-          )}
+          ) : null}
           <span className="flex items-center gap-0.5 text-[9px] text-amber-600 font-medium bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200/50">
             <FaLock className="text-[7px]" /> Locked
           </span>

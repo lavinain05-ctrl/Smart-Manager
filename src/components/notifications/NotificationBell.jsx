@@ -14,6 +14,7 @@ import {
 } from "react-icons/fa";
 
 import { useNotifications } from "../../context/NotificationContext";
+import toast from "react-hot-toast";
 
 const typeIcons = {
   info: <FaInfoCircle className="text-blue-500" />,
@@ -26,7 +27,12 @@ const typeIcons = {
 };
 
 export default function NotificationBell({ isDark = false }) {
-  const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
+  const {
+    notifications,
+    unreadCount,
+    markRead,
+    markAllRead,
+  } = useNotifications();
   const [open, setOpen] = useState(false);
   const panelRef = useRef(null);
   const navigate = useNavigate();

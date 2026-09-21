@@ -5,12 +5,16 @@ import {
   FaTrashAlt,
   FaHandHoldingHeart,
   FaFilter,
+  FaPrint,
 } from "react-icons/fa";
+import toast from "react-hot-toast";
 
 import { useAuth } from "../../context/AuthContext";
 import { usePayments } from "../../context/PaymentContext";
 import { subscribeAllSpecialPayments } from "../../services/specialCollectionService";
 import { generateSpecialCollectionReceipt } from "../../utils/specialCollectionReceiptGenerator";
+import { generateReceipt } from "../../utils/receiptGenerator";
+import { printPaymentReceipt } from "../../utils/printReceiptHelper";
 
 export default function CollectorHistory() {
   const { user } = useAuth();
@@ -202,23 +206,43 @@ export default function CollectorHistory() {
                   <p className="text-[11px] font-mono text-gray-400">{item.receiptNumber}</p>
                 </div>
 
-                {item.module === "special" && (
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
-                    onClick={() =>
-                      generateSpecialCollectionReceipt({
-                        ...item.raw,
-                        contributorType:
-                          item.raw.contributorType === "external"
-                            ? "External Contributor"
-                            : "Resident",
-                      })
-                    }
-                    title="Download Official Receipt"
-                    className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl transition text-xs"
+                    onClick={() => {
+                      printPaymentReceipt(item.raw);
+                      toast.success(`Printing receipt ${item.receiptNumber}...`);
+                    }}
+                    title="Print Official Payment Receipt"
+                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition text-xs font-bold flex items-center gap-1.5 shadow-xs active:scale-95 cursor-pointer"
+                  >
+                    <FaPrint className="text-[11px]" />
+                    <span className="hidden sm:inline">Print</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      if (item.module === "special") {
+                        generateSpecialCollectionReceipt({
+                          ...item.raw,
+                          contributorType:
+                            item.raw.contributorType === "external"
+                              ? "External Contributor"
+                              : "Resident",
+                        });
+                      } else {
+                        generateReceipt(item.raw);
+                      }
+                    }}
+                    title="Download PDF Receipt"
+                    className={`p-2 rounded-xl transition text-xs cursor-pointer ${
+                      item.module === "special"
+                        ? "bg-indigo-50 hover:bg-indigo-100 text-indigo-600"
+                        : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                    }`}
                   >
                     <FaFileDownload />
                   </button>
-                )}
+                </div>
               </div>
             </div>
           ))

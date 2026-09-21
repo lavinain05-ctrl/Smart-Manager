@@ -8,7 +8,10 @@ import {
   where,
   orderBy,
   getDocs,
+  getDoc,
+  addDoc,
   writeBatch,
+  updateDoc,
 } from "firebase/firestore";
 
 import {
@@ -27,6 +30,7 @@ import {
   getGarbageAccountByResidentId,
 } from "./garbageService";
 import { linkResidentToFlat } from "./blockFlatService";
+import { logActivity } from "./activityLogService";
 
 const requestsRef = collection(db, "registrationRequests");
 
@@ -251,7 +255,7 @@ export async function submitRegistration({
     });
 
     // --- Step 9: Write mobile→auth email lookup for login ---
-    await writeAuthLookup(normalizedMobile, authEmail, uid);
+    await writeAuthLookup(normalizedMobile, authEmail, uid, normalizedEmail);
 
     return uid;
   } catch (firestoreError) {
@@ -352,6 +356,7 @@ export async function approveRegistration(requestId, request, charge, overrides 
     name: request.name || "",
     email: (request.email || "").trim() || authEmail,
     phone: cleanMobile,
+    mobile: cleanMobile,
     flat: finalFlat,
     flatNumber: finalFlat,
     block: finalBlock,
@@ -398,7 +403,7 @@ export async function approveRegistration(requestId, request, charge, overrides 
   await batch.commit();
 
   // Confirm authLookup mapping
-  await writeAuthLookup(cleanMobile, authEmail, uid);
+  await writeAuthLookup(cleanMobile, authEmail, uid, (request.email || "").trim());
 
   // ── Post-commit: Auto-create garbage account if participating ──
   if (gcStatus === "participating") {
@@ -460,11 +465,83 @@ export async function approveRegistration(requestId, request, charge, overrides 
 
 // =============================
 // Admin: Reject Registration
-// Now performs COMPLETE cleanup:
-//   - Deletes Firebase Auth account (via Cloud Function)
-//   - Deletes registrationRequests doc
-//   - Archives to deletedAccounts
-//   - Frees email/phone for re-registration
+// Keeps the document in registrationRequests with status: "rejected"
+// so it is visible in the Rejected tab/file and informs the resident
 // =============================
+
+export async function rejectRegistration(requestId, requestData, reason, approverInfo = null) {
+  const targetId = requestId || requestData?.id || requestData?.uid;
+  if (!targetId) {
+    throw new Error("Missing registration request ID.");
+  }
+  const finalReason = reason?.trim() || "Registration rejected by admin";
+
+  // 1. Update registrationRequests document with status: "rejected"
+  await setDoc(
+    doc(db, "registrationRequests", targetId),
+    {
+      status: "rejected",
+      rejectionReason: finalReason,
+      rejectedAt: serverTimestamp(),
+      rejectedBy: approverInfo ? {
+        uid: approverInfo.uid || "",
+        name: approverInfo.name || "Administrator",
+        role: approverInfo.role || "admin",
+        at: new Date().toISOString(),
+      } : {
+        name: "Administrator",
+        role: "admin",
+        at: new Date().toISOString(),
+      },
+    },
+    { merge: true }
+  );
+
+  // 2. Update users/{targetId} status if document exists
+  try {
+    const userDocRef = doc(db, "users", targetId);
+    const userSnap = await getDoc(userDocRef);
+    if (userSnap.exists()) {
+      await updateDoc(userDocRef, {
+        status: "rejected",
+        rejectionReason: finalReason,
+        rejectedAt: serverTimestamp(),
+      });
+    }
+  } catch (userErr) {
+    console.warn("[Registration] user doc update warning:", userErr.message);
+  }
+
+  // 3. Send notification to the user
+  try {
+    await addDoc(collection(db, "notifications"), {
+      userId: targetId,
+      title: "Registration Rejected ❌",
+      message: `Your registration request was rejected. Reason: ${finalReason}`,
+      type: "registration_rejected",
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  } catch (notifErr) {
+    console.warn("[Registration] notification warning:", notifErr.message);
+  }
+
+  // 4. Activity Log
+  try {
+    await logActivity({
+      action: `Rejected registration for ${requestData?.name || targetId}`,
+      category: "auth",
+      performedBy: "admin",
+      performedByName: approverInfo?.name || "Admin",
+      targetId,
+      targetName: requestData?.name || "Unknown",
+      details: `Reason: ${finalReason}. Flat: ${requestData?.flat || "—"}, Block: ${requestData?.block || "—"}`,
+    });
+  } catch (e) {
+    console.warn("[Registration] Activity log error:", e.message);
+  }
+
+  return { success: true };
+}
 
 export { rejectAndDeleteRegistration } from "./accountDeletionService";

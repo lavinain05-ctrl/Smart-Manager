@@ -7,7 +7,7 @@ export function generateReceipt(payment) {
   // Header
   doc.setFontSize(22);
   doc.setTextColor(16, 185, 129);
-  doc.text("SMART MANAGER", 105, 18, {
+  doc.text("D BLOCK RWA", 105, 18, {
     align: "center",
   });
 
@@ -15,7 +15,7 @@ export function generateReceipt(payment) {
   doc.setTextColor(100);
 
   doc.text(
-    "Garbage Collection Management System",
+    "Resident Welfare Association — Indraprastha",
     105,
     26,
     {
@@ -100,7 +100,7 @@ export function generateReceipt(payment) {
   );
 
   doc.text(
-    "This is a computer-generated receipt.",
+    "This is an official computer-generated receipt from D Block RWA.",
     105,
     endY + 8,
     {

@@ -2,71 +2,59 @@
   <defs>
     <linearGradient id="rwaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#10b981"/>
-      <stop offset="50%" stop-color="#047857"/>
-      <stop offset="100%" stop-color="#044132"/>
+      <stop offset="60%" stop-color="#047857"/>
+      <stop offset="100%" stop-color="#064e3b"/>
     </linearGradient>
     <filter id="rwaShadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#001e14" flood-opacity="0.3"/>
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#002819" flood-opacity="0.4"/>
     </filter>
   </defs>
 
   <!-- Background Squircle -->
-  <rect width="512" height="512" rx="112" fill="url(#rwaGrad)"/>
-
-  <!-- Subtle ambient top radial light -->
-  <ellipse cx="256" cy="80" rx="200" ry="120" fill="#a7f3d0" fill-opacity="0.2" filter="blur(30px)"/>
+  <rect width="512" height="512" rx="110" fill="url(#rwaGrad)"/>
+  <rect x="2" y="2" width="508" height="508" rx="108" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-opacity="0.25"/>
 
   <!-- Architectural Community Buildings -->
   <g filter="url(#rwaShadow)">
     <!-- Center Tower -->
-    <polygon points="256,82 216,120 216,236 296,236 296,120" fill="#ffffff"/>
+    <polygon points="256,66 212,100 212,200 300,200 300,100" fill="#ffffff"/>
     
     <!-- Windows Center Tower -->
-    <rect x="234" y="132" width="44" height="10.5" rx="2" fill="#047857"/>
-    <rect x="234" y="152" width="44" height="10.5" rx="2" fill="#047857"/>
-    <rect x="234" y="172" width="44" height="10.5" rx="2" fill="#047857"/>
-    <rect x="234" y="192" width="44" height="10.5" rx="2" fill="#047857"/>
+    <rect x="228" y="108" width="56" height="12" rx="2" fill="#047857"/>
+    <rect x="228" y="132" width="56" height="12" rx="2" fill="#047857"/>
+    <rect x="228" y="156" width="56" height="12" rx="2" fill="#047857"/>
 
     <!-- Arch Doorway -->
-    <path d="M242,236 L242,218 A14,11 0 0,1 270,218 L270,236 Z" fill="#047857"/>
+    <path d="M238,200 L238,178 A18,10 0 0,1 274,178 L274,200 Z" fill="#047857"/>
 
     <!-- Left Building -->
-    <polygon points="208,140 168,166 168,236 208,236" fill="#f8fafc"/>
-    <rect x="179" y="176" width="17" height="10" rx="1.5" fill="#047857"/>
-    <rect x="179" y="196" width="17" height="10" rx="1.5" fill="#047857"/>
-    <rect x="179" y="216" width="17" height="10" rx="1.5" fill="#047857"/>
+    <polygon points="202,114 154,140 154,200 202,200" fill="#f8fafc"/>
+    <rect x="167" y="148" width="24" height="11" rx="2" fill="#047857"/>
+    <rect x="167" y="170" width="24" height="11" rx="2" fill="#047857"/>
 
     <!-- Right Building -->
-    <polygon points="304,140 344,166 344,236 304,236" fill="#f8fafc"/>
-    <rect x="316" y="176" width="17" height="10" rx="1.5" fill="#047857"/>
-    <rect x="316" y="196" width="17" height="10" rx="1.5" fill="#047857"/>
-    <rect x="316" y="216" width="17" height="10" rx="1.5" fill="#047857"/>
+    <polygon points="310,114 358,140 358,200 310,200" fill="#f8fafc"/>
+    <rect x="321" y="148" width="24" height="11" rx="2" fill="#047857"/>
+    <rect x="321" y="170" width="24" height="11" rx="2" fill="#047857"/>
 
     <!-- Foundation line -->
-    <line x1="150" y1="238" x2="362" y2="238" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="136" y1="202" x2="376" y2="202" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
   </g>
 
   <!-- Typography -->
-  <!-- D BLOCK -->
-  <text x="256" y="290" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="34" font-weight="900" letter-spacing="3">
+  <!-- HUGE BOLD D BLOCK -->
+  <text x="256" y="278" text-anchor="middle" fill="#002315" opacity="0.6" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="62" font-weight="900" letter-spacing="4">
+    D BLOCK
+  </text>
+  <text x="256" y="274" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="62" font-weight="900" letter-spacing="4">
     D BLOCK
   </text>
 
-  <!-- RWA Pill Badge -->
+  <!-- MASSIVE RWA PILL BADGE -->
   <g filter="url(#rwaShadow)">
-    <rect x="172" y="320" width="168" height="48" rx="24" fill="#ffffff"/>
-    <text x="256" y="354" text-anchor="middle" fill="#047857" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="900" letter-spacing="3">
+    <rect x="116" y="346" width="280" height="92" rx="46" fill="#ffffff"/>
+    <text x="256" y="412" text-anchor="middle" fill="#047857" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="54" font-weight="900" letter-spacing="4">
       RWA
     </text>
   </g>
-
-  <!-- INDRAPRASTHA -->
-  <text x="256" y="398" text-anchor="middle" fill="#a7f3d0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700" letter-spacing="2">
-    INDRAPRASTHA
-  </text>
-
-  <!-- Decorative Dots -->
-  <circle cx="244" cy="416" r="2.5" fill="#ffffff" fill-opacity="0.6"/>
-  <circle cx="256" cy="416" r="2.5" fill="#ffffff" fill-opacity="0.6"/>
-  <circle cx="268" cy="416" r="2.5" fill="#ffffff" fill-opacity="0.6"/>
 </svg>

@@ -30,18 +30,33 @@ export default function ResidentProfileMenu({ resident }) {
     return displayName.slice(0, 2).toUpperCase() || "RS";
   })();
 
-  // Compute subtitle (e.g. "D Block | Plot 3 | Unit 301")
+  // Compute subtitle (e.g. "90 METRE Block | Plot D571 | 1st Floor")
   const subtitle = (() => {
-    const block = resident?.block
-      ? (resident.block.toLowerCase().includes("block") ? resident.block : `${resident.block} Block`)
+    const rawBlock = String(resident?.block || "").trim();
+    const block = rawBlock
+      ? (rawBlock.toLowerCase().includes("block") ? rawBlock : `${rawBlock} Block`)
       : "D Block";
-    const plot = resident?.plotNumber
-      ? `Plot ${resident.plotNumber}`
-      : (resident?.plot ? `Plot ${resident.plot}` : "");
-    const unit = resident?.unit
-      ? `Unit ${resident.unit}`
-      : (resident?.flat ? `Unit ${resident.flat}` : "");
-    const parts = [block, plot, unit].filter(Boolean);
+
+    const rawPlot = String(resident?.plotNumber || resident?.plot || "").trim();
+    const rawFlat = String(resident?.unitNumber || resident?.unit || resident?.flat || resident?.flatNo || "").trim();
+
+    const plotStr = rawPlot
+      ? (rawPlot.toLowerCase().startsWith("plot") ? rawPlot : `Plot ${rawPlot}`)
+      : "";
+
+    // If flat/unit is missing, or is identical to plot, or is '-' or 'n/a', leave it blank!
+    const isSameAsPlot = rawPlot && rawFlat && rawFlat.toLowerCase() === rawPlot.toLowerCase();
+    const isInvalidFlat = !rawFlat || rawFlat === "-" || rawFlat.toLowerCase() === "n/a" || isSameAsPlot;
+
+    const flatStr = !isInvalidFlat
+      ? (rawFlat.toLowerCase().startsWith("flat") || rawFlat.toLowerCase().startsWith("unit")
+          ? rawFlat
+          : `Flat ${rawFlat}`)
+      : "";
+
+    const floorStr = resident?.floor ? String(resident.floor).trim() : "";
+
+    const parts = [block, plotStr, flatStr, floorStr].filter(Boolean);
     return parts.length > 0 ? parts.join(" | ") : "D Block | Resident";
   })();
 

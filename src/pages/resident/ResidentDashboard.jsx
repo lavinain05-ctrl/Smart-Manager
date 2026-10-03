@@ -433,17 +433,31 @@ export default function ResidentDashboard() {
   }, []);
 
   const residentSubtitle = useMemo(() => {
-    const block = resident?.block
-      ? (resident.block.toLowerCase().includes("block") ? resident.block : `${resident.block} Block`)
+    const rawBlock = String(resident?.block || "").trim();
+    const block = rawBlock
+      ? (rawBlock.toLowerCase().includes("block") ? rawBlock : `${rawBlock} Block`)
       : "D Block";
-    const plot = resident?.plotNumber
-      ? `Plot ${resident.plotNumber}`
-      : (resident?.plot ? `Plot ${resident.plot}` : "");
-    const unit = resident?.unit
-      ? `Unit ${resident.unit}`
-      : (resident?.flat ? `Flat ${resident.flat}` : "");
-    const floor = resident?.floor ? `${resident.floor}` : "";
-    const parts = [block, plot, unit, floor].filter(Boolean);
+
+    const rawPlot = String(resident?.plotNumber || resident?.plot || "").trim();
+    const rawFlat = String(resident?.unitNumber || resident?.unit || resident?.flat || resident?.flatNo || "").trim();
+
+    const plotStr = rawPlot
+      ? (rawPlot.toLowerCase().startsWith("plot") ? rawPlot : `Plot ${rawPlot}`)
+      : "";
+
+    // If flat/unit is missing, or is identical to plot, or is '-' or 'n/a', leave it blank!
+    const isSameAsPlot = rawPlot && rawFlat && rawFlat.toLowerCase() === rawPlot.toLowerCase();
+    const isInvalidFlat = !rawFlat || rawFlat === "-" || rawFlat.toLowerCase() === "n/a" || isSameAsPlot;
+
+    const flatStr = !isInvalidFlat
+      ? (rawFlat.toLowerCase().startsWith("flat") || rawFlat.toLowerCase().startsWith("unit")
+          ? rawFlat
+          : `Flat ${rawFlat}`)
+      : "";
+
+    const floorStr = resident?.floor ? String(resident.floor).trim() : "";
+
+    const parts = [block, plotStr, flatStr, floorStr].filter(Boolean);
     return parts.length > 0 ? parts.join(" • ") : "D Block Resident";
   }, [resident]);
 

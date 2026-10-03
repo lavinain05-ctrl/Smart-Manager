@@ -24,8 +24,6 @@ const defaultSettings = {
   bankBranch: "",
   upiId: "",
   accountHolderName: "",
-  razorpayKeyId: "",
-  enableOnlinePayments: true,
   // Society
   societyRules: "",
   codeOfConduct: "",

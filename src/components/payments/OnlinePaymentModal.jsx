@@ -14,12 +14,15 @@ import {
   FaCopy,
   FaCheck,
   FaMobileAlt,
+  FaBolt,
+  FaPrint,
 } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import QRCode from "qrcode";
 import toast from "react-hot-toast";
 import { initiateOnlineUpiPayment } from "../../services/paymentGatewayService";
 import { collectResidentPayment } from "../../utils/collectPayment";
+import { printPaymentReceipt } from "../../utils/printReceiptHelper";
 import { useAuth } from "../../context/AuthContext";
 
 export default function OnlinePaymentModal({
@@ -234,19 +237,34 @@ export default function OnlinePaymentModal({
               </div>
 
               <div className="pt-2 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (successReceipt) {
+                      printPaymentReceipt(successReceipt, settings);
+                    } else {
+                      toast.error("Receipt details not loaded");
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/20 transition cursor-pointer"
+                >
+                  <FaPrint />
+                  Print Official Receipt Now
+                </button>
+
                 <Link
                   to="/resident/receipts"
                   onClick={handleCloseModal}
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/20 transition"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs transition"
                 >
                   <FaReceipt />
-                  View & Print Official Receipt
+                  All Receipts History
                 </Link>
 
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="w-full py-2.5 px-4 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold text-xs transition"
+                  className="w-full py-2 px-4 rounded-xl text-slate-500 hover:bg-slate-100 font-medium text-xs transition"
                 >
                   Close
                 </button>
@@ -287,7 +305,51 @@ export default function OnlinePaymentModal({
                 </div>
               </div>
 
-              {/* 1. Direct Dynamic UPI Payment Section (Active if Society UPI ID exists) */}
+              {/* 1. Automated Gateway Checkout (Active when Razorpay Key ID is configured) */}
+              {hasGatewayConfigured && (
+                <div className="space-y-2 p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-300 shadow-sm">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                      <FaBolt className="text-amber-500" /> Automated Checkout
+                    </span>
+                    <span className="font-mono text-[10px] px-2 py-0.5 rounded font-extrabold bg-emerald-200 text-emerald-900">
+                      {razorpayKey.startsWith("rzp_live") ? "LIVE MODE" : "TEST MODE SIMULATOR"}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleStartRazorpay}
+                    disabled={loading}
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30 transition active:scale-[0.98]"
+                  >
+                    {loading ? (
+                      <>
+                        <FaSpinner className="animate-spin text-sm" />
+                        <span>Opening Gateway...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Pay ₹{rawAmount.toLocaleString()} via Gateway</span>
+                        <FaArrowRight className="text-xs" />
+                      </>
+                    )}
+                  </button>
+
+                  <p className="text-[11px] text-center text-emerald-800 font-medium">
+                    ⚡ Instant auto-confirmation without entering UTR number.
+                  </p>
+                </div>
+              )}
+
+              {/* Divider if both Gateway and Direct UPI are available */}
+              {hasGatewayConfigured && upiId && (
+                <div className="flex items-center gap-3 my-1 text-[10px] text-slate-400 font-bold uppercase tracking-wider before:flex-1 before:h-px before:bg-slate-200 after:flex-1 after:h-px after:bg-slate-200">
+                  Or Scan UPI QR Directly
+                </div>
+              )}
+
+              {/* 2. Direct Dynamic UPI Payment Section (Active if Society UPI ID exists) */}
               {upiId ? (
                 <div className="bg-gradient-to-b from-emerald-50/90 to-teal-50/50 border border-emerald-200/90 rounded-2xl p-3 sm:p-4 text-center space-y-2.5 shadow-inner">
                   <div className="flex items-center justify-between text-xs">
@@ -370,30 +432,6 @@ export default function OnlinePaymentModal({
                   </form>
                 </div>
               ) : null}
-
-              {/* 2. Razorpay Gateway Option (if Key ID is provided) */}
-              {hasGatewayConfigured && (
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={handleStartRazorpay}
-                    disabled={loading}
-                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-xs bg-slate-900 hover:bg-black text-white shadow-md transition"
-                  >
-                    {loading ? (
-                      <>
-                        <FaSpinner className="animate-spin text-sm" />
-                        <span>Opening Gateway...</span>
-                      </>
-                    ) : (
-                      <>
-                        <FaLock className="text-xs" />
-                        <span>Pay via Razorpay Gateway (Cards/NetBanking)</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
 
               {/* Notice if neither UPI ID nor Razorpay is set */}
               {!upiId && !hasGatewayConfigured && (

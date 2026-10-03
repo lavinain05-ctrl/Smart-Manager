@@ -89,23 +89,6 @@ export async function initiateOnlineUpiPayment({
       year: String(bill.year),
       purpose: "RWA Maintenance & Garbage Collection",
     },
-    // Focus specifically on UPI (GPay, PhonePe, Paytm, BHIM, QR)
-    config: {
-      display: {
-        blocks: {
-          upi: {
-            name: "Instant UPI & QR Code",
-            instruments: [
-              { method: "upi" },
-            ],
-          },
-        },
-        sequence: ["block.upi"],
-        preferences: {
-          show_default_blocks: true,
-        },
-      },
-    },
     theme: {
       color: "#059669", // emerald-600 to match society branding
       backdrop_color: "rgba(15, 23, 42, 0.7)",

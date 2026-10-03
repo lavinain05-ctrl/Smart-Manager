@@ -1535,7 +1535,7 @@ export default function ResidentDashboard() {
           bills={bills}
           settings={settings}
           onPaymentSuccess={() => {
-            setPayModalBill(null);
+            // Keep open so resident sees the confirmed receipt screen with print button
           }}
         />
       )}

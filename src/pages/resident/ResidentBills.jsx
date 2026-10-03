@@ -289,7 +289,7 @@ export default function ResidentBills() {
           bills={bills}
           settings={settings}
           onPaymentSuccess={() => {
-            setSelectedBillForPayment(null);
+            // Modal stays open to show confirmed receipt screen with print button
           }}
         />
       )}

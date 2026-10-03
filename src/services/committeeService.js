@@ -15,6 +15,7 @@ import {
 
 import {
   createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
 
@@ -307,10 +308,23 @@ export async function addCommitteeMember({
     }
   }
 
+  // 4. Check if user exists in registrationRequests collection
+  if (!uid) {
+    try {
+      const regSnap = await getDocs(query(collection(db, "registrationRequests"), where("mobile", "==", cleanPhone)));
+      if (!regSnap.empty) {
+        uid = regSnap.docs[0].data()?.uid || regSnap.docs[0].id;
+        isExistingAccount = true;
+      }
+    } catch (rErr) {
+      console.warn("[Committee] Error checking registrationRequests doc:", rErr.message);
+    }
+  }
+
   const effectivePassword =
     password && password.length >= 6 ? password : `RWA@${cleanPhone.slice(-6)}`;
 
-  // 4. If account does NOT exist anywhere, create in Firebase Auth
+  // 5. If account does NOT exist anywhere, create in Firebase Auth
   if (!isExistingAccount && !uid) {
     try {
       const credential = await createUserWithEmailAndPassword(
@@ -328,13 +342,34 @@ export async function addCommitteeMember({
         authError.message?.includes("email-already-in-use")
       ) {
         isExistingAccount = true;
-        // Resolve UID from authLookup if available
+        console.log("[Committee] Account already exists in Firebase Auth for:", authEmail);
+
+        // Try signing in to get actual Firebase Auth UID
         try {
-          const lookupDoc = await getDoc(doc(db, "authLookup", cleanPhone));
-          if (lookupDoc.exists() && lookupDoc.data()?.uid) {
-            uid = lookupDoc.data().uid;
+          const cred = await signInWithEmailAndPassword(secondaryAuth, authEmail, effectivePassword);
+          if (cred?.user?.uid) {
+            uid = cred.user.uid;
           }
-        } catch {}
+        } catch (siErr) {
+          // If password was different, try default formula password
+          try {
+            const fallbackPass = `RWA@${cleanPhone.slice(-6)}`;
+            const cred2 = await signInWithEmailAndPassword(secondaryAuth, authEmail, fallbackPass);
+            if (cred2?.user?.uid) {
+              uid = cred2.user.uid;
+            }
+          } catch {}
+        }
+
+        // Resolve UID from authLookup if available
+        if (!uid) {
+          try {
+            const lookupDoc = await getDoc(doc(db, "authLookup", cleanPhone));
+            if (lookupDoc.exists() && lookupDoc.data()?.uid) {
+              uid = lookupDoc.data().uid;
+            }
+          } catch {}
+        }
       } else if (authError.code === "auth/weak-password") {
         throw new Error("Password is too weak. Use at least 6 characters.");
       } else {

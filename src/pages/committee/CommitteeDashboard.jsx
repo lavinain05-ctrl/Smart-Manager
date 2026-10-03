@@ -721,12 +721,16 @@ export default function CommitteeDashboard() {
                     ? "/committee/president.jpg"
                     : (member.designation === "Vice President" || member.name?.toLowerCase().includes("ankit"))
                     ? "/committee/ankit-chaudhary.png"
+                    : (member.designation === "Secretary" || member.designation?.toLowerCase() === "secretary" || member.name?.toLowerCase().includes("janardan") || member.name?.toLowerCase().includes("janardhan"))
+                    ? "/committee/secretary.jpg"
                     : (member.designation === "Vice Treasurer" || member.name?.toLowerCase().includes("vinod"))
                     ? "/committee/vinod-kumar.jpg"
                     : (member.designation === "Spokesperson" || member.name?.toLowerCase().includes("narendra") || member.name?.toLowerCase().includes("dhama"))
                     ? "/committee/narendra-dhama.png"
                     : (member.designation === "Advisor" || member.name?.toLowerCase().includes("dinesh"))
                     ? "/committee/dinesh-kumar.png"
+                    : (member.designation === "Vice Secretary" || member.name?.toLowerCase().includes("manoj") || member.name?.toLowerCase().includes("tomar"))
+                    ? "/committee/manoj-tomar.jpg"
                     : null
                 );
                 return (

@@ -97,6 +97,11 @@ export function getAdminMemberPhoto(member) {
     member?.designation?.toLowerCase() === "vice president" ||
     member?.name?.toLowerCase().includes("ankit");
   if (isVicePresident) return "/committee/ankit-chaudhary.png";
+  const isSecretary =
+    member?.designation?.toLowerCase() === "secretary" ||
+    member?.name?.toLowerCase().includes("janardan") ||
+    member?.name?.toLowerCase().includes("janardhan");
+  if (isSecretary) return "/committee/secretary.jpg";
   const isVinod =
     member?.designation?.toLowerCase() === "vice treasurer" ||
     member?.name?.toLowerCase().includes("vinod");
@@ -110,6 +115,11 @@ export function getAdminMemberPhoto(member) {
     member?.designation?.toLowerCase() === "advisor" ||
     member?.name?.toLowerCase().includes("dinesh");
   if (isDinesh) return "/committee/dinesh-kumar.png";
+  const isManoj =
+    member?.designation?.toLowerCase() === "vice secretary" ||
+    member?.name?.toLowerCase().includes("manoj") ||
+    member?.name?.toLowerCase().includes("tomar");
+  if (isManoj) return "/committee/manoj-tomar.jpg";
   return null;
 }
 

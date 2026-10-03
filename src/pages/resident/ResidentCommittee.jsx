@@ -32,6 +32,11 @@ export function getMemberPhoto(member) {
     member?.designation?.toLowerCase() === "vice president" ||
     member?.name?.toLowerCase().includes("ankit");
   if (isAnkit) return "/committee/ankit-chaudhary.png";
+  const isSecretary =
+    member?.designation?.toLowerCase() === "secretary" ||
+    member?.name?.toLowerCase().includes("janardan") ||
+    member?.name?.toLowerCase().includes("janardhan");
+  if (isSecretary) return "/committee/secretary.jpg";
   const isVinod =
     member?.designation?.toLowerCase() === "vice treasurer" ||
     member?.name?.toLowerCase().includes("vinod");

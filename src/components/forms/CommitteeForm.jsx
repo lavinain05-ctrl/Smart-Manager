@@ -212,6 +212,8 @@ export default function CommitteeForm({
           ? "/committee/dinesh-kumar.png"
           : member.designation?.toLowerCase() === "vice secretary" || member.name?.toLowerCase().includes("manoj") || member.name?.toLowerCase().includes("tomar")
           ? "/committee/manoj-tomar.jpg"
+          : member.designation?.toLowerCase() === "secretary" || member.name?.toLowerCase().includes("janardan") || member.name?.toLowerCase().includes("janardhan")
+          ? "/committee/secretary.jpg"
           : ""
       );
       setPhotoFile(null);
@@ -274,7 +276,12 @@ export default function CommitteeForm({
     if (res.block) setBlock(res.block);
 
     const resName = (res.owner || res.name || "").toLowerCase();
-    if (resName.includes("manoj") || resName.includes("tomar")) {
+    if (resName.includes("janardan") || resName.includes("janardhan")) {
+      setPhotoUrl("/committee/secretary.jpg");
+      setPhotoPreview("/committee/secretary.jpg");
+      setPhotoMode("url");
+      setDesignation("Secretary");
+    } else if (resName.includes("manoj") || resName.includes("tomar")) {
       setPhotoUrl("/committee/manoj-tomar.jpg");
       setPhotoPreview("/committee/manoj-tomar.jpg");
       setPhotoMode("url");

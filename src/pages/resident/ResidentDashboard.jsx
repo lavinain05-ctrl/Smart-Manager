@@ -1342,10 +1342,14 @@ export default function ResidentDashboard() {
                             photo = "/committee/president.jpg";
                           } else if (member.designation?.toLowerCase() === "vice president" || member.name?.toLowerCase().includes("ankit")) {
                             photo = "/committee/ankit-chaudhary.png";
+                          } else if (member.designation?.toLowerCase() === "secretary" || member.name?.toLowerCase().includes("janardan") || member.name?.toLowerCase().includes("janardhan")) {
+                            photo = "/committee/secretary.jpg";
                           } else if (member.designation?.toLowerCase() === "vice treasurer" || member.name?.toLowerCase().includes("vinod")) {
                             photo = "/committee/vinod-kumar.jpg";
                           } else if (member.designation?.toLowerCase() === "advisor" || member.name?.toLowerCase().includes("dinesh")) {
                             photo = "/committee/dinesh-kumar.png";
+                          } else if (member.designation?.toLowerCase() === "vice secretary" || member.name?.toLowerCase().includes("manoj") || member.name?.toLowerCase().includes("tomar")) {
+                            photo = "/committee/manoj-tomar.jpg";
                           }
                         }
 

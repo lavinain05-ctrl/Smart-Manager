@@ -168,29 +168,29 @@ export default function OnlinePaymentModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto">
+      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] my-auto overflow-hidden animate-in zoom-in-95 duration-200">
         
-        {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white p-6 relative">
+        {/* Header (Always pinned at top of modal) */}
+        <div className="bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white p-4 sm:p-5 relative shrink-0">
           <button
             onClick={handleCloseModal}
-            className="absolute top-4 right-4 text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10 transition"
+            className="absolute top-3.5 right-3.5 text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10 transition z-10"
             aria-label="Close"
           >
             <FaTimes className="text-base" />
           </button>
 
-          <div className="flex items-center gap-2.5 mb-2">
-            <span className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm shadow-inner">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center text-xs shadow-inner">
               <FaFileInvoiceDollar />
             </span>
-            <span className="text-xs uppercase font-extrabold tracking-wider text-emerald-200">
+            <span className="text-[11px] uppercase font-extrabold tracking-wider text-emerald-200">
               Instant Online Payment
             </span>
           </div>
 
-          <h3 className="text-xl font-bold tracking-tight">
+          <h3 className="text-lg sm:text-xl font-bold tracking-tight">
             {bill.month} {bill.year} Maintenance
           </h3>
           <p className="text-xs text-emerald-100/90 mt-0.5">
@@ -198,8 +198,8 @@ export default function OnlinePaymentModal({
           </p>
         </div>
 
-        {/* Content Body */}
-        <div className="p-6 space-y-5">
+        {/* Content Body (Smoothly scrollable if viewport is compact) */}
+        <div className="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1">
           {successReceipt ? (
             /* SUCCESS STATE */
             <div className="text-center py-4 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -287,29 +287,9 @@ export default function OnlinePaymentModal({
                 </div>
               </div>
 
-              {/* Supported UPI Apps */}
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block text-center">
-                  Instant Payment via Any UPI App
-                </span>
-                <div className="flex items-center justify-center gap-2 flex-wrap">
-                  {["PhonePe", "Google Pay", "Paytm", "BHIM", "CRED"].map((app) => (
-                    <span
-                      key={app}
-                      className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold text-[11px] border border-slate-200/70 shadow-xs"
-                    >
-                      {app}
-                    </span>
-                  ))}
-                  <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200 shadow-xs">
-                    Dynamic QR
-                  </span>
-                </div>
-              </div>
-
               {/* 1. Direct Dynamic UPI Payment Section (Active if Society UPI ID exists) */}
               {upiId ? (
-                <div className="bg-gradient-to-b from-emerald-50 to-teal-50/50 border border-emerald-200 rounded-2xl p-4 text-center space-y-3 shadow-inner">
+                <div className="bg-gradient-to-b from-emerald-50/90 to-teal-50/50 border border-emerald-200/90 rounded-2xl p-3 sm:p-4 text-center space-y-2.5 shadow-inner">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-extrabold text-emerald-950 flex items-center gap-1.5 uppercase tracking-wide">
                       <FaQrcode className="text-emerald-700 text-sm" /> Scan & Pay via Any UPI App
@@ -325,17 +305,17 @@ export default function OnlinePaymentModal({
                       <img
                         src={qrDataUrl}
                         alt="Society UPI QR"
-                        className="w-40 h-40 mx-auto rounded-lg"
+                        className="w-32 h-32 sm:w-36 sm:h-36 mx-auto rounded-lg"
                       />
                     ) : (
-                      <div className="w-40 h-40 flex items-center justify-center text-xs text-gray-400">
+                      <div className="w-32 h-32 flex items-center justify-center text-xs text-gray-400">
                         Generating QR...
                       </div>
                     )}
                   </div>
 
-                  <p className="text-[11px] text-emerald-900 font-semibold max-w-xs mx-auto leading-relaxed">
-                    Scan with <strong>Google Pay, PhonePe, Paytm, or BHIM</strong>
+                  <p className="text-[11px] text-emerald-900 font-semibold max-w-xs mx-auto leading-tight">
+                    Scan with <strong>GPay, PhonePe, Paytm, BHIM, or CRED</strong>
                   </p>
 
                   {/* Mobile Deep Link Button */}

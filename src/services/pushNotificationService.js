@@ -85,15 +85,62 @@ export async function sendTestNotification() {
   });
 }
 
+let cachedAudioCtx = null;
+let audioUnlocked = false;
+
+// Attach a one-time user interaction listener to unlock AudioContext gracefully
+if (typeof window !== "undefined") {
+  const unlockAudio = () => {
+    audioUnlocked = true;
+    if (cachedAudioCtx && cachedAudioCtx.state === "suspended") {
+      cachedAudioCtx.resume().catch(() => {});
+    }
+    window.removeEventListener("pointerdown", unlockAudio);
+    window.removeEventListener("keydown", unlockAudio);
+    window.removeEventListener("touchstart", unlockAudio);
+  };
+  window.addEventListener("pointerdown", unlockAudio, { passive: true });
+  window.addEventListener("keydown", unlockAudio, { passive: true });
+  window.addEventListener("touchstart", unlockAudio, { passive: true });
+}
+
+function getAudioContext() {
+  if (typeof window === "undefined") return null;
+  // If user hasn't interacted yet, don't construct AudioContext to prevent browser autoplay warning
+  const hasUserInteracted =
+    audioUnlocked ||
+    (typeof navigator !== "undefined" && navigator.userActivation?.hasBeenActive);
+  if (!hasUserInteracted) {
+    return null;
+  }
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+
+  if (!cachedAudioCtx || cachedAudioCtx.state === "closed") {
+    try {
+      cachedAudioCtx = new AudioContextClass();
+    } catch {
+      return null;
+    }
+  }
+
+  if (cachedAudioCtx.state === "suspended") {
+    cachedAudioCtx.resume().catch(() => {});
+  }
+
+  return cachedAudioCtx;
+}
+
 /**
  * Play a crisp, gentle audio chime using Web Audio API (zero external assets needed).
+ * Respects browser autoplay policy and only plays after a user gesture.
  */
 export function playNotificationSound() {
   if (typeof window === "undefined") return;
   try {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
+    const ctx = getAudioContext();
+    if (!ctx || ctx.state === "suspended") return;
     const now = ctx.currentTime;
 
     // Pleasant dual-chime harmonic (D5: 587.33Hz -> A5: 880Hz)

@@ -50,8 +50,79 @@ const TABS = [
   { key: "system", label: "System", icon: <FaInfoCircle /> },
 ];
 
+function InputField({
+  label,
+  name,
+  type = "text",
+  placeholder,
+  hint,
+  prefix,
+  icon: Icon,
+  value = "",
+  onChange,
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-sm font-semibold text-gray-700">
+        {label}
+      </label>
+      {hint && <p className="text-gray-400 text-xs">{hint}</p>}
+      <div className="relative">
+        {Icon && (
+          <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
+            <Icon />
+          </div>
+        )}
+        {prefix && !Icon && (
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-sm pointer-events-none">
+            {prefix}
+          </span>
+        )}
+        <input
+          type={type}
+          name={name}
+          placeholder={placeholder}
+          value={value ?? ""}
+          onChange={onChange}
+          className={`w-full border border-gray-200 rounded-xl p-3 text-sm text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition bg-white ${
+            Icon || prefix ? "pl-10" : ""
+          }`}
+        />
+      </div>
+    </div>
+  );
+}
+
+function TextAreaField({
+  label,
+  name,
+  placeholder,
+  rows = 4,
+  hint,
+  value = "",
+  onChange,
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-sm font-semibold text-gray-700">
+        {label}
+      </label>
+      {hint && <p className="text-gray-400 text-xs">{hint}</p>}
+      <textarea
+        name={name}
+        placeholder={placeholder}
+        value={value ?? ""}
+        onChange={onChange}
+        rows={rows}
+        className="w-full border border-gray-200 rounded-xl p-3 text-sm text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition bg-white resize-y"
+      />
+    </div>
+  );
+}
+
 export default function Settings() {
   const { settings, loading, updateSettings } = useSettings();
+
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -107,9 +178,11 @@ export default function Settings() {
     }
   }, [user?.phone]);
 
+  const [initialLoaded, setInitialLoaded] = useState(false);
+
   // Populate form when settings load from Firestore
   useEffect(() => {
-    if (!loading && settings) {
+    if (!loading && settings && !initialLoaded) {
       setForm({
         societyName: settings.societyName || "",
         address: settings.address || "",
@@ -131,8 +204,9 @@ export default function Settings() {
         codeOfConduct: settings.codeOfConduct || "",
         googleMapUrl: settings.googleMapUrl || "",
       });
+      setInitialLoaded(true);
     }
-  }, [loading, settings]);
+  }, [loading, settings, initialLoaded]);
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -214,58 +288,6 @@ export default function Settings() {
     }
   }
 
-  function InputField({ label, name, type = "text", placeholder, hint, prefix, icon: Icon }) {
-    return (
-      <div className="space-y-1.5">
-        <label className="block text-sm font-semibold text-gray-700">
-          {label}
-        </label>
-        {hint && <p className="text-gray-400 text-xs">{hint}</p>}
-        <div className="relative">
-          {Icon && (
-            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
-              <Icon />
-            </div>
-          )}
-          {prefix && !Icon && (
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-sm pointer-events-none">
-              {prefix}
-            </span>
-          )}
-          <input
-            type={type}
-            name={name}
-            placeholder={placeholder}
-            value={form[name]}
-            onChange={handleChange}
-            className={`w-full border border-gray-200 rounded-xl p-3 text-sm text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition bg-white ${
-              Icon || prefix ? "pl-10" : ""
-            }`}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  function TextAreaField({ label, name, placeholder, rows = 4, hint }) {
-    return (
-      <div className="space-y-1.5">
-        <label className="block text-sm font-semibold text-gray-700">
-          {label}
-        </label>
-        {hint && <p className="text-gray-400 text-xs">{hint}</p>}
-        <textarea
-          name={name}
-          placeholder={placeholder}
-          value={form[name]}
-          onChange={handleChange}
-          rows={rows}
-          className="w-full border border-gray-200 rounded-xl p-3 text-sm text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition bg-white resize-y"
-        />
-      </div>
-    );
-  }
-
   // Check if admin is currently using mobile-based auth or has mobile linked
   const linkedPhone = user?.phone || (user?.email?.endsWith(`@${AUTH_EMAIL_DOMAIN}`) ? user.email.split("@")[0] : null);
   const isMobileLinked = Boolean(linkedPhone);
@@ -317,6 +339,8 @@ export default function Settings() {
                   <InputField
                     label="Society Name"
                     name="societyName"
+                    value={form.societyName}
+                    onChange={handleChange}
                     placeholder="e.g. D Block RWA Indraprastha"
                   />
                 </div>
@@ -325,6 +349,8 @@ export default function Settings() {
                   <InputField
                     label="Full Society Address"
                     name="address"
+                    value={form.address}
+                    onChange={handleChange}
                     placeholder="e.g. D-Block, Indraprastha Colony, Sector 3"
                     icon={FaMapMarkerAlt}
                   />
@@ -333,6 +359,8 @@ export default function Settings() {
                 <InputField
                   label="Default Monthly Charge"
                   name="monthlyCharge"
+                  value={form.monthlyCharge}
+                  onChange={handleChange}
                   type="number"
                   placeholder="e.g. 200"
                   prefix="₹"
@@ -342,6 +370,8 @@ export default function Settings() {
                 <InputField
                   label="Garbage Collector Timing"
                   name="collectorTiming"
+                  value={form.collectorTiming}
+                  onChange={handleChange}
                   placeholder="e.g. 7:00 AM - 10:30 AM"
                   icon={FaClock}
                   hint="Daily garbage pickup window."
@@ -350,6 +380,8 @@ export default function Settings() {
                 <InputField
                   label="Primary Contact Number"
                   name="contactNumber"
+                  value={form.contactNumber}
+                  onChange={handleChange}
                   placeholder="e.g. 9876543210"
                   icon={FaPhone}
                 />
@@ -357,6 +389,8 @@ export default function Settings() {
                 <InputField
                   label="Google Maps Location URL"
                   name="googleMapUrl"
+                  value={form.googleMapUrl}
+                  onChange={handleChange}
                   placeholder="https://maps.google.com/?q=..."
                   icon={FaMapMarkerAlt}
                   hint="Link for residents to find the RWA gate/office."
@@ -377,6 +411,8 @@ export default function Settings() {
                 <InputField
                   label="RWA Office Timing"
                   name="officeTiming"
+                  value={form.officeTiming}
+                  onChange={handleChange}
                   placeholder="e.g. Mon - Sat: 9:00 AM - 6:00 PM"
                   icon={FaClock}
                 />
@@ -384,6 +420,8 @@ export default function Settings() {
                 <InputField
                   label="Support Helpline Phone"
                   name="supportPhone"
+                  value={form.supportPhone}
+                  onChange={handleChange}
                   placeholder="e.g. 011-23456789"
                   icon={FaPhone}
                 />
@@ -391,6 +429,8 @@ export default function Settings() {
                 <InputField
                   label="Support Email Address"
                   name="supportEmail"
+                  value={form.supportEmail}
+                  onChange={handleChange}
                   type="email"
                   placeholder="support@society.com"
                   icon={FaEnvelope}
@@ -399,6 +439,8 @@ export default function Settings() {
                 <InputField
                   label="Office Landline / Desk Phone"
                   name="contactNumber"
+                  value={form.contactNumber}
+                  onChange={handleChange}
                   placeholder="e.g. 011-23456780"
                   icon={FaPhone}
                 />
@@ -451,6 +493,8 @@ export default function Settings() {
                     <InputField
                       label="Razorpay Key ID"
                       name="razorpayKeyId"
+                      value={form.razorpayKeyId}
+                      onChange={handleChange}
                       placeholder="e.g. rzp_live_xxxxxxxxxxxxxx or rzp_test_xxxxxxxxxxxxxx"
                       icon={FaKey}
                       hint="Generate this from your free Razorpay Dashboard > Settings > API Keys. Standard bank UPI has 0% processing fee."
@@ -498,6 +542,8 @@ export default function Settings() {
                     <InputField
                       label="Account Holder / Beneficiary Name"
                       name="accountHolderName"
+                      value={form.accountHolderName}
+                      onChange={handleChange}
                       placeholder="e.g. D BLOCK RESIDENTS WELFARE ASSOCIATION"
                       icon={FaBuilding}
                     />
@@ -506,6 +552,8 @@ export default function Settings() {
                   <InputField
                     label="Bank Name"
                     name="bankName"
+                    value={form.bankName}
+                    onChange={handleChange}
                     placeholder="e.g. State Bank of India"
                     icon={FaUniversity}
                   />
@@ -513,6 +561,8 @@ export default function Settings() {
                   <InputField
                     label="Account Number"
                     name="bankAccount"
+                    value={form.bankAccount}
+                    onChange={handleChange}
                     placeholder="e.g. 38472910482"
                     icon={FaCreditCard}
                   />
@@ -520,12 +570,16 @@ export default function Settings() {
                   <InputField
                     label="IFSC Code"
                     name="bankIfsc"
+                    value={form.bankIfsc}
+                    onChange={handleChange}
                     placeholder="e.g. SBIN0001234"
                   />
 
                   <InputField
                     label="Branch Name"
                     name="bankBranch"
+                    value={form.bankBranch}
+                    onChange={handleChange}
                     placeholder="e.g. Sector 62 Branch"
                   />
 
@@ -533,6 +587,8 @@ export default function Settings() {
                     <InputField
                       label="Official Society UPI ID (VPA)"
                       name="upiId"
+                      value={form.upiId}
+                      onChange={handleChange}
                       placeholder="e.g. dblockrwa@sbi"
                       hint="Primary UPI identifier for society records and fallback collections."
                     />
@@ -558,6 +614,8 @@ export default function Settings() {
               <TextAreaField
                 label="Society By-Laws & General Rules"
                 name="societyRules"
+                value={form.societyRules}
+                onChange={handleChange}
                 placeholder="1. Waste segregation is mandatory (wet and dry).&#10;2. Parking allowed only in designated slots.&#10;3. Quiet hours 10:00 PM to 6:00 AM..."
                 rows={6}
                 hint="Key community rules for all residents."
@@ -566,6 +624,8 @@ export default function Settings() {
               <TextAreaField
                 label="Code of Conduct"
                 name="codeOfConduct"
+                value={form.codeOfConduct}
+                onChange={handleChange}
                 placeholder="Guidelines for respectful behavior towards staff, neighbors, and common facilities..."
                 rows={5}
                 hint="Expected conduct inside society premises."

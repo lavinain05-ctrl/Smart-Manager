@@ -1352,6 +1352,8 @@ export default function ResidentDashboard() {
                             photo = "/committee/dinesh-kumar.png";
                           } else if (member.designation?.toLowerCase() === "vice secretary" || member.name?.toLowerCase().includes("manoj") || member.name?.toLowerCase().includes("tomar")) {
                             photo = "/committee/manoj-tomar.jpg";
+                          } else if (member.name?.toLowerCase().includes("pandey") || member.name?.toLowerCase().includes("d k") || member.name?.toLowerCase().includes("dk")) {
+                            photo = "/committee/dk-pandey.jpg";
                           }
                         }
 

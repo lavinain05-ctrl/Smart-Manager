@@ -125,6 +125,11 @@ export function getAdminMemberPhoto(member) {
     member?.name?.toLowerCase().includes("manoj") ||
     member?.name?.toLowerCase().includes("tomar");
   if (isManoj) return "/committee/manoj-tomar.jpg";
+  const isPandey =
+    member?.name?.toLowerCase().includes("pandey") ||
+    member?.name?.toLowerCase().includes("d k") ||
+    member?.name?.toLowerCase().includes("dk");
+  if (isPandey) return "/committee/dk-pandey.jpg";
   return null;
 }
 

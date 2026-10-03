@@ -733,6 +733,8 @@ export default function CommitteeDashboard() {
                     ? "/committee/dinesh-kumar.png"
                     : (member.designation === "Vice Secretary" || member.name?.toLowerCase().includes("manoj") || member.name?.toLowerCase().includes("tomar"))
                     ? "/committee/manoj-tomar.jpg"
+                    : (member.name?.toLowerCase().includes("pandey") || member.name?.toLowerCase().includes("d k") || member.name?.toLowerCase().includes("dk"))
+                    ? "/committee/dk-pandey.jpg"
                     : null
                 );
                 return (

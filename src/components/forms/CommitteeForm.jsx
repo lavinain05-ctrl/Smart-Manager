@@ -216,6 +216,8 @@ export default function CommitteeForm({
           ? "/committee/manoj-tomar.jpg"
           : member.designation?.toLowerCase() === "secretary" || member.name?.toLowerCase().includes("janardan") || member.name?.toLowerCase().includes("janardhan")
           ? "/committee/secretary.jpg"
+          : member.name?.toLowerCase().includes("pandey") || member.name?.toLowerCase().includes("d k") || member.name?.toLowerCase().includes("dk")
+          ? "/committee/dk-pandey.jpg"
           : ""
       );
       setPhotoFile(null);
@@ -293,6 +295,10 @@ export default function CommitteeForm({
       setPhotoPreview("/committee/manoj-tomar.jpg");
       setPhotoMode("url");
       setDesignation("Vice Secretary");
+    } else if (resName.includes("pandey") || resName.includes("d k") || resName.includes("dk")) {
+      setPhotoUrl("/committee/dk-pandey.jpg");
+      setPhotoPreview("/committee/dk-pandey.jpg");
+      setPhotoMode("url");
     }
 
     setIsDropdownOpen(false);

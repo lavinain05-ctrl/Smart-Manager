@@ -1,7 +1,24 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { formatResidentFloor } from "../services/propertyService";
 
-export function generateReceipt(payment) {
+export function generateReceipt(rawPayment, residentInfo = null) {
+  if (!rawPayment) return;
+
+  const payment = residentInfo
+    ? {
+        ...residentInfo,
+        ...rawPayment,
+        plotNumber: rawPayment.plotNumber || residentInfo.plotNumber || residentInfo.plot || "",
+        floor: rawPayment.floor || residentInfo.floor || "",
+        floorCode: rawPayment.floorCode || residentInfo.floorCode || "",
+        unitNumber: rawPayment.unitNumber || residentInfo.unitNumber || residentInfo.unit || "",
+        personType: rawPayment.personType || residentInfo.personType || residentInfo.occupantType || "",
+        block: rawPayment.block || residentInfo.block || "",
+        flat: rawPayment.flat || rawPayment.flatNumber || residentInfo.flat || residentInfo.flatNumber || "",
+      }
+    : rawPayment;
+
   const doc = new jsPDF();
 
   // Header
@@ -32,7 +49,7 @@ export function generateReceipt(payment) {
   doc.setTextColor(0);
 
   doc.text(
-    "PAYMENT RECEIPT",
+    "GARBAGE COLLECTION FEE RECEIPT",
     105,
     45,
     {
@@ -40,19 +57,37 @@ export function generateReceipt(payment) {
     }
   );
 
+  const floorLabel = formatResidentFloor(payment.floor);
+
   autoTable(doc, {
     startY: 55,
 
     head: [["Field", "Value"]],
 
     body: [
-      ["Receipt No", payment.receiptNumber],
+      ["Receipt No", payment.receiptNumber || "-"],
 
-      ["Resident", payment.residentName],
+      ["Resident", payment.residentName || "-"],
 
-      ["Flat", payment.flat],
+      ["Flat / Unit", payment.flat || payment.flatNumber || "—"],
 
-      ["Block", payment.block],
+      ...(payment.plotNumber && payment.plotNumber !== payment.flat
+        ? [["Plot Number", `Plot ${payment.plotNumber}`]]
+        : []),
+
+      ...(floorLabel
+        ? [["Floor", floorLabel]]
+        : []),
+
+      ...(payment.unitNumber
+        ? [["Unit Number", `Unit ${payment.unitNumber}`]]
+        : []),
+
+      ["Block", payment.block || "-"],
+
+      ...(payment.personType
+        ? [["Resident Type", payment.personType]]
+        : []),
 
       [
         "Amount",

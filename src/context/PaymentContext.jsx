@@ -566,5 +566,10 @@ export function PaymentProvider({ children }) {
 }
 
 export function usePayments() {
-  return useContext(PaymentContext);
+  const ctx = useContext(PaymentContext);
+  return ctx || {
+    payments: [],
+    addPayment: async () => {},
+    reversePayment: async () => {},
+  };
 }

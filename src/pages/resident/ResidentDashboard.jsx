@@ -28,6 +28,7 @@ import {
   FaLightbulb,
   FaChevronRight,
   FaBell,
+  FaFileAlt,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -37,6 +38,7 @@ import { useResidents } from "../../context/ResidentContext";
 import { useGarbage } from "../../context/GarbageContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useBills } from "../../context/BillContext";
+import { isPriorToCollectionStart, isPriorToResidentBillingStart } from "../../utils/billingCycle";
 import { useBilling } from "../../context/BillingContext";
 import { useNotices } from "../../context/NoticeContext";
 import { useComplaints } from "../../context/ComplaintContext";
@@ -50,6 +52,8 @@ import { isGcParticipating } from "../../services/statisticsService";
 import { subscribeSpecialCollections } from "../../services/specialCollectionService";
 import { DEFAULT_JOIN_GC_MESSAGE } from "./ResidentGarbage";
 import RecentUpdatesCard from "../../components/notifications/RecentUpdatesCard";
+import OnlinePaymentModal from "../../components/payments/OnlinePaymentModal";
+import { useSettings } from "../../context/SettingsContext";
 
 const GC_CONFIG = {
   participating: {
@@ -76,7 +80,7 @@ const GC_CONFIG = {
 
 export default function ResidentDashboard() {
   const { user } = useAuth();
-  const { residents } = useResidents();
+  const { residents, loading: residentsLoading } = useResidents();
   const { payments } = usePayments();
   const { bills } = useBills();
   const { selectedMonth, selectedYear } = useBilling();
@@ -86,10 +90,12 @@ export default function ResidentDashboard() {
   const { committee } = useCommittee();
   const { activities } = useActivities();
   const { garbageRequests = [], submitRequest } = useGarbage();
+  const { settings } = useSettings();
 
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinReason, setJoinReason] = useState(DEFAULT_JOIN_GC_MESSAGE);
   const [submittingJoin, setSubmittingJoin] = useState(false);
+  const [payModalBill, setPayModalBill] = useState(null);
 
   // Live special collection drives
   const [specialDrives, setSpecialDrives] = useState([]);
@@ -110,15 +116,30 @@ export default function ResidentDashboard() {
   }, [user]);
 
   const resident = useMemo(() => {
-    return (
-      residents.find(
-        (r) =>
-          r.id === user?.residentId ||
-          r.id === user?.uid ||
-          (cleanPhone && String(r.mobile || "").replace(/\D/g, "").slice(-10) === cleanPhone) ||
-          (user?.name && r.owner?.toLowerCase() === user.name.toLowerCase())
-      ) || null
+    const found = residents.find(
+      (r) =>
+        r.id === user?.residentId ||
+        r.id === user?.uid ||
+        (cleanPhone && String(r.mobile || "").replace(/\D/g, "").slice(-10) === cleanPhone) ||
+        (user?.name && r.owner?.toLowerCase() === user.name.toLowerCase())
     );
+    if (found) return found;
+
+    // Immediate fallback: If user profile already carries flat details or is committee/admin
+    if (user?.flat || user?.role === "committee" || user?.role === "admin") {
+      return {
+        id: user?.residentId || user?.uid,
+        owner: user?.name || "Resident",
+        name: user?.name || "Resident",
+        flat: user?.flat || "D Block",
+        block: user?.block || "",
+        mobile: user?.phone || user?.mobile || cleanPhone || "",
+        status: "active",
+        isFallback: true,
+      };
+    }
+
+    return null;
   }, [residents, user, cleanPhone]);
 
   const canonicalResidentId = resident?.id || user?.residentId || user?.uid;
@@ -167,10 +188,11 @@ export default function ResidentDashboard() {
     if (!isParticipating) return [];
     return bills.filter(
       (b) =>
-        b.residentId === canonicalResidentId ||
-        b.residentId === resident?.id ||
-        b.residentId === user?.residentId ||
-        b.residentId === user?.uid
+        (b.residentId === canonicalResidentId ||
+          b.residentId === resident?.id ||
+          b.residentId === user?.residentId ||
+          b.residentId === user?.uid) &&
+        !isPriorToResidentBillingStart(resident, b.month, b.year)
     );
   }, [bills, user, isParticipating, canonicalResidentId, resident]);
 
@@ -248,7 +270,19 @@ export default function ResidentDashboard() {
   } = useNotifications();
 
   const [phoneBannerDismissed, setPhoneBannerDismissed] = useState(() => {
-    return localStorage.getItem("rwa_dismiss_phone_notif_banner") === "true";
+    try {
+      if (sessionStorage.getItem("rwa_notif_banner_dismissed_session") === "true") {
+        return true;
+      }
+      const snoozeUntil = parseInt(localStorage.getItem("rwa_notif_banner_snooze_until_login") || "0", 10);
+      const currentLoginCount = parseInt(localStorage.getItem("rwa_user_login_count") || "1", 10);
+      if (snoozeUntil > 0 && currentLoginCount < snoozeUntil) {
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
   });
 
   // Active special drives to display
@@ -331,7 +365,7 @@ export default function ResidentDashboard() {
 
   // Auto-dispatch in-app Notification when a new month starts and fee is unpaid
   useEffect(() => {
-    if (!user?.uid || !isParticipating || isCurrentMonthPaid) return;
+    if (!user?.uid || !isParticipating || isCurrentMonthPaid || isPriorToResidentBillingStart(resident, currentMonthName, currentYearNum)) return;
 
     const notifKey = `rwa_gc_due_notif_${user.uid}_${currentMonthName}_${currentYearNum}`;
     if (localStorage.getItem(notifKey)) return;
@@ -349,22 +383,37 @@ export default function ResidentDashboard() {
       return;
     }
 
+    // Set lock synchronously before network call to prevent StrictMode / re-render duplicates
+    localStorage.setItem(notifKey, "true");
+
+    const deterministicId = `gc_due_${user.uid}_${currentMonthName}_${currentYearNum}`
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, "_");
+
     createNotification({
+      id: deterministicId,
       userId: user.uid,
       title: `🔔 Garbage Fee Due: ${currentMonthName} ${currentYearNum}`,
       message: `Your monthly garbage collection fee of ₹${currentMonthFee} for ${currentMonthName} ${currentYearNum} is due. Please pay to ensure continuous daily door-to-door waste collection.`,
       type: "payment",
       link: "/resident/bills",
-    })
-      .then(() => {
-        localStorage.setItem(notifKey, "true");
-      })
-      .catch((err) => {
-        console.warn("Could not dispatch monthly garbage due notification:", err);
-      });
+    }).catch((err) => {
+      console.warn("Could not dispatch monthly garbage due notification:", err);
+    });
   }, [user?.uid, isParticipating, isCurrentMonthPaid, currentMonthName, currentYearNum, currentMonthFee, notifications]);
 
   if (!resident) {
+    if (residentsLoading || residents.length === 0) {
+      return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Loading your resident dashboard...</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 max-w-md text-center shadow-lg">
@@ -411,9 +460,15 @@ export default function ResidentDashboard() {
               type="button"
               onClick={() => {
                 setPhoneBannerDismissed(true);
-                localStorage.setItem("rwa_dismiss_phone_notif_banner", "true");
+                try {
+                  sessionStorage.setItem("rwa_notif_banner_dismissed_session", "true");
+                  const currentLoginCount = parseInt(localStorage.getItem("rwa_user_login_count") || "1", 10);
+                  // Snooze to show again after 2 logins
+                  localStorage.setItem("rwa_notif_banner_snooze_until_login", String(currentLoginCount + 2));
+                  localStorage.removeItem("rwa_dismiss_phone_notif_banner");
+                } catch {}
               }}
-              className="px-3 py-1.5 text-xs text-emerald-100 hover:text-white transition"
+              className="px-3 py-1.5 text-xs text-emerald-100 hover:text-white transition cursor-pointer"
             >
               Later
             </button>
@@ -435,66 +490,145 @@ export default function ResidentDashboard() {
         </div>
       )}
 
-      {/* ═══════════ Hero Card: Resident & Society Profile ═══════════ */}
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 text-white p-4 sm:p-6 md:p-8 shadow-xl border border-slate-800/80">
-        {/* Glow ambient effects */}
-        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 -ml-20 -mb-20 w-72 h-72 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
+      {/* ═══════════ Scenic Society Hero Banner (Matching User Reference) ═══════════ */}
+      <div className="relative group overflow-hidden rounded-3xl shadow-xl border border-slate-200/60 dark:border-slate-800 bg-slate-900 transition-all duration-300">
+        {/* Background Image Container with subtle hover zoom */}
+        <div className="relative h-64 sm:h-72 md:h-80 w-full overflow-hidden">
+          <img
+            src="/society-banner.jpg"
+            alt="D Block RWA Society"
+            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-1000 ease-out"
+          />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
-          <div className="flex items-start sm:items-center gap-3.5 sm:gap-5">
-            {/* Avatar container */}
-            <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-xl sm:text-3xl font-black shrink-0 shadow-lg shadow-blue-500/30 border border-white/20">
-              {resident.owner
-                ?.split(" ")
-                .map((n) => n[0])
-                .slice(0, 2)
-                .join("")
-                .toUpperCase() || <FaUser />}
+          {/* Gradients: Vignette, Top Subtle Tint, Bottom Gradient for maximum readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/40 to-black/30" />
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-transparent to-slate-950/40" />
+
+          {/* Top Floating Society Badge & Verified Status */}
+          <div className="absolute top-4 left-4 right-4 flex items-center justify-between gap-2 z-10 flex-wrap">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/20 text-white text-[11px] sm:text-xs font-bold tracking-wide shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="truncate">D BLOCK RWA • INDRAPRASTHA</span>
             </div>
 
-            <div className="space-y-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
-                <span className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-400/30">
-                  <FaShieldAlt className="text-[8px] sm:text-[9px]" /> Verified Resident
-                </span>
-                <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider border ${gcCfg.badgeClass}`}>
-                  {gcCfg.icon} {gcCfg.label}
-                </span>
-              </div>
-
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight truncate">
-                {resident.owner}
-              </h1>
-
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-0.5 text-xs text-slate-300">
-                <span className="inline-flex items-center gap-1 bg-white/10 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg font-semibold text-white border border-white/10 text-xs">
-                  <FaHome className="text-emerald-400" /> Flat {resident.flat}
-                </span>
-                {resident.block && (
-                  <span className="bg-white/10 px-2 py-0.5 sm:py-1 rounded-lg font-medium border border-white/10 text-xs">
-                    Block {resident.block}
-                  </span>
-                )}
-                {resident.floor && (
-                  <span className="bg-white/10 px-2 py-0.5 sm:py-1 rounded-lg font-medium border border-white/10 text-xs">
-                    Floor {resident.floor}
-                  </span>
-                )}
-                <span className="text-slate-400 hidden sm:inline">• D BLOCK RWA INDRAPRASTHA</span>
-              </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md text-white text-[10px] font-extrabold uppercase tracking-wider border border-white/30 shadow-sm">
+                <FaShieldAlt className="text-emerald-300" /> Verified Resident
+              </span>
+              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider backdrop-blur-md border shadow-sm ${gcCfg.badgeClass}`}>
+                {gcCfg.icon} {gcCfg.label}
+              </span>
             </div>
           </div>
 
-          {/* Quick Header Shortcuts */}
-          <div className="flex items-center gap-2 self-start md:self-center shrink-0 flex-wrap">
+          {/* Center / Bottom Content: "Welcome" & "Your Society, Our Community" */}
+          <div className="absolute inset-0 flex flex-col justify-end p-5 sm:p-7 md:p-8 z-10 pb-6 sm:pb-8">
+            <div className="space-y-1.5 max-w-2xl">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]">
+                Welcome
+              </h1>
+              <p className="text-base sm:text-lg md:text-xl font-semibold text-emerald-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
+                Your Society, Our Community
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/20 backdrop-blur-md border border-white/25 text-white text-xs sm:text-sm font-bold shadow-sm">
+                  <FaHome className="text-emerald-300 text-xs" />
+                  <span>Flat {resident.flat}</span>
+                  {resident.block && <span>({resident.block})</span>}
+                  {resident.floor && <span>• {resident.floor}</span>}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-black/40 backdrop-blur-md border border-white/15 text-slate-200 text-xs sm:text-sm font-medium">
+                  <FaUser className="text-blue-300 text-xs" />
+                  <span>{resident.owner || "Resident"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ═══════════ Overlapping Quick Action Cards (Notices, Events, Receipts, Committee, Helpdesk) ═══════════ */}
+        <div className="p-3 sm:p-4 bg-gradient-to-b from-slate-900 to-slate-950 border-t border-white/10">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
+            {/* Notices */}
+            <Link
+              to="/resident/notices"
+              className="group/btn relative overflow-hidden bg-white dark:bg-slate-800 hover:bg-blue-50/90 dark:hover:bg-slate-700/90 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-center text-center active:scale-[0.98] cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 dark:bg-blue-950/70 dark:text-blue-400 flex items-center justify-center text-xl mb-2 group-hover/btn:scale-110 transition-transform shadow-xs">
+                <FaFileAlt />
+              </div>
+              <span className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                Notices
+              </span>
+              <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 mt-0.5">
+                {notices.length} {notices.length === 1 ? "Notice" : "Notices"} Active
+              </span>
+            </Link>
+
+            {/* Events */}
+            <Link
+              to="/resident/events"
+              className="group/btn relative overflow-hidden bg-white dark:bg-slate-800 hover:bg-emerald-50/90 dark:hover:bg-slate-700/90 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-center text-center active:scale-[0.98] cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/70 dark:text-emerald-400 flex items-center justify-center text-xl mb-2 group-hover/btn:scale-110 transition-transform shadow-xs">
+                <FaCalendarAlt />
+              </div>
+              <span className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                Events
+              </span>
+              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                {events.length} Upcoming
+              </span>
+            </Link>
+
+            {/* Receipts */}
+            <Link
+              to="/resident/receipts"
+              className="group/btn relative overflow-hidden bg-white dark:bg-slate-800 hover:bg-amber-50/90 dark:hover:bg-slate-700/90 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-center text-center active:scale-[0.98] cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950/70 dark:text-amber-400 flex items-center justify-center text-xl mb-2 group-hover/btn:scale-110 transition-transform shadow-xs">
+                <FaReceipt />
+              </div>
+              <span className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                Receipts
+              </span>
+              <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-0.5">
+                Payment History
+              </span>
+            </Link>
+
+            {/* D Block Indraprastha RWA Executive Committee */}
+            <Link
+              to="/resident/committee"
+              className="group/btn relative overflow-hidden bg-white dark:bg-slate-800 hover:bg-indigo-50/90 dark:hover:bg-slate-700/90 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-center text-center active:scale-[0.98] cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950/70 dark:text-indigo-400 flex items-center justify-center text-xl mb-2 group-hover/btn:scale-110 transition-transform shadow-xs">
+                <FaUserTie />
+              </div>
+              <span className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white leading-tight">
+                Executive Committee
+              </span>
+              <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 mt-0.5">
+                {activeCommittee.length > 0 ? `${activeCommittee.length} Office Bearers` : "D Block RWA"}
+              </span>
+            </Link>
+
+            {/* Helpdesk / Support */}
             <Link
               to="/resident/support"
-              className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 transition backdrop-blur-sm"
-              title="Help & FAQs"
+              className="group/btn relative overflow-hidden bg-white dark:bg-slate-800 hover:bg-purple-50/90 dark:hover:bg-slate-700/90 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-center text-center active:scale-[0.98] cursor-pointer col-span-2 sm:col-span-1"
             >
-              <FaQuestionCircle className="text-amber-400 text-xs" />
-              <span>Support & FAQs</span>
+              <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-600 dark:bg-purple-950/70 dark:text-purple-400 flex items-center justify-center text-xl mb-2 group-hover/btn:scale-110 transition-transform shadow-xs">
+                <FaQuestionCircle />
+              </div>
+              <span className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                Support & FAQs
+              </span>
+              <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 mt-0.5">
+                Emergency & Help
+              </span>
             </Link>
           </div>
         </div>
@@ -557,12 +691,29 @@ export default function ResidentDashboard() {
               </div>
 
               <div className="flex sm:flex-col items-center sm:items-end justify-end gap-2.5 shrink-0 pt-2 md:pt-0">
-                <Link
-                  to="/resident/bills"
-                  className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2"
+                <button
+                  type="button"
+                  onClick={() => {
+                    const matchedBill = myBills.find(
+                      (b) =>
+                        (b.month === currentMonthName && Number(b.year) === currentYearNum) ||
+                        (b.month === selectedMonth && Number(b.year) === Number(selectedYear))
+                    );
+                    setPayModalBill(
+                      matchedBill || {
+                        id: `bill_${resident.id}_${currentMonthName}_${currentYearNum}`,
+                        month: currentMonthName,
+                        year: currentYearNum,
+                        amount: currentMonthFee,
+                        residentId: resident.id,
+                        status: "Pending",
+                      }
+                    );
+                  }}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                 >
-                  <FaWallet /> Pay ₹{currentMonthFee} Now <FaArrowRight className="text-xs" />
-                </Link>
+                  <FaWallet /> Pay ₹{currentMonthFee} Online <FaArrowRight className="text-xs" />
+                </button>
                 <Link
                   to="/resident/bills"
                   className="w-full sm:w-auto px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold transition text-center"
@@ -1182,10 +1333,16 @@ export default function ResidentDashboard() {
                   ? "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200"
                   : member.designation === "Vice President"
                   ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200"
-                  : member.designation === "General Secretary"
+                  : member.designation === "General Secretary" || member.designation === "Secretary"
                   ? "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200"
                   : member.designation === "Treasurer"
                   ? "bg-violet-100 text-violet-900 dark:bg-violet-950/60 dark:text-violet-300 border-violet-200"
+                  : member.designation === "Vice Treasurer"
+                  ? "bg-teal-100 text-teal-900 dark:bg-teal-950/60 dark:text-teal-300 border-teal-200"
+                  : member.designation === "Spokesperson"
+                  ? "bg-cyan-100 text-cyan-900 dark:bg-cyan-950/60 dark:text-cyan-300 border-cyan-200"
+                  : member.designation === "Advisor"
+                  ? "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200"
                   : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-200";
 
               return (
@@ -1195,22 +1352,53 @@ export default function ResidentDashboard() {
                 >
                   <div>
                     <div className="flex items-center gap-3">
-                      {member.profilePhotoUrl ? (
-                        <img
-                          src={member.profilePhotoUrl}
-                          alt={member.name}
-                          className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
-                          {member.name
-                            ?.split(" ")
-                            .map((n) => n[0])
-                            .slice(0, 2)
-                            .join("")
-                            .toUpperCase() || "RWA"}
-                        </div>
-                      )}
+                      {(() => {
+                        let photo = member.profilePhotoUrl;
+                        if (
+                          !photo ||
+                          (photo.includes("narendra") && photo.endsWith(".jpg")) ||
+                          member.designation?.toLowerCase() === "spokesperson" ||
+                          member.name?.toLowerCase().includes("narendra") ||
+                          member.name?.toLowerCase().includes("dhama")
+                        ) {
+                          if (member.name?.toLowerCase().includes("narendra") || member.designation?.toLowerCase() === "spokesperson") {
+                            photo = "/committee/narendra-dhama.png";
+                          } else if (member.designation?.toLowerCase() === "president" || member.name?.toLowerCase().includes("dharmendra")) {
+                            photo = "/committee/president.jpg";
+                          } else if (member.designation?.toLowerCase() === "vice president" || member.name?.toLowerCase().includes("ankit")) {
+                            photo = "/committee/ankit-chaudhary.png";
+                          } else if (member.designation?.toLowerCase() === "vice treasurer" || member.name?.toLowerCase().includes("vinod")) {
+                            photo = "/committee/vinod-kumar.jpg";
+                          } else if (member.designation?.toLowerCase() === "advisor" || member.name?.toLowerCase().includes("dinesh")) {
+                            photo = "/committee/dinesh-kumar.png";
+                          }
+                        }
+
+                        return (
+                          <div className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0">
+                            {photo && (
+                              <img
+                                src={photo}
+                                alt={member.name}
+                                className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                  const fallback = e.currentTarget.parentElement?.querySelector(".avatar-initials");
+                                  if (fallback) fallback.style.display = "flex";
+                                }}
+                              />
+                            )}
+                            <div className={`avatar-initials w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white items-center justify-center font-black text-sm shrink-0 shadow-xs ${photo ? "hidden" : "flex"}`}>
+                              {member.name
+                                ?.split(" ")
+                                .map((n) => n[0])
+                                .slice(0, 2)
+                                .join("")
+                                .toUpperCase() || "RWA"}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       <div className="min-w-0 flex-1">
                         <h3 className="font-bold text-sm text-slate-900 dark:text-white truncate">
@@ -1219,16 +1407,6 @@ export default function ResidentDashboard() {
                         <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border mt-0.5 ${desigColor}`}>
                           {member.designation}
                         </span>
-                        {(member.flat || member.block) && (
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate flex items-center gap-1">
-                            <FaHome className="text-[9px] text-slate-400 shrink-0" />
-                            <span>
-                              {member.flat ? `Flat ${member.flat}` : ""}
-                              {member.flat && member.block ? " • " : ""}
-                              {member.block ? `Block ${member.block}` : ""}
-                            </span>
-                          </p>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -1264,6 +1442,7 @@ export default function ResidentDashboard() {
           </div>
         )}
       </div>
+
 
       {/* ═══════════ Join GC Request Modal ═══════════ */}
       {showJoinModal && (
@@ -1344,6 +1523,21 @@ export default function ResidentDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Online UPI Payment Modal */}
+      {payModalBill && (
+        <OnlinePaymentModal
+          isOpen={Boolean(payModalBill)}
+          onClose={() => setPayModalBill(null)}
+          bill={payModalBill}
+          resident={resident}
+          bills={bills}
+          settings={settings}
+          onPaymentSuccess={() => {
+            setPayModalBill(null);
+          }}
+        />
       )}
     </div>
   );

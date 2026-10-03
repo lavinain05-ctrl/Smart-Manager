@@ -4,6 +4,8 @@
 // Pure functions — no Firestore, no side effects.
 // =============================================
 
+import { isPriorToCollectionStart } from "../utils/billingCycle";
+
 // ─── Flat‑number normalizer (shared) ─────────
 
 function normalizeFlat(flat) {
@@ -50,7 +52,77 @@ export function calcResidentStats(residents = []) {
   const inactive = total - active;
   const gcParticipants = activeResidents.filter((r) => isGcParticipating(r)).length;
   const gcNonParticipants = active - gcParticipants;
-  return { total, active, inactive, gcParticipants, gcNonParticipants };
+
+  let owners = 0;
+  let tenants = 0;
+  let familyMembers = 0;
+
+  residents.forEach((r) => {
+    const pType = (r.personType || "OWNER").toUpperCase();
+    if (pType === "TENANT" || pType === "RENTED") tenants++;
+    else if (pType === "FAMILY_MEMBER") familyMembers++;
+    else owners++;
+  });
+
+  return {
+    total,
+    active,
+    inactive,
+    gcParticipants,
+    gcNonParticipants,
+    owners,
+    tenants,
+    familyMembers,
+  };
+}
+
+/**
+ * Canonical Property statistics engine (Phase 7).
+ * Accurately aggregates properties, unique plots, occupancy, and floors.
+ */
+export function calcCanonicalPropertyStats(properties = [], residents = []) {
+  const totalProperties = properties.length;
+
+  const uniquePlots = new Set(
+    properties.map((p) => `${p.blockId || ""}||${p.normalizedPlotNumber || p.plotNumber || ""}`)
+  ).size;
+
+  let ownerOccupied = 0;
+  let tenantOccupied = 0;
+  let vacant = 0;
+  let withUnitNumbers = 0;
+  let withoutUnitNumbers = 0;
+  const byFloor = {};
+
+  properties.forEach((p) => {
+    const status = (p.occupancyStatus || "").toUpperCase();
+    if (status === "OWNER_OCCUPIED") ownerOccupied++;
+    else if (status === "TENANT_OCCUPIED") tenantOccupied++;
+    else if (status === "VACANT") vacant++;
+    else if (p.ownerResidentId) ownerOccupied++;
+    else if (p.currentOccupantResidentId) tenantOccupied++;
+    else vacant++;
+
+    if (p.normalizedUnitNumber || p.unitNumber) {
+      withUnitNumbers++;
+    } else {
+      withoutUnitNumbers++;
+    }
+
+    const fl = p.floor || "Ground Floor";
+    byFloor[fl] = (byFloor[fl] || 0) + 1;
+  });
+
+  return {
+    totalProperties,
+    uniquePlots,
+    ownerOccupied,
+    tenantOccupied,
+    vacant,
+    withUnitNumbers,
+    withoutUnitNumbers,
+    byFloor,
+  };
 }
 
 /**
@@ -221,6 +293,27 @@ export function calcGarbageStats(accounts = [], bills = [], residents = [], mont
       .filter((a) => a.status === "active" && a.residentId && participatingIds.has(a.residentId))
       .map((a) => a.residentId)
   ).size;
+
+  if (isPriorToCollectionStart(month, year)) {
+    return {
+      totalAccounts,
+      activeAccounts,
+      gcParticipants,
+      gcNonParticipants,
+      totalBilled: 0,
+      collectedAmount: 0,
+      pendingAmount: 0,
+      collectionRate: 0,
+      paidCount: 0,
+      pendingCount: 0,
+      monthlyBills: [],
+      paidBills: [],
+      unpaidBills: [],
+      paidResidentIds: new Set(),
+      unpaidResidents: [],
+      participatingResidents,
+    };
+  }
 
 
   // Monthly bills for selected period

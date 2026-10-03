@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import BrandPageLoader from "../../components/common/BrandPageLoader";
 
 export default function ProtectedRoute({
   children,
@@ -7,13 +8,7 @@ export default function ProtectedRoute({
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center">
-        <div className="text-2xl font-semibold">
-          Loading...
-        </div>
-      </div>
-    );
+    return <BrandPageLoader message="Verifying session..." />;
   }
 
   if (!user) {

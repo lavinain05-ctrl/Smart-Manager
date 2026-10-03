@@ -1,16 +1,13 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { getHomeRouteForRole } from "../../services/authService";
+import BrandPageLoader from "../../components/common/BrandPageLoader";
 
 export default function CommitteeRoute({ children }) {
   const { user, loading, isImpersonating } = useAuth();
 
   if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600" />
-      </div>
-    );
+    return <BrandPageLoader message="Opening Committee Portal..." />;
   }
 
   // Admin live portal simulation mode - allow immediate bypass
@@ -23,7 +20,11 @@ export default function CommitteeRoute({ children }) {
   }
 
   const role = (user?.role || "").toLowerCase();
-  if (role !== "committee") {
+  if (!role) {
+    return <BrandPageLoader message="Opening Committee Portal..." />;
+  }
+  // Allow both committee members and admins
+  if (role !== "committee" && role !== "admin") {
     return <Navigate to={getHomeRouteForRole(role)} replace />;
   }
 

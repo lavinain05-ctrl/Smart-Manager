@@ -164,7 +164,7 @@ export default function ForgotPassword() {
   const [residentMode, setResidentMode] = useState("email_link");
   const [residentIdentifier, setResidentIdentifier] = useState(() => {
     if (isExactAdminEmail(identifierParam)) return "";
-    return identifierParam;
+    return identifierParam.includes("@") ? identifierParam : "";
   });
   const [residentEmailLoading, setResidentEmailLoading] = useState(false);
   const [residentEmailSent, setResidentEmailSent] = useState(false);
@@ -260,7 +260,12 @@ export default function ForgotPassword() {
     if (e) e.preventDefault();
     const raw = (residentIdentifier || "").trim();
     if (!raw) {
-      toast.error("Please enter your registered email address, 10-digit mobile number, or flat number.");
+      toast.error("Please enter your registered email address.");
+      return;
+    }
+
+    if (!raw.includes("@") || !raw.includes(".")) {
+      toast.error("Please enter a valid email address (e.g. name@gmail.com).");
       return;
     }
 
@@ -268,36 +273,28 @@ export default function ForgotPassword() {
     setResidentNoEmailWarning(null);
 
     try {
-      const result = await findPersonalEmailForIdentifier(raw);
+      const corrected = correctEmailTypo(raw);
+      const targetEmail = corrected.email.toLowerCase();
 
-      if (!result.found) {
-        setResidentNoEmailWarning({
-          mobile: result.mobile || (normalizeMobile(raw).length === 10 ? normalizeMobile(raw) : ""),
-          identifier: raw,
-          message: result.error || `No registered account found for "${raw}".`,
-          tip: result.tip || "Please check your input or try searching by Flat Number (e.g. D571).",
-        });
-        return;
-      }
-
-      const targetEmail = result.email.toLowerCase();
-
-      if (result.wasCorrected) {
-        toast(`Autocorrected typo: "${result.correctedFrom}" → "${targetEmail}"`, {
+      if (corrected.wasCorrected) {
+        toast(`Autocorrected typo: "${corrected.original}" → "${targetEmail}"`, {
           icon: "ℹ️",
           duration: 4500,
         });
       }
+
+      // Look up resident account info for personalized confirmation
+      const result = await findPersonalEmailForIdentifier(targetEmail);
 
       // Send password reset email via Firebase Auth
       await sendPasswordResetEmail(auth, targetEmail);
 
       setResidentSentToEmail(targetEmail);
       setResidentMatchedInfo({
-        flat: result.flat || "",
-        name: result.name || "",
-        mobile: result.mobile || "",
-        matchedBy: result.matchedBy || "",
+        flat: result?.flat || "",
+        name: result?.name || "",
+        mobile: result?.mobile || "",
+        matchedBy: "email",
       });
       setResidentEmailSent(true);
       setResidentResendCooldown(45);
@@ -306,12 +303,14 @@ export default function ForgotPassword() {
       console.error("[ResidentPasswordReset]", error);
       if (error.code === "auth/user-not-found") {
         setResidentNoEmailWarning({
-          mobile: normalizeMobile(raw) || "",
-          message: "No authentication account was found matching this email. If you registered using only your mobile number, please use 'Request Admin Permission'.",
+          email: raw,
+          message: `No registered account found with email "${raw}". If you don't have an email registered, please use "Request Admin Permission".`,
         });
-        toast.error("No account found matching this email in the login system.");
+        toast.error("No account found matching this email address.");
       } else if (error.code === "auth/too-many-requests") {
         toast.error("Too many attempts. Please wait a few minutes before trying again.");
+      } else if (error.code === "auth/invalid-email") {
+        toast.error("Please enter a valid email address format.");
       } else {
         toast.error(error.message || "Failed to send password reset email.");
       }
@@ -487,8 +486,8 @@ export default function ForgotPassword() {
 
       try {
         await createNotification({
-          userId: ADMIN_UID,
-          title: "New Account Recovery Request",
+          userId: "admin",
+          title: "New Account Recovery Request 🔑",
           message: `${name.trim()} has submitted a ${requestType.replace(/_/g, " ")} request.`,
           type: "warning",
           link: "/admin/account-recovery",
@@ -540,8 +539,8 @@ export default function ForgotPassword() {
 
       try {
         await createNotification({
-          userId: ADMIN_UID,
-          title: "New Support Request",
+          userId: "admin",
+          title: "New Support Request 📩",
           message: `${name.trim()} needs help: ${requestType.replace(/_/g, " ")}.`,
           type: "info",
           link: "/admin/account-recovery",
@@ -564,18 +563,18 @@ export default function ForgotPassword() {
   // =============================
   if (resetSuccess) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-700 via-emerald-600 to-blue-700 flex items-center justify-center p-6">
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center animate-in fade-in zoom-in-95 duration-200">
-          <div className="w-20 h-20 mx-auto rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-4xl mb-6 shadow-sm">
+      <div className="min-h-screen bg-slate-50 sm:bg-gradient-to-br sm:from-slate-100 sm:via-blue-50/40 sm:to-slate-200 flex items-center justify-center p-3 sm:p-6">
+        <div className="bg-white rounded-3xl shadow-xl sm:shadow-2xl sm:border sm:border-slate-100 w-full max-w-md p-6 sm:p-8 text-center animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl mb-5 shadow-xs border border-emerald-100">
             <FaCheckCircle />
           </div>
-          <h2 className="text-2xl font-bold mb-3 text-gray-900">Password Updated!</h2>
-          <p className="text-gray-600 mb-6 text-sm leading-relaxed">
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-2">Password Updated!</h2>
+          <p className="text-slate-600 mb-6 text-xs sm:text-sm leading-relaxed">
             Your password has been changed successfully. All other active sessions on other devices have been signed out. You can now log in with your new password.
           </p>
           <Link
-            to="/"
-            className="inline-flex items-center justify-center gap-2 w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition shadow-md"
+            to="/?view=login"
+            className="inline-flex items-center justify-center gap-2 w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition shadow-lg shadow-blue-500/25 active:scale-[0.98]"
           >
             <FaArrowLeft /> Proceed to Login
           </Link>
@@ -589,26 +588,26 @@ export default function ForgotPassword() {
   // =============================
   if (submitted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-700 via-emerald-600 to-blue-700 flex items-center justify-center p-6">
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center animate-in fade-in zoom-in-95 duration-200">
-          <div className="w-20 h-20 mx-auto rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-4xl mb-6 shadow-sm">
+      <div className="min-h-screen bg-slate-50 sm:bg-gradient-to-br sm:from-slate-100 sm:via-blue-50/40 sm:to-slate-200 flex items-center justify-center p-3 sm:p-6">
+        <div className="bg-white rounded-3xl shadow-xl sm:shadow-2xl sm:border sm:border-slate-100 w-full max-w-md p-6 sm:p-8 text-center animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl mb-5 shadow-xs border border-emerald-100">
             <FaCheckCircle />
           </div>
-          <h2 className="text-2xl font-bold mb-3 text-gray-900">Request Submitted</h2>
-          <p className="text-gray-600 mb-4 text-sm leading-relaxed">
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-2">Request Submitted</h2>
+          <p className="text-slate-600 mb-3 text-xs sm:text-sm leading-relaxed">
             Your {requestType === "forgot_password" ? "password recovery" : requestType === "forgot_mobile" ? "mobile recovery" : requestType === "forgot_both" ? "account recovery" : "support"} request has been sent to Society Administration.
           </p>
-          <p className="text-xs text-gray-500 mb-6">
+          <p className="text-xs text-slate-500 mb-5">
             The society management will verify your flat details and assist you with your login.
           </p>
           {requestId && (
-            <p className="text-xs text-gray-400 mb-6">
-              Request ID: <span className="font-mono font-semibold text-gray-600">{requestId.slice(0, 10)}...</span>
+            <p className="text-xs text-slate-400 mb-5">
+              Request ID: <span className="font-mono font-semibold text-slate-600">{requestId.slice(0, 10)}...</span>
             </p>
           )}
           <Link
-            to="/"
-            className="inline-flex items-center justify-center gap-2 w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition shadow-md"
+            to="/?view=login"
+            className="inline-flex items-center justify-center gap-2 w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition shadow-lg shadow-blue-500/25 active:scale-[0.98]"
           >
             <FaArrowLeft />
             Back to Login
@@ -622,8 +621,8 @@ export default function ForgotPassword() {
   // Main Render Form
   // =============================
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-700 via-emerald-600 to-blue-700 flex items-center justify-center p-6">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-8">
+    <div className="min-h-screen bg-slate-50 sm:bg-gradient-to-br sm:from-slate-100 sm:via-blue-50/40 sm:to-slate-200 flex items-center justify-center p-3 sm:p-6">
+      <div className="bg-white rounded-3xl shadow-xl sm:shadow-2xl sm:border sm:border-slate-100 w-full max-w-lg p-6 sm:p-8">
 
         {/* Header */}
         <div className="text-center mb-6">
@@ -1016,19 +1015,19 @@ export default function ForgotPassword() {
                           }}
                           className="text-gray-500 hover:text-gray-700"
                         >
-                          Use different email / mobile / flat
+                          Use a different email address
                         </button>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  /* Form to enter Email, Mobile, or Flat */
+                  /* Form to enter Email */
                   <form onSubmit={handleSendResidentReset} className="space-y-4">
                     <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-800 flex items-start gap-2.5">
                       <FaBolt className="text-emerald-600 mt-0.5 shrink-0 text-base" />
                       <div className="leading-relaxed">
                         <span className="font-bold block text-emerald-900">Instant Password Reset via Email</span>
-                        Enter your registered 10-digit mobile number, flat number (e.g. D571), or email. We'll find your account and send an instant password reset link to your email.
+                        Enter your registered email address below. We'll send an instant password reset link directly to your inbox.
                       </div>
                     </div>
 
@@ -1038,40 +1037,23 @@ export default function ForgotPassword() {
                         <div className="flex items-start gap-2">
                           <FaExclamationTriangle className="text-amber-600 mt-0.5 shrink-0 text-sm" />
                           <div className="space-y-1">
-                            <p className="font-bold text-amber-950">Account / Email Not Found</p>
+                            <p className="font-bold text-amber-950">Email Not Found</p>
                             <p className="text-[11px] text-amber-800 leading-relaxed">
                               {residentNoEmailWarning.message}
                             </p>
                             <p className="text-[11px] text-amber-700 font-medium">
-                              💡 {residentNoEmailWarning.tip || "If you mistyped your mobile number, check your digits or try searching by Flat Number (e.g. D571)."}
+                              💡 Don't have an email address registered? Use "Request Admin Permission" below to reset your password via the RWA Office.
                             </p>
                           </div>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                        <div className="pt-1">
                           <button
                             type="button"
                             onClick={() => {
-                              setResidentIdentifier("");
-                              setResidentNoEmailWarning(null);
-                              const inputEl = document.getElementById("resident-identifier-input");
-                              if (inputEl) inputEl.focus();
-                            }}
-                            className="flex-1 py-2 px-3 bg-white border border-amber-300 hover:bg-amber-100/50 text-amber-900 rounded-lg font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-xs"
-                          >
-                            <FaHome className="text-xs text-amber-600" />
-                            <span>Try Flat Number (e.g. D571)</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (residentNoEmailWarning.mobile) {
-                                setMobile(residentNoEmailWarning.mobile);
-                              }
                               setResidentMode("admin_request");
                             }}
-                            className="flex-1 py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-xs"
+                            className="w-full py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-xs"
                           >
                             <FaUserShield className="text-xs" />
                             <span>Request Admin Permission</span>
@@ -1082,14 +1064,14 @@ export default function ForgotPassword() {
 
                     <div>
                       <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-gray-700">
-                        Registered Mobile, Flat No., or Email <span className="text-red-500">*</span>
+                        Registered Email Address <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
                         <FaEnvelope className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                         <input
                           id="resident-identifier-input"
-                          type="text"
-                          placeholder="e.g. 9876543210, D571, or name@gmail.com"
+                          type="email"
+                          placeholder="e.g. name@gmail.com"
                           value={residentIdentifier}
                           onChange={(e) => {
                             setResidentIdentifier(e.target.value);
@@ -1098,6 +1080,7 @@ export default function ForgotPassword() {
                           className="w-full pl-10 pr-4 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
                           required
                           autoFocus
+                          autoComplete="email"
                         />
                       </div>
 

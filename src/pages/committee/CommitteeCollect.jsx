@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   FaMoneyBillWave,
   FaSearch,
@@ -25,6 +26,7 @@ import { useSettings } from "../../context/SettingsContext";
 
 import { collectResidentPayment } from "../../utils/collectPayment";
 import { isGcParticipating } from "../../services/statisticsService";
+import { isPriorToResidentBillingStart } from "../../utils/billingCycle";
 import {
   subscribeSpecialCollections,
   subscribeAllSpecialPayments,
@@ -34,13 +36,17 @@ import { generateSpecialCollectionReceipt } from "../../utils/specialCollectionR
 import { logActivity } from "../../services/activityLogService";
 import { addDoc, collection, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "../../firebase/firebase";
+import PrinterQuickAction from "../../components/common/PrinterQuickAction";
 
-export default function CommitteeCollect() {
+export default function CommitteeCollect({ defaultModule }) {
   const { user } = useAuth();
   const { residents, addResident } = useResidents();
   const { payments, addPayment } = usePayments();
   const { bills } = useBills();
   const { settings } = useSettings();
+
+  const [searchParams] = useSearchParams();
+  const queryModule = defaultModule || searchParams.get("module") || searchParams.get("type");
 
   const [permissions, setPermissions] = useState(user?.permissions || {});
 
@@ -59,18 +65,24 @@ export default function CommitteeCollect() {
   const hasSpecial = Boolean(permissions.canCollectSpecial);
   const canManageResidents = Boolean(permissions.canManageResidents);
 
-  const [activeModule, setActiveModule] = useState(
-    hasGarbage ? "garbage" : hasSpecial ? "special_collections" : "garbage"
-  );
+  const [activeModule, setActiveModule] = useState(() => {
+    if (queryModule === "special" || queryModule === "special_collections") return "special_collections";
+    if (queryModule === "garbage") return "garbage";
+    return hasGarbage ? "garbage" : hasSpecial ? "special_collections" : "garbage";
+  });
 
-  // Keep activeModule valid if permissions update
+  // Keep activeModule valid if permissions or query param update
   useEffect(() => {
-    if (!hasGarbage && hasSpecial) {
+    if (queryModule === "special" || queryModule === "special_collections") {
+      setActiveModule("special_collections");
+    } else if (queryModule === "garbage") {
+      setActiveModule("garbage");
+    } else if (!hasGarbage && hasSpecial) {
       setActiveModule("special_collections");
     } else if (hasGarbage && !hasSpecial) {
       setActiveModule("garbage");
     }
-  }, [hasGarbage, hasSpecial]);
+  }, [queryModule, hasGarbage, hasSpecial]);
 
   // ─── 1. GARBAGE COLLECTION STATE ───
   const [garbageSearch, setGarbageSearch] = useState("");
@@ -126,6 +138,7 @@ export default function CommitteeCollect() {
   const filteredGarbageResidents = useMemo(() => {
     return residents
       .filter((resident) => isGcParticipating(resident))
+      .filter((resident) => !isPriorToResidentBillingStart(resident, currentMonth, currentYear))
       .filter((resident) => {
         const query = garbageSearch.toLowerCase();
         const matchesQuery =
@@ -241,14 +254,32 @@ export default function CommitteeCollect() {
   // Official Receipt Modal State (Garbage & Special Collection with direct print)
   const [successReceipt, setSuccessReceipt] = useState(null);
 
-  // Subscribe to ALL active Special Collections created by Admin & all special payments
+  // Subscribe to active Special Collections authorized for this committee member & all special payments
   useEffect(() => {
     const unsubCol = subscribeSpecialCollections((list) => {
       // Active campaigns created by Admin
       const activeList = list.filter((c) => c.status === "active");
-      setSpecialCollections(activeList);
-      if (activeList.length > 0 && !selectedCampaignId) {
-        setSelectedCampaignId(activeList[0].id);
+
+      // Scope check: if restricted to specific campaigns, filter by authorized IDs
+      const isSpecific = permissions?.specialCollectionScope === "specific";
+      const allowedIds = Array.isArray(permissions?.allowedSpecialCollections)
+        ? new Set(permissions.allowedSpecialCollections)
+        : null;
+
+      const authorizedList = isSpecific && allowedIds
+        ? activeList.filter((c) => allowedIds.has(c.id))
+        : activeList;
+
+      setSpecialCollections(authorizedList);
+      if (authorizedList.length > 0) {
+        setSelectedCampaignId((prev) => {
+          if (prev && authorizedList.some((c) => c.id === prev)) {
+            return prev;
+          }
+          return authorizedList[0].id;
+        });
+      } else {
+        setSelectedCampaignId("");
       }
     });
 
@@ -260,7 +291,7 @@ export default function CommitteeCollect() {
       unsubCol();
       unsubPay();
     };
-  }, [selectedCampaignId]);
+  }, [permissions?.specialCollectionScope, JSON.stringify(permissions?.allowedSpecialCollections || [])]);
 
   // Selected Campaign Object
   const currentCampaign = useMemo(() => {
@@ -448,10 +479,10 @@ export default function CommitteeCollect() {
   // If user has neither permission
   if (!hasGarbage && !hasSpecial) {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-center max-w-lg mx-auto mt-12 shadow-sm space-y-3">
+      <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-3xl p-8 text-center max-w-lg mx-auto mt-12 shadow-sm space-y-3">
         <FaShieldAlt className="text-amber-500 text-5xl mx-auto" />
-        <h2 className="text-xl font-extrabold text-amber-900">Collection Permission Required</h2>
-        <p className="text-xs text-amber-700 leading-relaxed">
+        <h2 className="text-xl font-extrabold text-amber-900 dark:text-amber-100">Collection Permission Required</h2>
+        <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
           Your committee profile has not been assigned fee collection privileges yet. Please contact the society administrator to grant <strong>"Collect Garbage Fees"</strong> or <strong>"Collect Special Campaign Fees"</strong> on your committee account.
         </p>
       </div>
@@ -460,50 +491,54 @@ export default function CommitteeCollect() {
 
   return (
     <>
-      <div className="space-y-5">
+      <div className="space-y-6">
         {/* ─── Top Header & Assigned Powers Switcher ─── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                 Committee Collection Desk
               </h1>
-              <span className="bg-purple-100 text-purple-800 border border-purple-200 px-2.5 py-0.5 rounded-full text-xs font-bold">
+              <span className="bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-2.5 py-0.5 rounded-full text-xs font-bold">
                 🏛️ {user?.designation || "Executive Member"}
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Authorized collection terminal for {user?.name || "Committee Official"}
             </p>
           </div>
 
-          {/* Module Switcher Tabs (When committee member has both powers) */}
-          {hasGarbage && hasSpecial && (
-            <div className="flex bg-gray-200/80 p-1 rounded-2xl gap-1 shadow-inner self-start sm:self-auto">
-              <button
-                onClick={() => setActiveModule("garbage")}
-                className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer ${
-                  activeModule === "garbage"
-                    ? "bg-white text-emerald-700 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                <FaTrashAlt className="text-emerald-600" />
-                Garbage Collection
-              </button>
-              <button
-                onClick={() => setActiveModule("special_collections")}
-                className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer ${
-                  activeModule === "special_collections"
-                    ? "bg-white text-indigo-700 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                <FaHandHoldingHeart className="text-indigo-600" />
-                Special Collections
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-2.5 flex-wrap self-start sm:self-auto">
+            <PrinterQuickAction />
+
+            {/* Module Switcher Tabs (When committee member has both powers) */}
+            {hasGarbage && hasSpecial && (
+              <div className="flex bg-slate-100 dark:bg-slate-800/90 p-1.5 rounded-2xl gap-1 border border-slate-200 dark:border-slate-700">
+                <button
+                  onClick={() => setActiveModule("garbage")}
+                  className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer ${
+                    activeModule === "garbage"
+                      ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30"
+                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <FaTrashAlt className="text-xs" />
+                  <span>Garbage</span>
+                </button>
+                <button
+                  onClick={() => setActiveModule("special_collections")}
+                  className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer ${
+                    activeModule === "special_collections"
+                      ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
+                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <FaHandHoldingHeart className="text-xs" />
+                  <span>Special</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════ */}
@@ -511,12 +546,12 @@ export default function CommitteeCollect() {
         {/* ══════════════════════════════════════════════════════════════ */}
         {activeModule === "garbage" && hasGarbage && (
           <div className="space-y-4">
-            <div className="bg-gradient-to-r from-emerald-600 to-teal-700 rounded-2xl p-4 text-white shadow-md flex items-center justify-between">
+            <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-emerald-800 rounded-3xl p-5 text-white shadow-lg flex items-center justify-between gap-4">
               <div>
                 <span className="text-xs font-semibold uppercase tracking-wider text-emerald-100 flex items-center gap-1.5">
                   <FaTrashAlt /> Garbage Collection Module
                 </span>
-                <h2 className="text-lg font-bold mt-0.5">
+                <h2 className="text-lg font-black mt-0.5">
                   Billing Cycle: {currentMonth} {currentYear}
                 </h2>
               </div>
@@ -537,14 +572,14 @@ export default function CommitteeCollect() {
             </div>
 
             {/* Garbage Search & Filters */}
-            <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xs p-4 border border-slate-200 dark:border-slate-800 space-y-3">
               <div className="relative">
-                <FaSearch className="absolute left-4 top-3.5 text-gray-400 text-sm" />
+                <FaSearch className="absolute left-4 top-3.5 text-slate-400 text-sm" />
                 <input
                   value={garbageSearch}
                   onChange={(e) => setGarbageSearch(e.target.value)}
                   placeholder="Search by flat, resident, or mobile number..."
-                  className="w-full border rounded-xl pl-11 pr-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl pl-11 pr-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
@@ -555,7 +590,7 @@ export default function CommitteeCollect() {
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                     garbageFilter === "all"
                       ? "bg-emerald-600 text-white shadow-xs"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                   }`}
                 >
                   All ({residents.filter((r) => isGcParticipating(r)).length})
@@ -565,7 +600,7 @@ export default function CommitteeCollect() {
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                     garbageFilter === "pending"
                       ? "bg-red-600 text-white shadow-xs"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                   }`}
                 >
                   Pending
@@ -574,8 +609,8 @@ export default function CommitteeCollect() {
                   onClick={() => setGarbageFilter("paid")}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                     garbageFilter === "paid"
-                      ? "bg-green-600 text-white shadow-xs"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                   }`}
                 >
                   Paid
@@ -590,20 +625,20 @@ export default function CommitteeCollect() {
                 return (
                   <div
                     key={resident.id}
-                    className="bg-white rounded-2xl shadow-sm p-4 flex items-center justify-between gap-3 border border-gray-100 hover:border-emerald-200 transition"
+                    className="bg-white dark:bg-slate-900 rounded-2xl shadow-xs p-4 flex items-center justify-between gap-3 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition"
                   >
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-gray-900 text-base">
+                        <span className="font-bold text-slate-900 dark:text-white text-base">
                           Flat {resident.flat || resident.flatNumber || "—"}
                         </span>
                         {resident.block && (
-                          <span className="text-[11px] font-semibold bg-gray-100 px-2 py-0.5 rounded text-gray-600">
+                          <span className="text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300">
                             {resident.block}
                           </span>
                         )}
                       </div>
-                      <p className="text-gray-500 text-xs mt-0.5">
+                      <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
                         {resident.name || resident.owner || "Resident"}
                         {resident.mobile || resident.phone ? ` • ${resident.mobile || resident.phone}` : ""}
                       </p>
@@ -613,8 +648,8 @@ export default function CommitteeCollect() {
                       <span
                         className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                           paid
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
+                            ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                            : "bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800"
                         }`}
                       >
                         {paid ? "Paid" : "Pending"}
@@ -628,8 +663,8 @@ export default function CommitteeCollect() {
                         }}
                         className={`px-4 py-2 rounded-xl text-white flex items-center gap-1.5 text-xs font-bold shadow-xs transition cursor-pointer ${
                           paid
-                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                            : "bg-emerald-600 hover:bg-emerald-700 active:scale-95"
+                            ? "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                            : "bg-emerald-600 hover:bg-emerald-700 active:scale-95 shadow-emerald-600/25"
                         }`}
                       >
                         <FaMoneyBillWave />
@@ -641,7 +676,7 @@ export default function CommitteeCollect() {
               })}
 
               {filteredGarbageResidents.length === 0 && (
-                <div className="bg-white rounded-2xl shadow-sm p-10 text-center text-gray-500 text-sm">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xs p-10 text-center text-slate-400 dark:text-slate-500 text-sm border border-slate-200 dark:border-slate-800">
                   No garbage collection residents found.
                 </div>
               )}
@@ -655,38 +690,55 @@ export default function CommitteeCollect() {
         {activeModule === "special_collections" && hasSpecial && (
           <div className="space-y-4">
             {specialCollections.length === 0 ? (
-              <div className="bg-white rounded-2xl shadow-sm p-8 text-center space-y-3">
-                <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center text-xl mx-auto">
+              <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xs p-8 text-center space-y-3 border border-slate-200 dark:border-slate-800">
+                <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-900/40 text-indigo-500 dark:text-indigo-400 flex items-center justify-center text-xl mx-auto">
                   <FaHandHoldingHeart />
                 </div>
-                <h3 className="font-bold text-gray-800 text-base">No Active Special Collections</h3>
-                <p className="text-xs text-gray-500 max-w-md mx-auto">
-                  There are currently no active special collection campaigns created by the Admin. When the administrator launches a campaign (e.g. Festival, Maintenance, Emergency), it will automatically appear here for collection.
+                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                  {permissions?.specialCollectionScope === "specific"
+                    ? "No Assigned Campaigns Active"
+                    : "No Active Special Collections"}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                  {permissions?.specialCollectionScope === "specific"
+                    ? "Your account has selective permissions for particular special collections, but none of your assigned campaigns are currently active. Please contact an administrator if you need access to another campaign."
+                    : "There are currently no active special collection campaigns created by the Admin. When the administrator launches a campaign (e.g. Festival, Maintenance, Emergency), it will automatically appear here for collection."}
                 </p>
               </div>
             ) : (
               <>
                 {/* Active Campaign Selector / Banner */}
-                <div className="bg-gradient-to-br from-indigo-700 to-purple-800 rounded-2xl p-5 text-white shadow-md space-y-4">
+                <div className="bg-gradient-to-br from-indigo-900 via-purple-950 to-slate-950 rounded-3xl p-6 text-white shadow-xl border border-indigo-500/30 space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-200 flex items-center gap-1.5">
-                        <FaHandHoldingHeart /> Admin Created Special Campaign
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
+                        <FaHandHoldingHeart className="text-indigo-400" /> Admin Created Special Campaign
                       </span>
-                      <h2 className="text-xl font-bold mt-0.5">{currentCampaign?.name}</h2>
-                      <p className="text-xs text-indigo-100 mt-0.5">{currentCampaign?.purpose}</p>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <h2 className="text-xl font-black text-white">{currentCampaign?.name}</h2>
+                        {permissions?.specialCollectionScope === "specific" ? (
+                          <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                            Assigned ({specialCollections.length} allowed)
+                          </span>
+                        ) : (
+                          <span className="bg-indigo-500/20 text-indigo-200 border border-indigo-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                            Full Campaign Access
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-indigo-200 mt-0.5">{currentCampaign?.purpose}</p>
                     </div>
 
                     {/* Campaign Switcher Dropdown (Existing Admin Campaigns) */}
                     {specialCollections.length > 1 && (
-                      <div className="bg-white/10 p-1.5 rounded-xl backdrop-blur-sm">
+                      <div className="bg-white/10 p-1.5 rounded-xl backdrop-blur-sm border border-white/10">
                         <select
                           value={selectedCampaignId}
                           onChange={(e) => setSelectedCampaignId(e.target.value)}
                           className="bg-transparent text-white text-xs font-semibold outline-none cursor-pointer"
                         >
                           {specialCollections.map((col) => (
-                            <option key={col.id} value={col.id} className="text-gray-900">
+                            <option key={col.id} value={col.id} className="text-slate-900 bg-white">
                               {col.name} ({col.collectionType || "Campaign"})
                             </option>
                           ))}
@@ -696,10 +748,10 @@ export default function CommitteeCollect() {
                   </div>
 
                   {/* Campaign Progress Bar & Metrics */}
-                  <div className="pt-2 border-t border-indigo-500/50 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="pt-3 border-t border-indigo-500/30 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
                     <div>
-                      <span className="text-indigo-200 block text-[11px]">Requirement</span>
-                      <span className="font-bold text-sm">
+                      <span className="text-indigo-300 block text-[11px]">Requirement</span>
+                      <span className="font-bold text-sm text-white">
                         {currentCampaign?.amountType === "fixed"
                           ? `₹${currentCampaign?.fixedAmount} Fixed`
                           : "Flexible Contribution"}
@@ -707,8 +759,8 @@ export default function CommitteeCollect() {
                     </div>
 
                     <div>
-                      <span className="text-indigo-200 block text-[11px]">Collected So Far</span>
-                      <span className="font-bold text-sm text-emerald-300">
+                      <span className="text-indigo-300 block text-[11px]">Collected So Far</span>
+                      <span className="font-bold text-sm text-emerald-400">
                         ₹
                         {currentCampaignPayments
                           .reduce((s, p) => s + Number(p.amount || 0), 0)
@@ -718,8 +770,8 @@ export default function CommitteeCollect() {
                     </div>
 
                     <div className="col-span-2 sm:col-span-1">
-                      <span className="text-indigo-200 block text-[11px]">Target Goal</span>
-                      <span className="font-bold text-sm">
+                      <span className="text-indigo-300 block text-[11px]">Target Goal</span>
+                      <span className="font-bold text-sm text-white">
                         {currentCampaign?.targetAmount
                           ? `₹${Number(currentCampaign.targetAmount).toLocaleString("en-IN")}`
                           : "Open-ended"}
@@ -729,22 +781,22 @@ export default function CommitteeCollect() {
                 </div>
 
                 {/* Actions & Filters */}
-                <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xs p-4 border border-slate-200 dark:border-slate-800 space-y-3">
                   <div className="flex flex-col sm:flex-row gap-2">
                     <div className="relative flex-1">
-                      <FaSearch className="absolute left-4 top-3.5 text-gray-400 text-sm" />
+                      <FaSearch className="absolute left-4 top-3.5 text-slate-400 text-sm" />
                       <input
                         value={specialSearch}
                         onChange={(e) => setSpecialSearch(e.target.value)}
                         placeholder="Search by flat, resident, or mobile number..."
-                        className="w-full border rounded-xl pl-11 pr-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl pl-11 pr-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                     </div>
 
                     {/* Quick Button for Guest / External Contributor */}
                     <button
                       onClick={handleOpenExternalCollect}
-                      className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                      className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shrink-0 cursor-pointer"
                     >
                       <FaUserPlus /> + External / Guest
                     </button>
@@ -757,7 +809,7 @@ export default function CommitteeCollect() {
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                         specialFilter === "all"
                           ? "bg-indigo-600 text-white shadow-xs"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                       }`}
                     >
                       All Residents ({residents.length})
@@ -767,7 +819,7 @@ export default function CommitteeCollect() {
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                         specialFilter === "pending"
                           ? "bg-amber-600 text-white shadow-xs"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                       }`}
                     >
                       Pending
@@ -777,7 +829,7 @@ export default function CommitteeCollect() {
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                         specialFilter === "contributed"
                           ? "bg-emerald-600 text-white shadow-xs"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                       }`}
                     >
                       Contributed ({currentCampaignPayments.length})
@@ -792,20 +844,20 @@ export default function CommitteeCollect() {
                     return (
                       <div
                         key={resident.id}
-                        className="bg-white rounded-2xl shadow-sm p-4 flex items-center justify-between gap-3 border border-gray-100 hover:border-indigo-200 transition"
+                        className="bg-white dark:bg-slate-900 rounded-2xl shadow-xs p-4 flex items-center justify-between gap-3 border border-slate-200 dark:border-slate-800 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 transition"
                       >
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-gray-900 text-base">
+                            <span className="font-bold text-slate-900 dark:text-white text-base">
                               Flat {resident.flatNumber || resident.flat || "—"}
                             </span>
                             {resident.block && (
-                              <span className="text-[11px] font-semibold bg-gray-100 px-2 py-0.5 rounded text-gray-600">
+                              <span className="text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300">
                                 {resident.block}
                               </span>
                             )}
                           </div>
-                          <p className="text-gray-500 text-xs mt-0.5">
+                          <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
                             {resident.name || resident.owner || "Resident"}
                             {resident.mobileNumber || resident.mobile
                               ? ` • ${resident.mobileNumber || resident.mobile}`
@@ -816,8 +868,8 @@ export default function CommitteeCollect() {
                         <div className="flex items-center gap-2.5">
                           {contribution ? (
                             <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full text-xs">
-                                <FaCheckCircle className="text-emerald-600 text-[10px]" />
+                              <span className="inline-flex items-center gap-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold px-2.5 py-1 rounded-full text-xs">
+                                <FaCheckCircle className="text-emerald-600 dark:text-emerald-400 text-[10px]" />
                                 Contributed ₹{contribution.amount}
                               </span>
                               <button
@@ -830,7 +882,7 @@ export default function CommitteeCollect() {
                                   })
                                 }
                                 title="Download PDF Receipt"
-                                className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs transition cursor-pointer"
+                                className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs transition cursor-pointer"
                               >
                                 <FaFileDownload />
                               </button>
@@ -853,7 +905,7 @@ export default function CommitteeCollect() {
                   })}
 
                   {filteredSpecialResidents.length === 0 && (
-                    <div className="bg-white rounded-2xl shadow-sm p-10 text-center text-gray-500 text-sm">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xs p-10 text-center text-slate-400 dark:text-slate-500 text-sm border border-slate-200 dark:border-slate-800">
                       No residents found matching your criteria.
                     </div>
                   )}
@@ -877,24 +929,24 @@ export default function CommitteeCollect() {
 
       {/* ─── 4. SPECIAL CONTRIBUTION COLLECT MODAL ─── */}
       {collectModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="font-bold text-gray-900 flex items-center gap-2 text-base">
-                <FaHandHoldingHeart className="text-indigo-600" />
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-base">
+                <FaHandHoldingHeart className="text-indigo-600 dark:text-indigo-400" />
                 Collect Special Contribution
               </h3>
               <button
                 onClick={() => setCollectModalOpen(false)}
-                className="text-gray-400 hover:text-gray-700 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
               >
                 <FaTimes />
               </button>
             </div>
 
-            <div className="bg-indigo-50 border border-indigo-200 p-3 rounded-xl text-xs text-indigo-900">
-              <span className="font-bold block">{currentCampaign?.name}</span>
-              <span className="text-[11px] text-indigo-700 block mt-0.5">
+            <div className="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 p-3.5 rounded-2xl text-xs text-indigo-900 dark:text-indigo-200">
+              <span className="font-bold block text-sm">{currentCampaign?.name}</span>
+              <span className="text-[11px] text-indigo-700 dark:text-indigo-300 block mt-0.5">
                 {currentCampaign?.purpose} •{" "}
                 {currentCampaign?.amountType === "fixed"
                   ? `₹${currentCampaign.fixedAmount} Fixed`
@@ -905,7 +957,7 @@ export default function CommitteeCollect() {
             <form onSubmit={handleSubmitSpecialCollect} className="space-y-3.5">
               {/* Contributor Name */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Contributor Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -918,7 +970,7 @@ export default function CommitteeCollect() {
                     }))
                   }
                   placeholder="e.g. Ramesh Kumar"
-                  className="w-full px-3 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                   required
                 />
               </div>
@@ -926,7 +978,7 @@ export default function CommitteeCollect() {
               {/* Flat & Block */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Flat / Unit</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Flat / Unit</label>
                   <input
                     type="text"
                     value={collectFormData.flatNumber}
@@ -937,11 +989,11 @@ export default function CommitteeCollect() {
                       }))
                     }
                     placeholder="e.g. D-101"
-                    className="w-full px-3 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Block / Section</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Block / Section</label>
                   <input
                     type="text"
                     value={collectFormData.block}
@@ -952,14 +1004,14 @@ export default function CommitteeCollect() {
                       }))
                     }
                     placeholder="e.g. D-Block"
-                    className="w-full px-3 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
               </div>
 
               {/* Mobile */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Mobile Number</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Mobile Number</label>
                 <input
                   type="tel"
                   value={collectFormData.mobileNumber}
@@ -970,14 +1022,14 @@ export default function CommitteeCollect() {
                     }))
                   }
                   placeholder="e.g. 9876543210"
-                  className="w-full px-3 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
               {/* Amount & Mode */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Amount (₹) <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -991,12 +1043,12 @@ export default function CommitteeCollect() {
                       }))
                     }
                     placeholder="e.g. 500"
-                    className="w-full px-3 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Payment Method</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Method</label>
                   <select
                     value={collectFormData.paymentMethod}
                     onChange={(e) =>
@@ -1005,7 +1057,7 @@ export default function CommitteeCollect() {
                         paymentMethod: e.target.value,
                       }))
                     }
-                    className="w-full px-3 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
                     <option value="Cash">Cash</option>
                     <option value="Offline UPI">Offline UPI</option>
@@ -1016,7 +1068,7 @@ export default function CommitteeCollect() {
 
               {/* Remarks */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Remarks / Note</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Remarks / Note</label>
                 <input
                   type="text"
                   value={collectFormData.remarks}
@@ -1027,22 +1079,22 @@ export default function CommitteeCollect() {
                     }))
                   }
                   placeholder="e.g. Collected at office counter"
-                  className="w-full px-3 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setCollectModalOpen(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={collectSubmitting}
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer active:scale-95"
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm shadow-indigo-600/25 transition cursor-pointer active:scale-95"
                 >
                   <FaReceipt />
                   {collectSubmitting ? "Issuing..." : "Collect & Issue Receipt"}
@@ -1062,16 +1114,16 @@ export default function CommitteeCollect() {
 
       {/* Add Resident Drawer */}
       {showAddResident && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex justify-end">
-          <div className="w-full max-w-md bg-white h-full overflow-y-auto shadow-2xl">
-            <div className="sticky top-0 bg-emerald-600 text-white p-5 flex justify-between items-center z-10">
+        <div className="fixed inset-0 bg-black/50 z-50 flex justify-end backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 text-slate-900 dark:text-white h-full overflow-y-auto shadow-2xl border-l border-slate-200 dark:border-slate-800">
+            <div className="sticky top-0 bg-emerald-600 text-white p-5 flex justify-between items-center z-10 shadow-md">
               <div className="flex items-center gap-3">
                 <FaUserPlus className="text-xl" />
                 <h2 className="text-xl font-bold">Add New Resident</h2>
               </div>
               <button
                 onClick={() => setShowAddResident(false)}
-                className="text-xl hover:text-red-300 cursor-pointer"
+                className="text-xl hover:text-emerald-200 cursor-pointer"
               >
                 <FaTimes />
               </button>

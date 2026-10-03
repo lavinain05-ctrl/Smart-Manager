@@ -8,15 +8,18 @@ import {
   FaLock,
   FaHome,
   FaBuilding,
-  FaArrowLeft,
   FaBriefcase,
   FaCalendarAlt,
   FaUserShield,
   FaCheckCircle,
   FaLeaf,
-  FaExclamationCircle,
   FaEye,
   FaEyeSlash,
+  FaChevronLeft,
+  FaArrowRight,
+  FaShieldAlt,
+  FaLayerGroup,
+  FaSpinner,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -32,10 +35,85 @@ import {
 
 import {
   submitRegistration,
-  validateFlatNumber,
-  normalizeFlatNumber,
 } from "../../services/registrationService";
 import { normalizeMobile, validateMobile } from "../../services/authService";
+import { AVAILABLE_FLOORS } from "../../services/propertyService";
+
+// ══════════════════════════════════════════════════════════════════
+// Official D BLOCK RWA Brand Header Logo (Matching New Theme)
+// ══════════════════════════════════════════════════════════════════
+function RwaBrandHeader({ onBack = null, className = "" }) {
+  return (
+    <div className={`flex items-center gap-2.5 ${className}`}>
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="p-2 -ml-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+          title="Back to Login"
+          aria-label="Back to Login"
+        >
+          <FaChevronLeft className="text-sm" />
+        </button>
+      )}
+
+      {/* Stylized Modern Buildings + Green Lawn Vector */}
+      <div className="relative shrink-0 w-11 h-11 flex items-center justify-center">
+        <svg viewBox="0 0 64 64" className="w-full h-full drop-shadow-sm" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Back Building */}
+          <rect x="8" y="24" width="14" height="30" rx="2" fill="#1e3a8a" />
+          <rect x="12" y="28" width="2.5" height="3" rx="0.5" fill="#93c5fd" />
+          <rect x="16.5" y="28" width="2.5" height="3" rx="0.5" fill="#93c5fd" />
+          <rect x="12" y="34" width="2.5" height="3" rx="0.5" fill="#93c5fd" />
+          <rect x="16.5" y="34" width="2.5" height="3" rx="0.5" fill="#93c5fd" />
+          <rect x="12" y="40" width="2.5" height="3" rx="0.5" fill="#93c5fd" />
+          <rect x="16.5" y="40" width="2.5" height="3" rx="0.5" fill="#93c5fd" />
+
+          {/* Center Tall Building */}
+          <rect x="24" y="10" width="18" height="44" rx="2.5" fill="#0f172a" />
+          <polygon points="33,4 23,10 43,10" fill="#1d4ed8" />
+          {/* Windows Grid */}
+          <rect x="28" y="15" width="3" height="3.5" rx="0.5" fill="#60a5fa" />
+          <rect x="34" y="15" width="3" height="3.5" rx="0.5" fill="#60a5fa" />
+          <rect x="28" y="21" width="3" height="3.5" rx="0.5" fill="#60a5fa" />
+          <rect x="34" y="21" width="3" height="3.5" rx="0.5" fill="#60a5fa" />
+          <rect x="28" y="27" width="3" height="3.5" rx="0.5" fill="#60a5fa" />
+          <rect x="34" y="27" width="3" height="3.5" rx="0.5" fill="#60a5fa" />
+          <rect x="28" y="33" width="3" height="3.5" rx="0.5" fill="#60a5fa" />
+          <rect x="34" y="33" width="3" height="3.5" rx="0.5" fill="#60a5fa" />
+          <rect x="28" y="39" width="3" height="3.5" rx="0.5" fill="#60a5fa" />
+          <rect x="34" y="39" width="3" height="3.5" rx="0.5" fill="#60a5fa" />
+
+          {/* Right Mid Building */}
+          <rect x="44" y="20" width="13" height="34" rx="2" fill="#1e3a8a" />
+          <rect x="47.5" y="25" width="2.5" height="3" rx="0.5" fill="#bfdbfe" />
+          <rect x="51.5" y="25" width="2.5" height="3" rx="0.5" fill="#bfdbfe" />
+          <rect x="47.5" y="31" width="2.5" height="3" rx="0.5" fill="#bfdbfe" />
+          <rect x="51.5" y="31" width="2.5" height="3" rx="0.5" fill="#bfdbfe" />
+          <rect x="47.5" y="37" width="2.5" height="3" rx="0.5" fill="#bfdbfe" />
+          <rect x="51.5" y="37" width="2.5" height="3" rx="0.5" fill="#bfdbfe" />
+
+          {/* Green Lawn Swath */}
+          <path d="M4 52 C18 48, 38 49, 60 52 C52 56, 12 56, 4 52Z" fill="#15803d" />
+          <path d="M6 53.5 C20 50, 42 51, 58 53.5 C48 57, 16 57, 6 53.5Z" fill="#22c55e" />
+          <circle cx="10" cy="48" r="3" fill="#15803d" />
+          <circle cx="22" cy="49" r="2.5" fill="#16a34a" />
+          <circle cx="55" cy="49" r="3" fill="#15803d" />
+        </svg>
+      </div>
+
+      {/* Brand Typography */}
+      <div className="text-left leading-tight">
+        <div className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-none sm:leading-tight">
+          D BLOCK RWA INDRAPRASTHA
+        </div>
+        <div className="text-[11px] sm:text-xs font-semibold text-slate-500 tracking-normal mt-0.5">
+          Society Management System
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Register() {
   const navigate = useNavigate();
@@ -56,8 +134,11 @@ export default function Register() {
   const [availableBlocks, setAvailableBlocks] = useState([]);
   const [blockId, setBlockId] = useState("");
   const [block, setBlock] = useState("");
+  const [plotNumber, setPlotNumber] = useState("");
+  const [floor, setFloor] = useState("Ground Floor");
+  const [unitNumber, setUnitNumber] = useState("");
+  const [personType, setPersonType] = useState("OWNER");
   const [flat, setFlat] = useState("");
-  const [floor, setFloor] = useState("");
   const [alternateMobile, setAlternateMobile] = useState("");
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState("");
@@ -65,16 +146,12 @@ export default function Register() {
   const [emergencyContact, setEmergencyContact] = useState("");
   const [garbageParticipation, setGarbageParticipation] = useState("participating");
 
-  // ========== Inline Validation Errors ==========
-  const [flatError, setFlatError] = useState("");
-
-  // Load blocks from Firestore (public read — allowed by rules)
+  // Load blocks from Firestore
   useEffect(() => {
     async function loadBlocks() {
       try {
         const q = query(collection(db, "blocks"), orderBy("name", "asc"));
         const snap = await getDocs(q);
-        // Only show ACTIVE blocks in registration
         const allBlocks = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setAvailableBlocks(allBlocks.filter((b) => b.status === "active" || !b.status));
       } catch (error) {
@@ -90,26 +167,9 @@ export default function Register() {
     setBlock(selectedBlock?.name || "");
   }
 
-  // ========== Real-time flat validation ==========
-  function handleFlatChange(value) {
-    setFlat(value);
-
-    // Only validate if user has typed something
-    const trimmed = value.trim();
-    if (trimmed) {
-      const error = validateFlatNumber(trimmed);
-      setFlatError(error || "");
-    } else {
-      setFlatError("");
-    }
-  }
-
   // ========== Submit Registration ==========
-
   async function handleSubmitRegistration(e) {
     e.preventDefault();
-
-    // --- Client-side validation ---
 
     // 1. Validate mobile format
     const mobileError = validateMobile(mobile);
@@ -130,27 +190,26 @@ export default function Register() {
 
     // 3. Validate name
     if (!name.trim()) {
-      toast.error("Please enter your name");
+      toast.error("Please enter your full name");
       return;
     }
 
-    // 4. Validate flat format
-    const flatValidationError = validateFlatNumber(flat);
-    if (flatValidationError) {
-      toast.error(flatValidationError);
-      setFlatError(flatValidationError);
-      return;
-    }
-
-    // 5. Validate block selection
+    // 4. Validate block selection
     if (!blockId) {
-      toast.error("Please select a block");
+      toast.error("Please select your block");
+      return;
+    }
+
+    // 5. Validate plot number
+    const resolvedPlot = (plotNumber || flat || "").trim();
+    if (!resolvedPlot) {
+      toast.error("Please enter your plot number");
       return;
     }
 
     // 6. Validate floor
     if (!floor.trim()) {
-      toast.error("Please enter the floor number");
+      toast.error("Please select or enter your floor");
       return;
     }
 
@@ -164,27 +223,24 @@ export default function Register() {
     try {
       setLoading(true);
 
-      // The service handles:
-      // - Mobile normalization
-      // - Flat normalization
-      // - Server-side availability check (Cloud Function)
-      // - Firebase Auth account creation
-      // - Registration request doc creation
       await submitRegistration({
-        name,
-        fatherHusbandName,
-        flat,
+        name: name.trim(),
+        fatherHusbandName: fatherHusbandName.trim(),
+        plotNumber: resolvedPlot,
+        floor,
+        unitNumber: unitNumber.trim(),
+        flat: unitNumber.trim() ? `${resolvedPlot}-${unitNumber.trim()}` : resolvedPlot,
         block,
         blockId,
-        floor,
+        personType,
         mobile: normalizeMobile(mobile),
-        alternateMobile,
-        email,
+        alternateMobile: alternateMobile.trim(),
+        email: trimmedEmail,
         password,
         dob,
         gender,
-        occupation,
-        emergencyContact,
+        occupation: occupation.trim(),
+        emergencyContact: emergencyContact.trim(),
         garbageParticipation,
       });
 
@@ -192,391 +248,623 @@ export default function Register() {
       navigate("/pending-approval", { replace: true });
     } catch (error) {
       console.error("[Registration] Error:", error.code || "", error.message);
-
-      // Display the error message from the service
-      // (already user-friendly messages from getAvailabilityErrorMessage)
       toast.error(error.message || "Registration failed");
     } finally {
       setLoading(false);
     }
   }
 
-  // ========== RENDER ==========
-
+  // ══════════════════════════════════════════════════════════════════
+  // RENDER: Mobile-First Responsive Registration Page
+  // ══════════════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-700 via-emerald-600 to-blue-700 flex items-center justify-center p-3 sm:p-6">
-
-      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl w-full max-w-2xl p-4 sm:p-8 max-h-[96vh] overflow-y-auto">
-
-        {/* Back to Login */}
-        <Link
-          to="/"
-          className="flex items-center gap-2 text-xs sm:text-sm text-gray-500 hover:text-gray-700 mb-4 sm:mb-6 transition"
-        >
-          <FaArrowLeft /> Back to Login
-        </Link>
-
-        {/* Logo */}
-        <div className="text-center mb-6 sm:mb-8">
-          <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-2xl sm:text-3xl shadow-lg">
-            <FaBuilding />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold mt-3 sm:mt-4">Resident Registration</h1>
-          <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-2">
-            Register for your society management account
-          </p>
+    <div className="min-h-screen bg-slate-50 sm:bg-gradient-to-br sm:from-slate-100 sm:via-blue-50/40 sm:to-slate-200 flex items-center justify-center p-0 sm:p-4 md:p-6">
+      <div className="w-full min-h-screen sm:min-h-0 sm:my-6 max-w-2xl bg-white sm:rounded-[36px] sm:shadow-2xl sm:border sm:border-slate-100 overflow-hidden flex flex-col justify-between transition-all duration-300">
+        
+        {/* Top Header with Back to Login */}
+        <div className="pt-4 sm:pt-6 px-4 sm:px-6 pb-2 flex items-center justify-between">
+          <RwaBrandHeader onBack={() => navigate("/?view=welcome")} />
+          <Link
+            to="/?view=login"
+            className="text-xs sm:text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/70 px-3 py-1.5 rounded-xl transition"
+          >
+            Sign In
+          </Link>
         </div>
 
-        <form onSubmit={handleSubmitRegistration} className="space-y-4 sm:space-y-5">
+        {/* Top Scenic Banner with Curved Wave (Matching Login Design) */}
+        <div className="relative h-44 sm:h-52 w-full overflow-hidden mt-1 shrink-0">
+          <img
+            src="/society-banner.jpg"
+            alt="D Block RWA Indraprastha Society"
+            className="w-full h-full object-cover object-center"
+          />
 
-          {/* Account Credentials */}
-          <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 sm:space-y-4">
-            <h3 className="font-semibold text-gray-700 flex items-center gap-2">
-              <FaLock className="text-emerald-600" /> Account Credentials
-            </h3>
+          {/* Sunlight & Gradient Vignette Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-slate-900/20 to-transparent pointer-events-none" />
 
-            <div>
-              <label className="block mb-1.5 text-sm font-medium">
-                Mobile Number <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-medium">+91</span>
-                <input
-                  type="tel"
-                  placeholder="10-digit mobile number"
-                  value={mobile}
-                  onChange={(e) => setMobile(normalizeMobile(e.target.value))}
-                  className="w-full pl-12 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  maxLength={10}
-                  required
-                  autoComplete="username"
-                />
-              </div>
-              <p className="text-xs text-gray-400 mt-1">This will be your login ID (Mobile Number + Password)</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block mb-1.5 text-sm font-medium">
-                  Password <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <FaLock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Min 6 characters"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-10 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    minLength={6}
-                    required
-                    autoComplete="new-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1 transition"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    title={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <FaEyeSlash className="text-sm" /> : <FaEye className="text-sm" />}
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="block mb-1.5 text-sm font-medium">
-                  Confirm Password <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <FaLock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                  <input
-                    type={showConfirmPassword ? "text" : "password"}
-                    placeholder="Confirm password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full pl-10 pr-10 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    minLength={6}
-                    required
-                    autoComplete="new-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword((prev) => !prev)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1 transition"
-                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                    title={showConfirmPassword ? "Hide password" : "Show password"}
-                  >
-                    {showConfirmPassword ? <FaEyeSlash className="text-sm" /> : <FaEye className="text-sm" />}
-                  </button>
-                </div>
-              </div>
-            </div>
+          {/* Banner Text Over Photo */}
+          <div className="absolute bottom-10 left-5 sm:left-7 z-10 text-white">
+            <span className="inline-block text-[11px] sm:text-xs font-bold uppercase tracking-wider bg-blue-600/90 text-white px-2.5 py-0.5 rounded-full mb-1">
+              New Member Portal
+            </span>
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight drop-shadow-sm">
+              Resident Registration
+            </h1>
+            <p className="text-xs text-white/90 font-medium drop-shadow-xs">
+              Apply for your official digital society account
+            </p>
           </div>
 
-          {/* Personal Information */}
-          <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 sm:space-y-4">
-            <h3 className="font-semibold text-gray-700 flex items-center gap-2">
-              <FaUser className="text-emerald-600" /> Personal Information
-            </h3>
+          {/* Organic Bottom Wave SVG */}
+          <div className="absolute -bottom-1 left-0 right-0 w-full overflow-hidden leading-none z-10">
+            <svg
+              viewBox="0 0 1200 120"
+              preserveAspectRatio="none"
+              className="relative block w-full h-8 sm:h-10 text-white fill-current"
+            >
+              <path d="M0,0 C150,90 350,-40 500,45 C650,130 900,10 1200,60 L1200,120 L0,120 Z" />
+            </svg>
+          </div>
+        </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Form Container */}
+        <div className="px-4 sm:px-8 pt-3 pb-8 text-left flex-1 flex flex-col justify-start">
+          <form onSubmit={handleSubmitRegistration} className="space-y-5 sm:space-y-6">
+
+            {/* ─────────────────────────────────────────────────────────────
+                SECTION 1: Account Credentials
+            ───────────────────────────────────────────────────────────── */}
+            <div className="bg-slate-50/70 border border-slate-100 rounded-3xl p-4 sm:p-5 space-y-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm shadow-xs">
+                  <FaLock />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-slate-800">
+                    Account Credentials
+                  </h2>
+                  <p className="text-[11px] sm:text-xs text-slate-400 font-medium">
+                    This mobile number will be your login ID
+                  </p>
+                </div>
+              </div>
+
+              {/* Mobile Number Input with Soft Blue Pill Background */}
               <div>
-                <label className="block mb-1.5 text-sm font-medium">
-                  Full Name <span className="text-red-500">*</span>
+                <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                  Mobile Number <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  placeholder="Full name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block mb-1.5 text-sm font-medium">
-                  Father / Husband Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="Father or husband name"
-                  value={fatherHusbandName}
-                  onChange={(e) => setFatherHusbandName(e.target.value)}
-                  className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block mb-1.5 text-sm font-medium">
-                Email Address <span className="text-gray-400 font-normal text-xs">(Optional — for notices & receipts)</span>
-              </label>
-              <div className="relative">
-                <FaEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                <input
-                  type="email"
-                  placeholder="Your email address (optional)"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  autoComplete="off"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block mb-1.5 text-sm font-medium">Date of Birth</label>
                 <div className="relative">
-                  <FaCalendarAlt className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <span className="text-xs sm:text-sm font-bold text-slate-500 bg-white/80 px-1.5 py-0.5 rounded-lg border border-slate-200">
+                      +91
+                    </span>
+                  </div>
                   <input
-                    type="date"
-                    value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                    className="w-full pl-10 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    type="tel"
+                    placeholder="Enter 10-digit mobile number"
+                    value={mobile}
+                    onChange={(e) => setMobile(normalizeMobile(e.target.value))}
+                    className="w-full pl-16 pr-4 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-sm sm:text-base font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                    maxLength={10}
+                    required
+                    autoComplete="username"
                   />
                 </div>
               </div>
-              <div>
-                <label className="block mb-1.5 text-sm font-medium">Gender</label>
-                <select
-                  value={gender}
-                  onChange={(e) => setGender(e.target.value)}
-                  className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                >
-                  <option value="">Select</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                </select>
+
+              {/* Password & Confirm Password */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                    Password <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 text-sm">
+                      <FaLock />
+                    </div>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Min 6 characters"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-11 pr-11 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-sm sm:text-base font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                      minLength={6}
+                      required
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none transition cursor-pointer"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <FaEyeSlash className="text-base" /> : <FaEye className="text-base" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                    Confirm Password <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 text-sm">
+                      <FaLock />
+                    </div>
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Re-enter password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full pl-11 pr-11 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-sm sm:text-base font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                      minLength={6}
+                      required
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none transition cursor-pointer"
+                      aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                    >
+                      {showConfirmPassword ? <FaEyeSlash className="text-base" /> : <FaEye className="text-base" />}
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block mb-1.5 text-sm font-medium">Occupation</label>
-                <div className="relative">
-                  <FaBriefcase className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+            </div>
+
+            {/* ─────────────────────────────────────────────────────────────
+                SECTION 2: Personal Information
+            ───────────────────────────────────────────────────────────── */}
+            <div className="bg-slate-50/70 border border-slate-100 rounded-3xl p-4 sm:p-5 space-y-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm shadow-xs">
+                  <FaUser />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-slate-800">
+                    Personal Information
+                  </h2>
+                  <p className="text-[11px] sm:text-xs text-slate-400 font-medium">
+                    Your official identity details for society records
+                  </p>
+                </div>
+              </div>
+
+              {/* Name & Father/Husband Name */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                    Full Name <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 text-sm">
+                      <FaUser />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="e.g. Rahul Sharma"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full pl-11 pr-4 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-sm sm:text-base font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                    Father / Husband Name
+                  </label>
                   <input
                     type="text"
-                    placeholder="Occupation"
-                    value={occupation}
-                    onChange={(e) => setOccupation(e.target.value)}
-                    className="w-full pl-10 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    placeholder="Father or husband's name"
+                    value={fatherHusbandName}
+                    onChange={(e) => setFatherHusbandName(e.target.value)}
+                    className="w-full px-4 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-sm sm:text-base font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
                   />
                 </div>
               </div>
-            </div>
-          </div>
 
-          {/* Flat Information */}
-          <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 sm:space-y-4">
-            <h3 className="font-semibold text-gray-700 flex items-center gap-2">
-              <FaHome className="text-emerald-600" /> Flat Information
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Email Address */}
               <div>
-                <label className="block mb-1.5 text-sm font-medium">
-                  Block <span className="text-red-500">*</span>
+                <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                  Email Address <span className="text-slate-400 font-normal text-xs">(Optional — for notices & receipts)</span>
                 </label>
-                <select
-                  value={blockId}
-                  onChange={(e) => handleBlockChange(e.target.value)}
-                  className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  required
-                >
-                  <option value="">Select Block</option>
-                  {availableBlocks.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-                {availableBlocks.length === 0 && (
-                  <p className="text-xs text-amber-600 mt-1">No blocks are currently available. Please contact the society administrator.</p>
-                )}
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 text-sm">
+                    <FaEnvelope />
+                  </div>
+                  <input
+                    type="email"
+                    placeholder="name@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-sm sm:text-base font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                    autoComplete="off"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block mb-1.5 text-sm font-medium">
-                  Flat Number <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. A101"
-                  value={flat}
-                  onChange={(e) => handleFlatChange(e.target.value)}
-                  className={`w-full border rounded-xl p-3 focus:ring-2 outline-none ${
-                    flatError
-                      ? "border-red-400 focus:ring-red-500"
-                      : "focus:ring-emerald-500"
-                  }`}
-                  required
-                />
-                {flatError ? (
-                  <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                    <FaExclamationCircle className="text-[10px] shrink-0" />
-                    {flatError}
+
+              {/* DOB, Gender, Occupation */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">Date of Birth</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 text-sm">
+                      <FaCalendarAlt />
+                    </div>
+                    <input
+                      type="date"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      className="w-full pl-10 pr-3 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">Gender</label>
+                  <select
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full px-3.5 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">Occupation</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 text-sm">
+                      <FaBriefcase />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="e.g. Business, Engineer"
+                      value={occupation}
+                      onChange={(e) => setOccupation(e.target.value)}
+                      className="w-full pl-10 pr-3 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ─────────────────────────────────────────────────────────────
+                SECTION 3: Property Identity & Hierarchy
+            ───────────────────────────────────────────────────────────── */}
+            <div className="bg-slate-50/70 border border-slate-100 rounded-3xl p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm shadow-xs">
+                    <FaHome />
+                  </div>
+                  <div>
+                    <h2 className="text-sm sm:text-base font-bold text-slate-800">
+                      Property & Residence Details
+                    </h2>
+                    <p className="text-[11px] sm:text-xs text-slate-400 font-medium">
+                      Exact address within D Block society
+                    </p>
+                  </div>
+                </div>
+                <span className="hidden sm:inline-flex text-[11px] bg-blue-100/70 text-blue-700 font-bold px-2.5 py-1 rounded-full">
+                  Hierarchy: Block → Plot → Floor → Unit
+                </span>
+              </div>
+
+              {/* Block & Plot Number */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                    Select Block <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={blockId}
+                    onChange={(e) => handleBlockChange(e.target.value)}
+                    className="w-full px-4 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-sm sm:text-base font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                    required
+                  >
+                    <option value="">Select Block</option>
+                    {availableBlocks.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                  {availableBlocks.length === 0 && (
+                    <p className="text-[11px] text-amber-600 font-medium mt-1">
+                      Loading available blocks...
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                    Plot / Building Number <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 572, 12, 104"
+                    value={plotNumber}
+                    onChange={(e) => {
+                      setPlotNumber(e.target.value);
+                      setFlat(e.target.value);
+                    }}
+                    className="w-full px-4 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-sm sm:text-base font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                    required
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Your designated plot number within the selected block
                   </p>
+                </div>
+              </div>
+
+              {/* Floor, Unit/Flat, and Resident Type */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                    Floor <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={floor}
+                    onChange={(e) => setFloor(e.target.value)}
+                    className="w-full px-3.5 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                    required
+                  >
+                    {AVAILABLE_FLOORS.map((fl) => (
+                      <option key={fl} value={fl}>
+                        {fl}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                    Flat Number <span className="text-slate-400 font-normal text-xs">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 1, A, 2"
+                    value={unitNumber}
+                    onChange={(e) => setUnitNumber(e.target.value)}
+                    className="w-full px-3.5 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Leave empty if full floor</p>
+                </div>
+
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                    Registering As <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={personType === "TENANT" ? "RENTED" : personType}
+                    onChange={(e) => setPersonType(e.target.value)}
+                    className="w-full px-3.5 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-xs sm:text-sm font-bold text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                    required
+                  >
+                    <option value="OWNER">Property Owner</option>
+                    <option value="RENTED">Tenant / Rented</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Dynamic Live Property Identity Preview Pill */}
+              {plotNumber && (
+                <div className="bg-blue-50/90 border border-blue-200/80 rounded-2xl p-3.5 text-xs text-blue-900 flex flex-wrap items-center justify-between gap-2 shadow-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                    <span>
+                      <strong className="text-blue-950 font-bold">Property Identity:</strong>{" "}
+                      {block ? `Block ${block}` : "Block Selected"}, Plot {plotNumber}, {floor}
+                      {unitNumber ? `, Unit ${unitNumber}` : " (Entire Floor)"}
+                    </span>
+                  </div>
+                  <span className="font-extrabold uppercase tracking-wider px-2.5 py-0.5 bg-blue-600 text-white rounded-lg text-[10px] shadow-xs">
+                    {personType === "TENANT" ? "RENTED" : personType}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* ─────────────────────────────────────────────────────────────
+                SECTION 4: Alternate & Emergency Contacts
+            ───────────────────────────────────────────────────────────── */}
+            <div className="bg-slate-50/70 border border-slate-100 rounded-3xl p-4 sm:p-5 space-y-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm shadow-xs">
+                  <FaPhone />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-slate-800">
+                    Additional Contacts
+                  </h2>
+                  <p className="text-[11px] sm:text-xs text-slate-400 font-medium">
+                    Optional numbers for emergency alerts and family communication
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                    Alternate Mobile <span className="text-slate-400 font-normal text-xs">(Optional)</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                      <span className="text-xs font-bold text-slate-500 bg-white/80 px-1.5 py-0.5 rounded-lg border border-slate-200">
+                        +91
+                      </span>
+                    </div>
+                    <input
+                      type="tel"
+                      placeholder="10-digit number"
+                      value={alternateMobile}
+                      onChange={(e) => setAlternateMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      className="w-full pl-16 pr-4 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                      maxLength={10}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                    Emergency Contact <span className="text-slate-400 font-normal text-xs">(Optional)</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 text-sm">
+                      <FaUserShield />
+                    </div>
+                    <input
+                      type="tel"
+                      placeholder="Emergency contact number"
+                      value={emergencyContact}
+                      onChange={(e) => setEmergencyContact(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      className="w-full pl-11 pr-4 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
+                      maxLength={10}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ─────────────────────────────────────────────────────────────
+                SECTION 5: Garbage Collection Service
+            ───────────────────────────────────────────────────────────── */}
+            <div className="bg-slate-50/70 border border-slate-100 rounded-3xl p-4 sm:p-5 space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm shadow-xs">
+                  <FaLeaf />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-slate-800">
+                    Garbage Collection Service
+                  </h2>
+                  <p className="text-[11px] sm:text-xs text-slate-400 font-medium">
+                    Do you want to participate in the society's door-to-door garbage service?
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setGarbageParticipation("participating")}
+                  className={`p-3.5 sm:p-4 rounded-2xl border-2 text-left transition font-semibold flex items-center gap-3 cursor-pointer ${
+                    garbageParticipation === "participating"
+                      ? "border-emerald-500 bg-emerald-50/90 text-emerald-800 shadow-sm"
+                      : "border-slate-200 bg-white hover:border-slate-300 text-slate-600"
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 ${
+                    garbageParticipation === "participating"
+                      ? "bg-emerald-500 text-white"
+                      : "bg-slate-100 text-slate-400"
+                  }`}>
+                    <FaCheckCircle />
+                  </div>
+                  <div>
+                    <div className="text-xs sm:text-sm font-bold">Participating</div>
+                    <div className="text-[10px] sm:text-[11px] font-normal text-slate-500">
+                      Standard collection with monthly receipt
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setGarbageParticipation("not_participating")}
+                  className={`p-3.5 sm:p-4 rounded-2xl border-2 text-left transition font-semibold flex items-center gap-3 cursor-pointer ${
+                    garbageParticipation === "not_participating"
+                      ? "border-amber-500 bg-amber-50/90 text-amber-800 shadow-sm"
+                      : "border-slate-200 bg-white hover:border-slate-300 text-slate-600"
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 ${
+                    garbageParticipation === "not_participating"
+                      ? "bg-amber-500 text-white"
+                      : "bg-slate-100 text-slate-400"
+                  }`}>
+                    <FaCheckCircle />
+                  </div>
+                  <div>
+                    <div className="text-xs sm:text-sm font-bold">Not Participating</div>
+                    <div className="text-[10px] sm:text-[11px] font-normal text-slate-500">
+                      Opt-out of society waste pickup
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* ─────────────────────────────────────────────────────────────
+                SECTION 6: Security & Approval Notice
+            ───────────────────────────────────────────────────────────── */}
+            <div className="bg-blue-50/80 border border-blue-200/60 rounded-2xl p-4 text-xs sm:text-sm text-blue-900 flex items-start gap-3">
+              <FaShieldAlt className="text-blue-600 text-lg shrink-0 mt-0.5" />
+              <div className="leading-relaxed">
+                <strong className="font-bold text-blue-950">Verification Note:</strong> Your application will be verified by the RWA executive committee to maintain resident security. You will be able to log in immediately upon approval.
+              </div>
+            </div>
+
+            {/* ─────────────────────────────────────────────────────────────
+                SECTION 7: Submit Application & Action Buttons
+            ───────────────────────────────────────────────────────────── */}
+            <div className="space-y-3 pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] disabled:bg-blue-400 text-white font-bold rounded-2xl text-base shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <FaSpinner className="animate-spin text-lg" />
+                    Submitting Application...
+                  </span>
                 ) : (
-                  <p className="text-xs text-gray-400 mt-1">Enter your flat/house number (e.g. B-201, A101, 571)</p>
+                  <>
+                    <span>Submit Registration Application</span>
+                    <FaArrowRight className="text-sm" />
+                  </>
                 )}
-              </div>
-              <div>
-                <label className="block mb-1.5 text-sm font-medium">
-                  Floor <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter floor number"
-                  value={floor}
-                  onChange={(e) => setFloor(e.target.value)}
-                  className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  required
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Contact Information */}
-          <div className="bg-gray-50 rounded-2xl p-5 space-y-4">
-            <h3 className="font-semibold text-gray-700 flex items-center gap-2">
-              <FaPhone className="text-emerald-600" /> Contact Information
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block mb-1.5 text-sm font-medium">Alternate Mobile</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-medium">+91</span>
-                  <input
-                    type="tel"
-                    placeholder="10-digit number"
-                    value={alternateMobile}
-                    onChange={(e) => setAlternateMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                    className="w-full pl-12 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    maxLength={10}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block mb-1.5 text-sm font-medium">
-                  Emergency Contact
-                </label>
-                <div className="relative">
-                  <FaUserShield className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                  <input
-                    type="tel"
-                    placeholder="Emergency contact number"
-                    value={emergencyContact}
-                    onChange={(e) => setEmergencyContact(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                    className="w-full pl-10 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    maxLength={10}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Garbage Collection */}
-          <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 sm:space-y-4">
-            <h3 className="font-semibold text-gray-700 flex items-center gap-2">
-              <FaLeaf className="text-emerald-600" /> Garbage Collection
-            </h3>
-
-            <p className="text-xs sm:text-sm text-gray-500">
-              Do you want to participate in the society's garbage collection service?
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-              <button
-                type="button"
-                onClick={() => setGarbageParticipation("participating")}
-                className={`p-3 sm:p-4 rounded-xl border-2 text-center transition font-semibold flex items-center justify-center sm:flex-col gap-2 ${
-                  garbageParticipation === "participating"
-                    ? "border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm"
-                    : "border-gray-200 hover:border-gray-300 text-gray-500"
-                }`}
-              >
-                <FaCheckCircle className={`text-xl sm:text-2xl shrink-0 ${
-                  garbageParticipation === "participating" ? "text-emerald-500" : "text-gray-300"
-                }`} />
-                <span className="text-xs sm:text-sm">Participating</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setGarbageParticipation("not_participating")}
-                className={`p-3 sm:p-4 rounded-xl border-2 text-center transition font-semibold flex items-center justify-center sm:flex-col gap-2 ${
-                  garbageParticipation === "not_participating"
-                    ? "border-orange-500 bg-orange-50 text-orange-700 shadow-sm"
-                    : "border-gray-200 hover:border-gray-300 text-gray-500"
-                }`}
-              >
-                <FaCheckCircle className={`text-xl sm:text-2xl shrink-0 ${
-                  garbageParticipation === "not_participating" ? "text-orange-500" : "text-gray-300"
-                }`} />
-                <span className="text-xs sm:text-sm">Not Participating</span>
-              </button>
+
+              <div className="text-center pt-2">
+                <p className="text-xs sm:text-sm font-semibold text-slate-500">
+                  Already have an account?{" "}
+                  <Link
+                    to="/?view=login"
+                    className="text-blue-600 hover:text-blue-700 font-bold transition inline-flex items-center gap-1"
+                  >
+                    <span>Sign In Here</span>
+                    <FaChevronLeft className="text-[10px] rotate-180" />
+                  </Link>
+                </p>
+              </div>
             </div>
-          </div>
 
-          {/* Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
-            <strong>Note:</strong> After registration, your account will be reviewed by the society admin. You will receive access once approved.
-          </div>
+          </form>
+        </div>
 
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={loading || !!flatError}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white py-3.5 rounded-xl font-semibold transition text-lg"
-          >
-            {loading ? "Submitting..." : "Submit Registration"}
-          </button>
+        {/* Bottom Scenic Society Illustration Footer */}
+        <div className="relative h-20 sm:h-24 w-full overflow-hidden shrink-0 mt-2">
+          <img
+            src="/society-banner.jpg"
+            alt="D Block Community"
+            className="w-full h-full object-cover object-bottom"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-white via-white/40 to-transparent" />
+        </div>
 
-          <p className="text-center text-gray-500 text-sm">
-            Already have an account?{" "}
-            <Link to="/" className="text-emerald-600 hover:text-emerald-700 font-semibold transition">
-              Login Here
-            </Link>
-          </p>
-        </form>
       </div>
     </div>
   );

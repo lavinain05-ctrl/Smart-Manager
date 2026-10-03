@@ -10,6 +10,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
+import { notifyAdmin, createNotification } from "./notificationService";
 
 const suggestionsRef = collection(db, "suggestions");
 
@@ -96,7 +97,23 @@ export async function addSuggestion(data) {
     updatedAt: serverTimestamp(),
   };
 
-  return await addDoc(suggestionsRef, payload);
+  const docRef = await addDoc(suggestionsRef, payload);
+
+  try {
+    const sender = payload.isAnonymous
+      ? "Anonymous Resident"
+      : `${payload.residentName}${payload.flatNumber ? ` (Flat ${payload.flatNumber})` : ""}`;
+    await notifyAdmin({
+      title: "New Resident Suggestion 💡",
+      message: `${sender}: "${payload.title}"`,
+      type: "suggestion",
+      link: "/admin/suggestions",
+    });
+  } catch (notifErr) {
+    console.warn("[Suggestion] Admin notification warning:", notifErr.message);
+  }
+
+  return docRef;
 }
 
 // =============================

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import {
   FaUsers,
   FaPlus,
@@ -26,6 +27,11 @@ import {
   FaMoneyBillWave,
   FaUserPlus,
   FaUserTie,
+  FaCamera,
+  FaLink,
+  FaChartBar,
+  FaTrashAlt,
+  FaHandHoldingHeart,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -33,30 +39,79 @@ import { useCommittee } from "../../context/CommitteeContext";
 import { useAuth } from "../../context/AuthContext";
 import { useBlockFlat } from "../../context/BlockFlatContext";
 import { deleteUserAccount } from "../../services/accountDeletionService";
-import { normalizeMobile } from "../../services/authService";
-import { adminResetPasswordFn, db } from "../../firebase/firebase";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
-import ConfirmDialog from "../../components/common/ConfirmDialog";
+import { normalizeMobile, mobileToAuthEmail, writeAuthLookup, isRealEmail } from "../../services/authService";
+import { adminResetPasswordFn, db, secondaryAuth } from "../../firebase/firebase";
+import { doc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { blockAccount, unblockAccount } from "../../services/blockService";
+import {
+  toggleCommitteeGarbagePower,
+  toggleCommitteeSpecialPower,
+  toggleCommitteeCollectionPower,
+  toggleCommitteeReportAccess,
+} from "../../services/committeeService";
 import AddCommitteeDrawer from "../../components/forms/AddCommitteeDrawer";
 
 const DESIGNATIONS = [
   "President",
   "Vice President",
   "Secretary",
+  "Vice Secretary",
   "Joint Secretary",
   "Treasurer",
+  "Vice Treasurer",
+  "General Secretary",
+  "Spokesperson",
+  "Advisor",
+  "Legal Advisor",
+  "Technical Advisor",
+  "Cultural Secretary",
+  "Sports Secretary",
+  "Security Incharge",
+  "Maintenance Incharge",
   "Executive Member",
+  "Member",
 ];
 
 const designationColors = {
   President: "bg-indigo-100 text-indigo-800 border-indigo-200",
   "Vice President": "bg-indigo-100 text-indigo-700 border-indigo-200",
   Secretary: "bg-purple-100 text-purple-800 border-purple-200",
+  "Vice Secretary": "bg-purple-100 text-purple-700 border-purple-200",
   "Joint Secretary": "bg-purple-100 text-purple-700 border-purple-200",
+  "General Secretary": "bg-indigo-100 text-indigo-800 border-indigo-200",
   Treasurer: "bg-amber-100 text-amber-800 border-amber-200",
+  "Vice Treasurer": "bg-amber-100 text-amber-700 border-amber-200",
+  Spokesperson: "bg-cyan-100 text-cyan-800 border-cyan-200",
+  Advisor: "bg-blue-100 text-blue-800 border-blue-200",
   "Executive Member": "bg-slate-100 text-slate-700 border-slate-200",
 };
+
+export function getAdminMemberPhoto(member) {
+  if (member?.profilePhotoUrl) return member.profilePhotoUrl;
+  const isPresident =
+    member?.designation?.toLowerCase() === "president" ||
+    member?.name?.toLowerCase().includes("dharmendra");
+  if (isPresident) return "/committee/president.jpg";
+  const isVicePresident =
+    member?.designation?.toLowerCase() === "vice president" ||
+    member?.name?.toLowerCase().includes("ankit");
+  if (isVicePresident) return "/committee/ankit-chaudhary.png";
+  const isVinod =
+    member?.designation?.toLowerCase() === "vice treasurer" ||
+    member?.name?.toLowerCase().includes("vinod");
+  if (isVinod) return "/committee/vinod-kumar.jpg";
+  const isNarendra =
+    member?.designation?.toLowerCase() === "spokesperson" ||
+    member?.name?.toLowerCase().includes("narendra") ||
+    member?.name?.toLowerCase().includes("dhama");
+  if (isNarendra) return "/committee/narendra-dhama.png";
+  const isDinesh =
+    member?.designation?.toLowerCase() === "advisor" ||
+    member?.name?.toLowerCase().includes("dinesh");
+  if (isDinesh) return "/committee/dinesh-kumar.png";
+  return null;
+}
 
 export default function ManageCommittee() {
   const {
@@ -67,6 +122,7 @@ export default function ManageCommittee() {
     uploadCommitteePhoto,
     deleteCommitteePhoto,
     replaceCommitteePhoto,
+    setCommitteePhotoUrl,
   } = useCommittee();
   const { user } = useAuth();
   const { activeBlocks = [] } = useBlockFlat();
@@ -74,6 +130,14 @@ export default function ManageCommittee() {
   // Drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
+
+  // Quick Photo Edit State
+  const [photoTarget, setPhotoTarget] = useState(null);
+  const [photoModalMode, setPhotoModalMode] = useState("file"); // "file" | "url"
+  const [photoModalUrl, setPhotoModalUrl] = useState("");
+  const [photoModalFile, setPhotoModalFile] = useState(null);
+  const [photoModalPreview, setPhotoModalPreview] = useState("");
+  const [photoModalLoading, setPhotoModalLoading] = useState(false);
 
   // Filters & View Mode
   const [search, setSearch] = useState("");
@@ -102,6 +166,44 @@ export default function ManageCommittee() {
   const [blockModalDetails, setBlockModalDetails] = useState("");
   const [blockLoading, setBlockLoading] = useState(false);
 
+  function handleOpenPhotoModal(member) {
+    setPhotoTarget(member);
+    setPhotoModalUrl(member.profilePhotoUrl || "");
+    setPhotoModalPreview(member.profilePhotoUrl || "");
+    setPhotoModalFile(null);
+    setPhotoModalMode(member.profilePhotoUrl ? "url" : "file");
+  }
+
+  async function handleSavePhotoModal(e) {
+    e.preventDefault();
+    if (!photoTarget) return;
+    setPhotoModalLoading(true);
+    const memberId = photoTarget.id || photoTarget.uid;
+
+    try {
+      if (photoModalMode === "file") {
+        if (photoModalFile) {
+          await replaceCommitteePhoto(memberId, photoModalFile);
+        } else if (!photoModalPreview) {
+          await deleteCommitteePhoto(memberId);
+        }
+      } else {
+        const cleanUrl = photoModalUrl.trim();
+        if (cleanUrl) {
+          await setCommitteePhotoUrl(memberId, cleanUrl);
+        } else {
+          await deleteCommitteePhoto(memberId);
+        }
+      }
+      setPhotoTarget(null);
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || "Failed to update profile photo");
+    } finally {
+      setPhotoModalLoading(false);
+    }
+  }
+
   // Copy phone handler
   function handleCopyPhone(phone) {
     if (!phone) return;
@@ -109,6 +211,60 @@ export default function ManageCommittee() {
     setCopiedPhone(phone);
     toast.success("Phone copied to clipboard!");
     setTimeout(() => setCopiedPhone(null), 2000);
+  }
+
+  // Quick toggle committee garbage collection power
+  async function handleToggleGarbagePower(member) {
+    const current = Boolean(member.permissions?.canCollectGarbage || member.canCollectGarbage);
+    const next = !current;
+    try {
+      await toggleCommitteeGarbagePower(member.id || member.uid, next);
+      toast.success(
+        next
+          ? `Granted Garbage Collection power to ${member.name}!`
+          : `Revoked Garbage Collection power from ${member.name}.`
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update garbage collection permissions");
+    }
+  }
+
+  // Quick toggle committee special collection power
+  async function handleToggleSpecialPower(member) {
+    const current = Boolean(member.permissions?.canCollectSpecial || member.canCollectSpecial);
+    const next = !current;
+    try {
+      await toggleCommitteeSpecialPower(member.id || member.uid, next);
+      toast.success(
+        next
+          ? `Granted Special Collection power to ${member.name}!`
+          : `Revoked Special Collection power from ${member.name}.`
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update special collection permissions");
+    }
+  }
+
+  // Backwards-compatible alias
+  const handleToggleCollectionPower = handleToggleGarbagePower;
+
+  // Quick toggle committee society report viewing power
+  async function handleToggleReportPower(member) {
+    const current = Boolean(member.permissions?.canViewGarbageReports || member.canViewGarbageReports);
+    const next = !current;
+    try {
+      await toggleCommitteeReportAccess(member.id || member.uid, next);
+      toast.success(
+        next
+          ? `Granted Society Reports & Analytics access to ${member.name}!`
+          : `Revoked Society Reports & Analytics access from ${member.name}.`
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update report permissions");
+    }
   }
 
   // Filtered members list
@@ -164,12 +320,9 @@ export default function ManageCommittee() {
         active++;
       }
 
-      if (
-        m.designation === "President" ||
-        m.designation === "Vice President" ||
-        m.designation === "Secretary" ||
-        m.designation === "Treasurer"
-      ) {
+      const nonExecutiveRoles = ["Member", "General Member", "Volunteer"];
+      const isExecutive = m.designation && !nonExecutiveRoles.includes(m.designation);
+      if (isExecutive) {
         executiveCount++;
       }
     });
@@ -211,21 +364,40 @@ export default function ManageCommittee() {
         await deleteCommitteePhoto(memberId);
       } else if (formData.photoFile) {
         await replaceCommitteePhoto(memberId, formData.photoFile);
+      } else if (formData.photoUrl !== undefined && formData.photoUrl !== "") {
+        await setCommitteePhotoUrl(memberId, formData.photoUrl);
       }
 
       // Password update if provided
       if (formData.password) {
+        let pwUpdated = false;
         try {
           await adminResetPasswordFn({
             targetUid: memberId,
             password: formData.password,
           });
+          pwUpdated = true;
         } catch (pwErr) {
           console.warn("Could not update auth password directly:", pwErr.message);
         }
-      }
 
-      toast.success(`Updated ${formData.name}'s profile`);
+        if (!pwUpdated) {
+          const cleanPhone = normalizeMobile(formData.phone || editingMember.phone || "");
+          if (cleanPhone.length === 10) {
+            const authEmail = mobileToAuthEmail(cleanPhone);
+            try {
+              const cred = await createUserWithEmailAndPassword(secondaryAuth, authEmail, formData.password);
+              const newUid = cred.user.uid;
+              await signOut(secondaryAuth);
+              await writeAuthLookup(cleanPhone, authEmail, newUid, formData.email || "", formData.flat || "", formData.name || "");
+              await setDoc(doc(db, "users", newUid), { ...updates, role: "committee" }, { merge: true });
+              await setDoc(doc(db, "committee", newUid), { ...updates, uid: newUid }, { merge: true });
+            } catch (createErr) {
+              console.warn("secondaryAuth creation on save:", createErr.message);
+            }
+          }
+        }
+      }
     } else {
       // Add new
       const createdUid = await addCommitteeMember({
@@ -243,6 +415,7 @@ export default function ManageCommittee() {
         residentId: formData.residentId,
         permissions: formData.permissions,
         mustChangePassword: formData.mustChangePassword,
+        profilePhotoUrl: formData.photoUrl || "",
       });
 
       if (!createdUid) return;
@@ -343,14 +516,35 @@ export default function ManageCommittee() {
         console.warn("Cloud function reset:", fnErr.message);
       }
 
+      // If user had no Auth user, create it via secondaryAuth
+      const targetPhone = normalizeMobile(resetTarget.phone || resetTarget.mobile || "");
+      if (targetPhone.length === 10) {
+        const authEmail = mobileToAuthEmail(targetPhone);
+        try {
+          const cred = await createUserWithEmailAndPassword(secondaryAuth, authEmail, chosenPassword);
+          const newUid = cred.user.uid;
+          await signOut(secondaryAuth);
+          console.log("[Committee] Reset created missing Auth user:", newUid);
+          await writeAuthLookup(targetPhone, authEmail, newUid, resetTarget.email || "", resetTarget.flat || "", resetTarget.name || "");
+          await setDoc(doc(db, "users", newUid), { ...resetTarget, role: "committee", mustChangePassword: true }, { merge: true });
+          await setDoc(doc(db, "committee", newUid), { ...resetTarget, uid: newUid, mustChangePassword: true }, { merge: true });
+        } catch (createErr) {
+          console.warn("[Committee] secondaryAuth creation on reset:", createErr.message);
+        }
+      }
+
       // Mark mustChangePassword in Firestore
-      await updateDoc(doc(db, "users", memberId), {
-        mustChangePassword: true,
-        tempPasswordSetAt: serverTimestamp(),
-      });
-      await updateDoc(doc(db, "committee", memberId), {
-        mustChangePassword: true,
-      });
+      try {
+        await updateDoc(doc(db, "users", memberId), {
+          mustChangePassword: true,
+          tempPasswordSetAt: serverTimestamp(),
+        });
+      } catch {}
+      try {
+        await updateDoc(doc(db, "committee", memberId), {
+          mustChangePassword: true,
+        });
+      } catch {}
 
       setTempPasswordResult(chosenPassword);
       toast.success("Temporary password generated!");
@@ -455,12 +649,19 @@ export default function ManageCommittee() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            to="/committee/dashboard"
+            className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-xs"
+          >
+            <FaShieldAlt className="text-sm" /> Open Committee Portal
+          </Link>
+
           <button
             onClick={() => {
               setEditingMember(null);
               setDrawerOpen(true);
             }}
-            className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl font-semibold transition shadow-md hover:shadow-lg transform active:scale-95"
+            className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl font-semibold transition shadow-md hover:shadow-lg transform active:scale-95 cursor-pointer"
           >
             <FaPlus className="text-sm" /> Add Member
           </button>
@@ -711,20 +912,46 @@ export default function ManageCommittee() {
                 <div>
                   <div className="flex items-start justify-between gap-3 pt-1">
                     <div className="flex items-center gap-3 min-w-0">
-                      {member.profilePhotoUrl ? (
-                        <img
-                          src={member.profilePhotoUrl}
-                          alt={member.name}
-                          className="w-12 h-12 rounded-full object-cover shrink-0 ring-2 ring-indigo-100"
-                          onError={(e) => {
-                            e.target.style.display = "none";
-                          }}
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-indigo-100 to-purple-100 text-indigo-700 flex items-center justify-center shrink-0 font-bold text-base shadow-inner">
-                          {member.name ? member.name.charAt(0).toUpperCase() : <FaUser />}
-                        </div>
-                      )}
+                      <div className="relative shrink-0 group/avatar" style={{ width: "56px", height: "56px" }}>
+                        {(() => {
+                          const photo = getAdminMemberPhoto(member);
+                          return (
+                            <>
+                              {photo && (
+                                <img
+                                  src={photo}
+                                  alt={member.name}
+                                  className="w-14 h-14 rounded-2xl object-cover ring-2 ring-indigo-100 shadow-xs cursor-pointer hover:opacity-90 transition shrink-0"
+                                  style={{ width: "56px", height: "56px", minWidth: "56px", minHeight: "56px", maxWidth: "56px", maxHeight: "56px" }}
+                                  onClick={() => handleOpenPhotoModal(member)}
+                                  title="Click to update photo"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                    const fallback = e.currentTarget.parentElement?.querySelector(".member-initial-fallback");
+                                    if (fallback) fallback.style.display = "flex";
+                                  }}
+                                />
+                              )}
+                              <div
+                                onClick={() => handleOpenPhotoModal(member)}
+                                className={`member-initial-fallback w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-100 to-purple-100 text-indigo-700 items-center justify-center shrink-0 font-bold text-base shadow-inner cursor-pointer hover:bg-indigo-200/80 transition ${photo ? "hidden" : "flex"}`}
+                                style={{ width: "56px", height: "56px", minWidth: "56px", minHeight: "56px" }}
+                                title="Click to set photo"
+                              >
+                                {member.name ? member.name.charAt(0).toUpperCase() : <FaUser />}
+                              </div>
+                            </>
+                          );
+                        })()}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenPhotoModal(member)}
+                          className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center text-[10px] shadow-sm transition"
+                          title="Quick Set / Change Photo"
+                        >
+                          <FaCamera />
+                        </button>
+                      </div>
 
                       <div className="min-w-0">
                         <h3 className="font-bold text-gray-900 truncate text-base leading-tight">
@@ -794,7 +1021,7 @@ export default function ManageCommittee() {
                     </div>
 
                     {/* Email */}
-                    {member.email && (
+                    {isRealEmail(member.email) && (
                       <div className="flex items-center justify-between">
                         <span className="text-gray-400 font-medium">Official Email:</span>
                         <span
@@ -844,14 +1071,29 @@ export default function ManageCommittee() {
                             <FaKey className="text-[9px]" /> Recovery
                           </span>
                         )}
-                        {member.permissions.canCollectGarbage && (
-                          <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 font-semibold text-[10px] border border-teal-100 flex items-center gap-1">
-                            <FaMoneyBillWave className="text-[9px]" /> Collector (Garbage)
+                        {(member.permissions?.canCollectGarbage || member.canCollectGarbage) && (
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold text-[10px] border border-emerald-300 flex items-center gap-1 shadow-xs">
+                            <FaTrashAlt className="text-[9px]" /> GC Collector
                           </span>
                         )}
-                        {member.permissions.canCollectSpecial && (
-                          <span className="px-2 py-0.5 rounded-md bg-fuchsia-50 text-fuchsia-700 font-semibold text-[10px] border border-fuchsia-100 flex items-center gap-1">
-                            <FaMoneyBillWave className="text-[9px]" /> Collector (Special)
+                        {(member.permissions?.canCollectSpecial || member.canCollectSpecial) && (
+                          <span
+                            className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-bold text-[10px] border border-indigo-300 flex items-center gap-1 shadow-xs"
+                            title={
+                              (member.permissions?.specialCollectionScope || member.specialCollectionScope) === "specific"
+                                ? `Permitted Campaigns: ${(member.permissions?.allowedSpecialCollectionNames || member.allowedSpecialCollectionNames || []).join(", ") || `${(member.permissions?.allowedSpecialCollections || member.allowedSpecialCollections || []).length} campaigns`}`
+                                : "Authorized for All Special Collections"
+                            }
+                          >
+                            <FaHandHoldingHeart className="text-[9px]" />{" "}
+                            {(member.permissions?.specialCollectionScope || member.specialCollectionScope) === "specific"
+                              ? `Special (${(member.permissions?.allowedSpecialCollections || member.allowedSpecialCollections || []).length})`
+                              : "Special (All)"}
+                          </span>
+                        )}
+                        {(member.permissions?.canViewGarbageReports || member.canViewGarbageReports) && (
+                          <span className="px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 font-bold text-[10px] border border-teal-300 flex items-center gap-1 shadow-xs">
+                            <FaChartBar className="text-[9px]" /> Reports Viewer
                           </span>
                         )}
                       </div>
@@ -894,6 +1136,60 @@ export default function ManageCommittee() {
                       title={isBlocked ? "Unblock Account" : "Suspend Account"}
                     >
                       {isBlocked ? <FaUnlock className="text-sm" /> : <FaBan className="text-sm" />}
+                    </button>
+
+                    {/* Quick Toggle GC Collection Power */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleGarbagePower(member)}
+                      className={`p-2 rounded-lg transition cursor-pointer ${
+                        member.permissions?.canCollectGarbage || member.canCollectGarbage
+                          ? "text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                          : "text-slate-400 hover:text-emerald-600 hover:bg-slate-100"
+                      }`}
+                      title={
+                        member.permissions?.canCollectGarbage || member.canCollectGarbage
+                          ? "Garbage Collection Power: ACTIVE (Click to Revoke)"
+                          : "Garbage Collection Power: DISABLED (Click to Grant)"
+                      }
+                    >
+                      <FaTrashAlt className="text-sm" />
+                    </button>
+
+                    {/* Quick Toggle Special Collection Power */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSpecialPower(member)}
+                      className={`p-2 rounded-lg transition cursor-pointer ${
+                        member.permissions?.canCollectSpecial || member.canCollectSpecial
+                          ? "text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
+                          : "text-slate-400 hover:text-indigo-600 hover:bg-slate-100"
+                      }`}
+                      title={
+                        member.permissions?.canCollectSpecial || member.canCollectSpecial
+                          ? "Special Collection Power: ACTIVE (Click to Revoke)"
+                          : "Special Collection Power: DISABLED (Click to Grant)"
+                      }
+                    >
+                      <FaHandHoldingHeart className="text-sm" />
+                    </button>
+
+                    {/* Quick Toggle Society Reports Power */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleReportPower(member)}
+                      className={`p-2 rounded-lg transition cursor-pointer ${
+                        member.permissions?.canViewGarbageReports || member.canViewGarbageReports
+                          ? "text-teal-700 bg-teal-50 hover:bg-teal-100"
+                          : "text-slate-400 hover:text-teal-600 hover:bg-slate-100"
+                      }`}
+                      title={
+                        member.permissions?.canViewGarbageReports || member.canViewGarbageReports
+                          ? "Society Reports Power: ACTIVE (Click to Revoke)"
+                          : "Society Reports Power: DISABLED (Click to Grant)"
+                      }
+                    >
+                      <FaChartBar className="text-sm" />
                     </button>
                   </div>
 
@@ -941,20 +1237,42 @@ export default function ManageCommittee() {
                       {/* Name */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
-                          {member.profilePhotoUrl ? (
-                            <img
-                              src={member.profilePhotoUrl}
-                              alt={member.name}
-                              className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-indigo-100"
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
-                              {member.name ? member.name.charAt(0).toUpperCase() : "C"}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPhotoModal(member)}
+                            className="relative group shrink-0"
+                            title="Click to update photo"
+                          >
+                            {(() => {
+                              const photo = getAdminMemberPhoto(member);
+                              return (
+                                <>
+                                  {photo && (
+                                    <img
+                                      src={photo}
+                                      alt={member.name}
+                                      className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-indigo-100 group-hover:ring-indigo-400 transition"
+                                      style={{ width: "32px", height: "32px", minWidth: "32px", minHeight: "32px", maxWidth: "32px", maxHeight: "32px" }}
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = "none";
+                                        const fallback = e.currentTarget.parentElement?.querySelector(".table-initial-fallback");
+                                        if (fallback) fallback.style.display = "flex";
+                                      }}
+                                    />
+                                  )}
+                                  <div className={`table-initial-fallback w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 items-center justify-center font-bold text-xs shrink-0 group-hover:bg-indigo-200 transition ${photo ? "hidden" : "flex"}`}>
+                                    {member.name ? member.name.charAt(0).toUpperCase() : "C"}
+                                  </div>
+                                </>
+                              );
+                            })()}
+                            <div className="absolute inset-0 rounded-full bg-black/30 flex items-center justify-center text-white text-[9px] opacity-0 group-hover:opacity-100 transition">
+                              <FaCamera />
                             </div>
-                          )}
+                          </button>
                           <div>
                             <p className="font-semibold text-gray-900">{member.name}</p>
-                            {member.email && (
+                            {isRealEmail(member.email) && (
                               <p className="text-xs text-gray-400">{member.email}</p>
                             )}
                           </div>
@@ -995,14 +1313,29 @@ export default function ManageCommittee() {
                                 Recovery
                               </span>
                             )}
-                            {member.permissions.canCollectGarbage && (
-                              <span className="px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 text-[9px] font-semibold border border-teal-100">
-                                Collector (GC)
+                            {(member.permissions?.canCollectGarbage || member.canCollectGarbage) && (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-bold border border-emerald-300">
+                                ♻️ GC
                               </span>
                             )}
-                            {member.permissions.canCollectSpecial && (
-                              <span className="px-1.5 py-0.5 rounded bg-fuchsia-50 text-fuchsia-700 text-[9px] font-semibold border border-fuchsia-100">
-                                Collector (Special)
+                            {(member.permissions?.canCollectSpecial || member.canCollectSpecial) && (
+                              <span
+                                className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[9px] font-bold border border-indigo-300"
+                                title={
+                                  (member.permissions?.specialCollectionScope || member.specialCollectionScope) === "specific"
+                                    ? `Permitted Campaigns: ${(member.permissions?.allowedSpecialCollectionNames || member.allowedSpecialCollectionNames || []).join(", ") || `${(member.permissions?.allowedSpecialCollections || member.allowedSpecialCollections || []).length} campaigns`}`
+                                    : "Authorized for All Special Collections"
+                                }
+                              >
+                                🎁 Special{" "}
+                                {(member.permissions?.specialCollectionScope || member.specialCollectionScope) === "specific"
+                                  ? `(${(member.permissions?.allowedSpecialCollections || member.allowedSpecialCollections || []).length})`
+                                  : "(All)"}
+                              </span>
+                            )}
+                            {(member.permissions?.canViewGarbageReports || member.canViewGarbageReports) && (
+                              <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 text-[9px] font-bold border border-teal-300">
+                                📊 Reports
                               </span>
                             )}
                           </div>
@@ -1088,6 +1421,54 @@ export default function ManageCommittee() {
                             title={isBlocked ? "Unblock" : "Suspend"}
                           >
                             {isBlocked ? <FaUnlock /> : <FaBan />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleGarbagePower(member)}
+                            className={`p-1.5 rounded-lg transition cursor-pointer ${
+                              member.permissions?.canCollectGarbage || member.canCollectGarbage
+                                ? "text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                                : "text-slate-400 hover:text-emerald-600 hover:bg-slate-100"
+                            }`}
+                            title={
+                              member.permissions?.canCollectGarbage || member.canCollectGarbage
+                                ? "GC Collection Power: ACTIVE (Click to Revoke)"
+                                : "GC Collection Power: DISABLED (Click to Grant)"
+                            }
+                          >
+                            <FaTrashAlt className="text-xs" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSpecialPower(member)}
+                            className={`p-1.5 rounded-lg transition cursor-pointer ${
+                              member.permissions?.canCollectSpecial || member.canCollectSpecial
+                                ? "text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
+                                : "text-slate-400 hover:text-indigo-600 hover:bg-slate-100"
+                            }`}
+                            title={
+                              member.permissions?.canCollectSpecial || member.canCollectSpecial
+                                ? "Special Collection Power: ACTIVE (Click to Revoke)"
+                                : "Special Collection Power: DISABLED (Click to Grant)"
+                            }
+                          >
+                            <FaHandHoldingHeart className="text-xs" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleReportPower(member)}
+                            className={`p-1.5 rounded-lg transition cursor-pointer ${
+                              member.permissions?.canViewGarbageReports || member.canViewGarbageReports
+                                ? "text-teal-700 bg-teal-50 hover:bg-teal-100"
+                                : "text-slate-400 hover:text-teal-600 hover:bg-slate-100"
+                            }`}
+                            title={
+                              member.permissions?.canViewGarbageReports || member.canViewGarbageReports
+                                ? "Society Reports: ACTIVE (Click to Revoke)"
+                                : "Society Reports: DISABLED (Click to Grant)"
+                            }
+                          >
+                            <FaChartBar className="text-xs" />
                           </button>
                           <button
                             onClick={() => setConfirmDelete(member)}
@@ -1354,7 +1735,191 @@ export default function ManageCommittee() {
         </div>
       )}
 
-      {/* 8. Confirm Delete Dialog */}
+      {/* 8. Quick Profile Photo Modal */}
+      {photoTarget && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-indigo-50/70">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-lg shadow-sm">
+                  <FaCamera />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm sm:text-base">
+                    Official Profile Photo
+                  </h3>
+                  <p className="text-xs text-indigo-700 font-medium">
+                    {photoTarget.name} • {photoTarget.designation}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPhotoTarget(null)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePhotoModal} className="p-5 space-y-4">
+              {/* Photo Mode Switcher */}
+              <div className="flex items-center justify-center bg-gray-100 p-1 rounded-xl text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setPhotoModalMode("file")}
+                  className={`flex-1 py-1.5 rounded-lg transition ${
+                    photoModalMode === "file"
+                      ? "bg-white text-indigo-700 shadow-xs"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  📁 Upload Device File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPhotoModalMode("url")}
+                  className={`flex-1 py-1.5 rounded-lg transition ${
+                    photoModalMode === "url"
+                      ? "bg-white text-indigo-700 shadow-xs"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  🔗 Image URL / Path
+                </button>
+              </div>
+
+              {/* Live Photo Preview */}
+              <div className="flex flex-col items-center justify-center py-1">
+                <div className="w-28 h-28 rounded-2xl bg-indigo-50 border-2 border-indigo-200 shadow-md flex items-center justify-center overflow-hidden relative">
+                  {photoModalPreview ? (
+                    <img
+                      src={photoModalPreview}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // fallback
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-indigo-300">
+                      <FaUser className="text-4xl" />
+                      <span className="text-[10px] font-semibold text-indigo-400 mt-1">No Image</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-2">
+                  Preview in Residents Portal & Committee Directory
+                </p>
+              </div>
+
+              {photoModalMode === "file" ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Choose Image File
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    id="quick-photo-file-input"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setPhotoModalFile(file);
+                      const reader = new FileReader();
+                      reader.onload = () => setPhotoModalPreview(reader.result);
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="quick-photo-file-input"
+                      className="flex-1 cursor-pointer py-2.5 px-3 rounded-xl border border-gray-300 hover:bg-gray-50 text-xs font-semibold text-gray-700 flex items-center justify-center gap-2 transition bg-white"
+                    >
+                      <FaCamera className="text-indigo-600" />
+                      <span>{photoModalFile ? "Change Selected File" : "Browse File"}</span>
+                    </label>
+
+                    {photoModalPreview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhotoModalFile(null);
+                          setPhotoModalPreview("");
+                        }}
+                        className="py-2.5 px-3 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 border border-red-200 transition"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    JPG, PNG, or WebP. Max 5MB. Uploads to Firebase Storage.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Image Link or Local Path
+                  </label>
+                  <div className="relative">
+                    <FaLink className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="e.g. /committee/president.jpg or https://..."
+                      value={photoModalUrl}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPhotoModalUrl(val);
+                        setPhotoModalPreview(val.trim());
+                      }}
+                      className="w-full pl-9 pr-3.5 py-2.5 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-gray-500">
+                    <span>
+                      Public path (e.g. <code className="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">/committee/president.jpg</code>)
+                    </span>
+                    {photoModalPreview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhotoModalUrl("");
+                          setPhotoModalPreview("");
+                        }}
+                        className="text-red-600 hover:text-red-700 font-semibold"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setPhotoTarget(null)}
+                  disabled={photoModalLoading}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={photoModalLoading}
+                  className="px-5 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white rounded-xl shadow-xs transition flex items-center gap-1.5"
+                >
+                  {photoModalLoading ? "Saving..." : "Save Photo"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 9. Confirm Delete Dialog */}
       {confirmDelete && (
         <ConfirmDialog
           title="Remove Committee Member"

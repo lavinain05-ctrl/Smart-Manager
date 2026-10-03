@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
   FaHome,
   FaBell,
@@ -7,6 +8,9 @@ import {
   FaFileInvoiceDollar,
   FaUser,
   FaUsers,
+  FaFileAlt,
+  FaReceipt,
+  FaUserTie,
 } from "react-icons/fa";
 
 import { doc, getDoc } from "firebase/firestore";
@@ -65,32 +69,117 @@ export default function FamilyDashboard() {
   return (
     <div className="space-y-6">
 
-      {/* Welcome Card */}
-      <div className="bg-gradient-to-r from-sky-600 to-sky-700 rounded-2xl p-6 text-white">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-3xl">
-            <FaUser />
+      {/* ═══════════ Scenic Society Hero Banner ═══════════ */}
+      <div className="relative group overflow-hidden rounded-3xl shadow-xl border border-slate-200/60 dark:border-slate-800 bg-slate-900 transition-all duration-300">
+        <div className="relative h-60 sm:h-64 md:h-72 w-full overflow-hidden">
+          <img
+            src="/society-banner.jpg"
+            alt="D Block RWA Society"
+            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-1000 ease-out"
+          />
+
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/40 to-black/30" />
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-transparent to-slate-950/40" />
+
+          {/* Top Floating Society Badge */}
+          <div className="absolute top-4 left-4 right-4 flex items-center justify-between gap-2 z-10 flex-wrap">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/20 text-white text-[11px] sm:text-xs font-bold tracking-wide shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>D BLOCK RWA • INDRAPRASTHA</span>
+            </div>
+
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/30 text-sky-200 backdrop-blur-md border border-sky-400/40 text-[10px] font-extrabold uppercase tracking-wider">
+              👨‍👩‍👧 Family Member
+            </span>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold">
-              Welcome, {user?.name || "Family Member"}
-            </h1>
-            <p className="text-sky-200 mt-1">
-              <span className="bg-white/20 px-3 py-0.5 rounded-full text-xs font-semibold">
-                👨‍👩‍👧 Family Member
-              </span>
-              {parentResident && (
-                <span className="ml-3">
-                  Flat {parentResident.flat}
-                  {parentResident.block ? `, Block ${parentResident.block}` : ""}
-                </span>
-              )}
-            </p>
-            {user?.relation && (
-              <p className="text-sky-200 text-sm mt-1">
-                Relation: {user.relation}
+
+          {/* Welcome Text */}
+          <div className="absolute inset-0 flex flex-col justify-end p-5 sm:p-7 z-10 pb-6 sm:pb-7">
+            <div className="space-y-1 max-w-2xl">
+              <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]">
+                Welcome
+              </h1>
+              <p className="text-sm sm:text-base font-semibold text-emerald-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
+                Your Society, Our Community
               </p>
-            )}
+
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/20 backdrop-blur-md border border-white/25 text-white text-xs font-bold shadow-sm">
+                  <FaUser className="text-sky-300 text-xs" />
+                  <span>{user?.name || "Family Member"}</span>
+                  {user?.relation && <span className="text-white/80 font-normal">({user.relation})</span>}
+                </div>
+
+                {parentResident && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-black/40 backdrop-blur-md border border-white/15 text-slate-200 text-xs font-medium">
+                    <FaHome className="text-emerald-300 text-xs" />
+                    <span>Flat {parentResident.flat}</span>
+                    {parentResident.block && <span>({parentResident.block})</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Action Navigation Buttons */}
+        <div className="p-3 sm:p-4 bg-gradient-to-b from-slate-900 to-slate-950 border-t border-white/10">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
+            <Link
+              to="/family/notices"
+              className="bg-white dark:bg-slate-800 hover:bg-blue-50/90 dark:hover:bg-slate-700/90 p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm transition-all duration-200 flex flex-col items-center text-center active:scale-[0.98]"
+            >
+              <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-950/70 dark:text-blue-400 flex items-center justify-center text-lg mb-1.5">
+                <FaFileAlt />
+              </div>
+              <span className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white">Notices</span>
+              <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">{notices.length} Active</span>
+            </Link>
+
+            <Link
+              to="/family/events"
+              className="bg-white dark:bg-slate-800 hover:bg-emerald-50/90 dark:hover:bg-slate-700/90 p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm transition-all duration-200 flex flex-col items-center text-center active:scale-[0.98]"
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/70 dark:text-emerald-400 flex items-center justify-center text-lg mb-1.5">
+                <FaCalendarAlt />
+              </div>
+              <span className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white">Events</span>
+              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">{upcomingEvents.length} Upcoming</span>
+            </Link>
+
+            <Link
+              to="/family/receipts"
+              className="bg-white dark:bg-slate-800 hover:bg-amber-50/90 dark:hover:bg-slate-700/90 p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm transition-all duration-200 flex flex-col items-center text-center active:scale-[0.98]"
+            >
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-950/70 dark:text-amber-400 flex items-center justify-center text-lg mb-1.5">
+                <FaReceipt />
+              </div>
+              <span className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white">Receipts</span>
+              <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">Payment Records</span>
+            </Link>
+
+            {/* Executive Committee */}
+            <Link
+              to="/family/committee"
+              className="bg-white dark:bg-slate-800 hover:bg-indigo-50/90 dark:hover:bg-slate-700/90 p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm transition-all duration-200 flex flex-col items-center text-center active:scale-[0.98]"
+            >
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950/70 dark:text-indigo-400 flex items-center justify-center text-lg mb-1.5">
+                <FaUserTie />
+              </div>
+              <span className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white leading-tight">Executive Committee</span>
+              <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">Office Bearers</span>
+            </Link>
+
+            <Link
+              to="/family/complaints"
+              className="bg-white dark:bg-slate-800 hover:bg-purple-50/90 dark:hover:bg-slate-700/90 p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm transition-all duration-200 flex flex-col items-center text-center active:scale-[0.98] col-span-2 sm:col-span-1"
+            >
+              <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 dark:bg-purple-950/70 dark:text-purple-400 flex items-center justify-center text-lg mb-1.5">
+                <FaExclamationCircle />
+              </div>
+              <span className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white">Complaints</span>
+              <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400">{myComplaints.length} Logged</span>
+            </Link>
           </div>
         </div>
       </div>

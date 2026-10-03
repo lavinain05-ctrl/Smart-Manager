@@ -35,8 +35,12 @@ const designationConfig = {
   President: { classes: "bg-indigo-100 text-indigo-700", dot: "bg-indigo-600" },
   "Vice President": { classes: "bg-indigo-100 text-indigo-700", dot: "bg-indigo-500" },
   Secretary: { classes: "bg-purple-100 text-purple-700", dot: "bg-purple-600" },
+  "Vice Secretary": { classes: "bg-purple-100 text-purple-700", dot: "bg-purple-500" },
   "Joint Secretary": { classes: "bg-purple-100 text-purple-700", dot: "bg-purple-500" },
   Treasurer: { classes: "bg-violet-100 text-violet-700", dot: "bg-violet-600" },
+  "Vice Treasurer": { classes: "bg-amber-100 text-amber-700", dot: "bg-amber-600" },
+  Spokesperson: { classes: "bg-cyan-100 text-cyan-700", dot: "bg-cyan-600" },
+  Advisor: { classes: "bg-blue-100 text-blue-700", dot: "bg-blue-600" },
   "Executive Member": { classes: "bg-slate-100 text-slate-700", dot: "bg-slate-500" },
 };
 

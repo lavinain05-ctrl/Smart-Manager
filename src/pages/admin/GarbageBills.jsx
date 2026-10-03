@@ -16,11 +16,11 @@ import { useGarbage } from "../../context/GarbageContext";
 import { usePayments } from "../../context/PaymentContext";
 import { isGcParticipating } from "../../services/statisticsService";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
-
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+import {
+  isPriorToCollectionStart,
+  getAvailableBillingYears,
+  getAvailableBillingMonths,
+} from "../../utils/billingCycle";
 
 export default function GarbageBills() {
   const {
@@ -48,6 +48,9 @@ export default function GarbageBills() {
 
   // Synchronized monthly bills: merge garbageBills with all active participating residents
   const monthlyBills = useMemo(() => {
+    if (isPriorToCollectionStart(selectedMonth, selectedYear)) {
+      return [];
+    }
     const billMap = new Map();
 
     // 1. Existing bills from garbageBills
@@ -217,7 +220,7 @@ export default function GarbageBills() {
             onChange={(e) => setSelectedMonth(e.target.value)}
             className="border rounded-xl px-4 py-2.5 bg-white shadow-sm text-sm outline-none"
           >
-            {MONTHS.map((m) => (
+            {getAvailableBillingMonths(selectedYear).map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
           </select>
@@ -227,14 +230,14 @@ export default function GarbageBills() {
             onChange={(e) => setSelectedYear(Number(e.target.value))}
             className="border rounded-xl px-4 py-2.5 bg-white shadow-sm text-sm outline-none"
           >
-            {[2024, 2025, 2026, 2027, 2028].map((y) => (
+            {getAvailableBillingYears().map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
 
           <button
             onClick={generateBills}
-            disabled={loading}
+            disabled={loading || isPriorToCollectionStart(selectedMonth, selectedYear)}
             className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-medium transition shadow-lg shadow-emerald-500/30 disabled:opacity-50"
           >
             <FaMoneyBillWave />

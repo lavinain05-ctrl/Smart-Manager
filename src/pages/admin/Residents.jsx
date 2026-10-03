@@ -22,6 +22,7 @@ import toast from "react-hot-toast";
 import AddResidentDrawer from "../../components/forms/AddResidentDrawer";
 import SearchBar from "../../components/residents/SearchBar";
 import ResidentsTable from "../../components/residents/ResidentsTable";
+import ResidentDetailsModal from "../../components/residents/ResidentDetailsModal";
 import StatsCards from "../../components/residents/StatsCards";
 import MonthSelector from "../../components/common/MonthSelector";
 import PendingDuesModal from "../../components/residents/PendingDuesModal";
@@ -32,6 +33,7 @@ import { collectResidentPayment } from "../../utils/collectPayment";
 import { subscribeSettings } from "../../services/settingsService";
 import { syncBlockWiseResidents } from "../../utils/reportSyncService";
 import { generateBlockWiseResidentsPDF } from "../../utils/printReportHelper";
+import { synchronizeAllSocietyData } from "../../utils/propertyMigration";
 
 import { useResidents } from "../../context/ResidentContext";
 import { usePayments } from "../../context/PaymentContext";
@@ -63,6 +65,7 @@ export default function Residents() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingResident, setEditingResident] = useState(null);
+  const [viewingResident, setViewingResident] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({
@@ -70,6 +73,7 @@ export default function Residents() {
     gc: "all",
     payment: "all",
     block: "all",
+    personType: "all",
     addedBy: "all",
   });
 
@@ -104,6 +108,8 @@ export default function Residents() {
   const [collectYear, setCollectYear] = useState(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [successReceipt, setSuccessReceipt] = useState(null);
+  const [syncResults, setSyncResults] = useState(null);
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeSettings((data) => {
@@ -314,14 +320,23 @@ export default function Residents() {
   async function handleSyncAll() {
     try {
       setSyncing(true);
-      const res = await reconcileGarbageAccounts();
-      toast.success(
-        `Sync complete: ${res?.statusSynced || 0} statuses updated, ${res?.accountsCreated || 0} accounts enrolled`,
-        { duration: 4000 }
-      );
+      toast.loading("Synchronizing canonical properties, resident accounts, and auth lookups...", { id: "syncToast" });
+      
+      // 1. Run Master Full Society Synchronization
+      const masterSync = await synchronizeAllSocietyData({ adminUserId: user?.uid || "admin" });
+
+      // 2. Reconcile context garbage accounts & bills
+      const gcRes = await reconcileGarbageAccounts({ silent: true });
+
+      setSyncResults({
+        ...masterSync,
+        gcRes,
+      });
+      setShowSyncModal(true);
+      toast.success("Society data synchronized completely & safely!", { id: "syncToast" });
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to synchronize resident data");
+      console.error("Failed to synchronize resident data:", err);
+      toast.error("Failed to synchronize data: " + (err.message || "Unknown error"), { id: "syncToast" });
     } finally {
       setSyncing(false);
     }
@@ -467,6 +482,13 @@ export default function Residents() {
         if ((resident.block || "").toLowerCase() !== filters.block.toLowerCase()) return false;
       }
 
+      // 6. Resident Type (Owner vs Rented) filter
+      if (filters.personType && filters.personType !== "all") {
+        const pType = (resident.personType || "OWNER").toUpperCase();
+        if (filters.personType === "OWNER" && pType !== "OWNER") return false;
+        if (filters.personType === "RENTED" && pType !== "RENTED" && pType !== "TENANT") return false;
+      }
+
       // 6. Added By / Access Origin filter
       if (filters.addedBy && filters.addedBy !== "all") {
         const provRole = (resident.accessProvenance?.grantedByRole || "").toLowerCase();
@@ -596,11 +618,27 @@ export default function Residents() {
           payments={currentMonthPayments}
           bills={currentMonthBills}
           gcMonthlyStats={gcMonthlyStats}
+          onViewDetails={setViewingResident}
           onEdit={handleEdit}
           onDelete={handleDelete}
           onResetPassword={handleOpenResetPassword}
           onBlock={handleOpenBlock}
         />
+
+        {/* Complete Resident Details Modal */}
+        {viewingResident && (
+          <ResidentDetailsModal
+            resident={viewingResident}
+            onClose={() => setViewingResident(null)}
+            onEdit={handleEdit}
+            onResetPassword={handleOpenResetPassword}
+            onBlock={handleOpenBlock}
+            onCollect={(res) => handleOpenCollectFromPending(res, selectedMonth, selectedYear)}
+            payments={payments}
+            bills={bills}
+            garbageBills={garbageBills}
+          />
+        )}
 
         {/* Comprehensive Delete Dialog */}
         {deleteTarget && (
@@ -1126,6 +1164,137 @@ export default function Residents() {
         year={selectedYear}
         settings={societySettings}
       />
+
+      {/* Complete Data Synchronization Results Modal */}
+      {showSyncModal && syncResults && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto border border-slate-200">
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-teal-50 rounded-t-3xl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/30">
+                  <FaCheckCircle className="text-xl" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-slate-800">
+                    Data Synchronization Complete
+                  </h2>
+                  <p className="text-xs text-slate-500 font-medium">
+                    All society records verified, normalized, and unified safely
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSyncModal(false)}
+                className="w-9 h-9 rounded-xl hover:bg-slate-200/60 flex items-center justify-center text-slate-400 hover:text-slate-600 transition"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6">
+              {/* Metric KPI Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 border border-slate-200/70 rounded-2xl p-4">
+                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Properties Created / Linked
+                  </div>
+                  <div className="text-2xl font-black text-slate-800 mt-1">
+                    {syncResults.propertiesCreated ?? 0}
+                  </div>
+                  <div className="text-[11px] text-emerald-600 font-semibold mt-1">
+                    Canonical hierarchy active
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200/70 rounded-2xl p-4">
+                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Residents Synchronized
+                  </div>
+                  <div className="text-2xl font-black text-slate-800 mt-1">
+                    {syncResults.residentsUpdated ?? 0}
+                  </div>
+                  <div className="text-[11px] text-emerald-600 font-semibold mt-1">
+                    Flat & floor details intact
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200/70 rounded-2xl p-4">
+                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Garbage Accounts Enrolled
+                  </div>
+                  <div className="text-2xl font-black text-slate-800 mt-1">
+                    {syncResults.garbageAccountsUpdated ?? 0}
+                  </div>
+                  <div className="text-[11px] text-indigo-600 font-semibold mt-1">
+                    Participation & fees unified
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200/70 rounded-2xl p-4">
+                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Auth Login Lookups
+                  </div>
+                  <div className="text-2xl font-black text-slate-800 mt-1">
+                    {syncResults.authLookupsSynced ?? 0}
+                  </div>
+                  <div className="text-[11px] text-teal-600 font-semibold mt-1">
+                    Mobile login keys verified
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Checklist */}
+              <div className="space-y-2.5 bg-slate-50/80 rounded-2xl p-4 border border-slate-100 text-xs">
+                <div className="flex items-center gap-2 text-slate-700 font-medium">
+                  <FaCheckCircle className="text-emerald-500 shrink-0 text-sm" />
+                  <span>Total Resident Profiles Scanned: <strong>{syncResults.totalResidents || residents.length}</strong></span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-700 font-medium">
+                  <FaCheckCircle className="text-emerald-500 shrink-0 text-sm" />
+                  <span>All custom flat notes and labels e.g. <code>(60 METRE)</code> preserved</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-700 font-medium">
+                  <FaCheckCircle className="text-emerald-500 shrink-0 text-sm" />
+                  <span>Financial history, past receipts, and payment status preserved</span>
+                </div>
+                {syncResults.ambiguousCount > 0 ? (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5 text-xs">
+                      <FaExclamationTriangle className="text-amber-500" />
+                      {syncResults.ambiguousCount} Resident Record(s) Require Admin Review:
+                    </div>
+                    {syncResults.ambiguousResidents?.map((ar, idx) => (
+                      <div key={idx} className="text-[11px] text-amber-900">
+                        • {ar.name} ({ar.mobile}): {ar.reason}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-emerald-700 font-bold">
+                    <FaCheckCircle className="text-emerald-500 shrink-0 text-sm" />
+                    <span>0 Ambiguous Records — 100% matched cleanly</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end bg-slate-50/50 rounded-b-3xl">
+              <button
+                type="button"
+                onClick={() => setShowSyncModal(false)}
+                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition shadow-sm"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
+
   );
 }

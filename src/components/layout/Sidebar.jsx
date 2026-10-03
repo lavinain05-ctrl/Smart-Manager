@@ -1,5 +1,7 @@
-import { NavLink, Link } from "react-router-dom";
+import { useEffect } from "react";
+import { NavLink, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useNotifications } from "../../context/NotificationContext";
 import {
   FaHome,
   FaUsers,
@@ -30,6 +32,7 @@ import {
   FaHeadset,
   FaLightbulb,
   FaLaptop,
+  FaSlidersH,
 } from "react-icons/fa";
 
 // =============================================
@@ -49,7 +52,8 @@ const navSections = [
       { name: "Residents", icon: <FaUsers />, path: "/admin/residents" },
       { name: "Family Members", icon: <FaUsers />, path: "/admin/family-members" },
       { name: "Blocks & Flats", icon: <FaBuilding />, path: "/admin/blocks-flats" },
-      { name: "Committee", icon: <FaUserTie />, path: "/admin/committee" },
+      { name: "Committee List", icon: <FaUserTie />, path: "/admin/committee" },
+      { name: "Committee Portal", icon: <FaSlidersH />, path: "/committee/dashboard" },
       { name: "Collectors", icon: <FaUserTie />, path: "/admin/collectors" },
       { name: "Registrations", icon: <FaUserPlus />, path: "/admin/registrations" },
       { name: "Profile Requests", icon: <FaEdit />, path: "/admin/profile-requests" },
@@ -102,6 +106,15 @@ const navSections = [
 
 export default function Sidebar({ onClose }) {
   const { logout } = useAuth();
+  const { unreadByPath, markPathRead } = useNotifications();
+  const location = useLocation();
+
+  // Mark notifications read when viewing that route
+  useEffect(() => {
+    if (location.pathname && unreadByPath && unreadByPath[location.pathname] > 0) {
+      markPathRead(location.pathname);
+    }
+  }, [location.pathname, unreadByPath, markPathRead]);
 
   return (
     <aside className="w-72 h-full bg-gradient-to-b from-slate-800 to-slate-900 text-white flex flex-col shadow-2xl">
@@ -152,25 +165,56 @@ export default function Sidebar({ onClose }) {
             )}
 
             {/* Section Items */}
-            {section.items.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={onClose}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-2.5 rounded-lg mb-0.5 text-[13px] font-medium transition-all duration-200 ${
-                    isActive
-                      ? "bg-emerald-500/15 text-emerald-400 shadow-sm"
-                      : "text-slate-300 hover:bg-slate-700/60 hover:text-white"
-                  }`
-                }
-              >
-                <span className="text-base w-5 flex justify-center shrink-0">
-                  {item.icon}
-                </span>
-                <span>{item.name}</span>
-              </NavLink>
-            ))}
+            {section.items.map((item) => {
+              const unreadCount = unreadByPath?.[item.path] || 0;
+              const hasDot = unreadCount > 0;
+              const isMessageOrComplaint =
+                item.path === "/admin/complaints" || item.path === "/admin/support";
+
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => {
+                    if (hasDot) markPathRead(item.path);
+                    if (onClose) onClose();
+                  }}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-2.5 rounded-lg mb-0.5 text-[13px] font-medium transition-all duration-200 group relative ${
+                      isActive
+                        ? "bg-emerald-500/15 text-emerald-400 shadow-sm"
+                        : "text-slate-300 hover:bg-slate-700/60 hover:text-white"
+                    }`
+                  }
+                >
+                  <span className="text-base w-5 flex justify-center shrink-0">
+                    {item.icon}
+                  </span>
+                  <span className="truncate flex-1">{item.name}</span>
+
+                  {/* Small Dot in Sidebar for New Message / Operational Update */}
+                  {hasDot && (
+                    <span
+                      className="ml-auto relative flex h-2 w-2 shrink-0 items-center justify-center"
+                      title={`${item.name}: ${unreadCount} new update${unreadCount > 1 ? "s" : ""}`}
+                    >
+                      <span
+                        className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                          isMessageOrComplaint ? "bg-rose-400" : "bg-emerald-400"
+                        }`}
+                      />
+                      <span
+                        className={`relative inline-flex rounded-full h-2 w-2 ${
+                          isMessageOrComplaint
+                            ? "bg-rose-500 shadow-sm shadow-rose-500/80"
+                            : "bg-emerald-400 shadow-sm shadow-emerald-400/80"
+                        }`}
+                      />
+                    </span>
+                  )}
+                </NavLink>
+              );
+            })}
 
           </div>
         ))}

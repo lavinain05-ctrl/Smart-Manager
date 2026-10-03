@@ -39,6 +39,54 @@ service cloud.firestore {
       return isSignedIn() && getUserRole() == "committee";
     }
 
+    // Evaluates if the authenticated user has garbage fee collection authorization:
+    // 1. Admin always has collection authority.
+    // 2. Collector always has collection authority.
+    // 3. Committee official ONLY if explicitly granted by Admin (canCollectGarbage == true).
+    function canUserCollectGarbage() {
+      return isSignedIn() && (
+        isAdmin() ||
+        isCollector() ||
+        (
+          getUserRole() == "committee" &&
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.canCollectGarbage == true ||
+            (
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions is map &&
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions.canCollectGarbage == true
+            )
+          )
+        )
+      );
+    }
+
+    // Evaluates if the authenticated user has special campaign collection authorization:
+    // 1. Admin always has collection authority.
+    // 2. Collector always has collection authority.
+    // 3. Committee official ONLY if explicitly granted by Admin (canCollectSpecial == true).
+    function canUserCollectSpecial() {
+      return isSignedIn() && (
+        isAdmin() ||
+        isCollector() ||
+        (
+          getUserRole() == "committee" &&
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.canCollectSpecial == true ||
+            (
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions is map &&
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions.canCollectSpecial == true
+            )
+          )
+        )
+      );
+    }
+
+    function canUserCollect() {
+      return canUserCollectGarbage() || canUserCollectSpecial();
+    }
+
     // Protected Master Admin account UID
     function isMasterAdmin(uid) {
       return uid == "92jYvGPlKMexX37WEzs7MaDuc7U2";
@@ -51,8 +99,8 @@ service cloud.firestore {
     // ============================
 
     match /registrationRequests/{reqId} {
-      allow create: if isSignedIn() && (isAdmin() || isCommittee() || request.resource.data.uid == request.auth.uid);
-      allow read: if isSignedIn() && (isAdmin() || isCommittee() || request.auth.uid == reqId);
+      allow create: if isSignedIn() && (isAdmin() || isCollector() || isCommittee() || request.resource.data.uid == request.auth.uid);
+      allow read: if isSignedIn() && (isAdmin() || isCollector() || isCommittee() || request.auth.uid == reqId);
       allow update, delete: if isAdmin() || isCommittee();
     }
 
@@ -68,9 +116,9 @@ service cloud.firestore {
       allow read: if isSignedIn() && (isAdmin() || isCommittee() || request.auth.uid == uid);
       
       // Admin or Committee can create user doc.
-      // New user self-registering can only create their own doc with role="resident".
+      // New user or self-healing user can create their own doc with role="resident", "committee", or "collector".
       allow create: if isAdmin() || isCommittee()
-        || (isSignedIn() && request.auth.uid == uid && request.resource.data.role == "resident");
+        || (isSignedIn() && request.auth.uid == uid && (request.resource.data.role == "resident" || request.resource.data.role == "committee" || request.resource.data.role == "collector"));
       
       // Admin or Committee can update users. Regular users can update non-critical profile fields
       // but CANNOT change their own role or account status.
@@ -97,7 +145,7 @@ service cloud.firestore {
       allow create: if isAdmin() || isCommittee()
         || (isSignedIn() && request.resource.data.uid == request.auth.uid);
       allow update: if isAdmin() || isCommittee()
-        || (isSignedIn() && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid);
+        || (isSignedIn() && (resource.data.uid == request.auth.uid || request.resource.data.uid == request.auth.uid));
       allow delete: if isAdmin() || isCommittee();
     }
 
@@ -134,7 +182,7 @@ service cloud.firestore {
 
     match /bills/{id} {
       allow read: if isSignedIn();
-      allow create, update: if isAdmin() || isCollector() || isCommittee();
+      allow create, update: if canUserCollect();
       allow delete: if isAdmin();
     }
 
@@ -144,7 +192,7 @@ service cloud.firestore {
 
     match /payments/{id} {
       allow read: if isSignedIn();
-      allow create, update: if isAdmin() || isCollector() || isCommittee();
+      allow create, update: if canUserCollect();
       allow delete: if isAdmin();
     }
 
@@ -155,7 +203,7 @@ service cloud.firestore {
 
     match /paymentAudit/{id} {
       allow read: if isAdmin() || isCommittee();
-      allow create: if isAdmin() || isCollector() || isCommittee();
+      allow create: if canUserCollect();
       allow update, delete: if false;
     }
 
@@ -224,11 +272,25 @@ service cloud.firestore {
     }
 
     // ============================
+    // Family Members
+    // ============================
+
+    match /familyMembers/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isCommittee();
+    }
+
+    // ============================
     // Notifications (Single Unified Block)
     // ============================
 
     match /notifications/{id} {
-      allow read: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.userId == request.auth.uid ||
+        resource.data.userId == "all" ||
+        resource.data.userId == getUserRole()
+      );
       allow create: if isSignedIn();
       allow update: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
       allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
@@ -256,6 +318,11 @@ service cloud.firestore {
     match /flats/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    match /properties/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isCollector() || isCommittee();
     }
 
     // ============================
@@ -346,7 +413,7 @@ service cloud.firestore {
 
     match /garbageBills/{id} {
       allow read: if isSignedIn();
-      allow create, update: if isAdmin() || isCollector() || isCommittee();
+      allow create, update: if canUserCollectGarbage();
       allow delete: if isAdmin();
     }
 
@@ -356,7 +423,7 @@ service cloud.firestore {
 
     match /garbageCollections/{id} {
       allow read: if isSignedIn();
-      allow create: if isAdmin() || isCollector() || isCommittee();
+      allow create: if canUserCollectGarbage();
       allow update, delete: if isAdmin();
     }
 
@@ -381,7 +448,7 @@ service cloud.firestore {
 
     match /garbageSettings/{docId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCommittee();
       allow delete: if false;
     }
 
@@ -437,7 +504,7 @@ service cloud.firestore {
     match /specialCollectionPayments/{id} {
       allow create: if true;
       allow read: if isSignedIn();
-      allow update: if isAdmin() || isCollector() || isCommittee();
+      allow update: if canUserCollectSpecial();
       allow delete: if isAdmin();
     }
 
@@ -448,7 +515,7 @@ service cloud.firestore {
     match /receipts/{id} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update, delete: if isAdmin() || isCollector() || isCommittee();
+      allow update, delete: if canUserCollect() || isAdmin();
     }
 
     // ============================
@@ -456,31 +523,21 @@ service cloud.firestore {
     // ============================
 
     match /utrLookup/{utr} {
-      allow get: if true;
+      allow read: if true;
       allow create: if true;
       allow update, delete: if isAdmin();
     }
 
     // ============================
     // Special Collection Audit Logs
-    // Immutable audit logs
     // ============================
 
     match /specialCollectionAudit/{id} {
       allow read: if isAdmin();
       allow create: if true;
-      allow update, delete: if false;
+      allow update, delete: if isAdmin();
     }
 
-    // ============================
-    // Notifications
-    // ============================
-
-    match /notifications/{id} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn();
-    }
 
     // ============================
     // Suggestions
@@ -490,6 +547,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
       allow update, delete: if isAdmin() || isCommittee();
+    }
+
+    // ============================
+    // Migration & Sync Audit Logs
+    // ============================
+
+    match /migrationAuditLogs/{id} {
+      allow read, write: if isAdmin();
     }
 
     // ============================

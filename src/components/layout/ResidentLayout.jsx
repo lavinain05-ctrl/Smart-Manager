@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { Outlet, NavLink, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
+import ErrorBoundary from "../common/ErrorBoundary";
 import {
   FaHome,
   FaFileInvoiceDollar,
@@ -27,6 +28,7 @@ import {
   FaMoon,
   FaSun,
   FaChevronLeft,
+  FaSlidersH,
 } from "react-icons/fa";
 import NotificationBell from "../notifications/NotificationBell";
 
@@ -70,6 +72,9 @@ export default function ResidentLayout() {
   ];
 
   const societyItems = [
+    ...(user?.role === "committee"
+      ? [{ name: "Committee Portal", icon: <FaSlidersH className="text-purple-400" />, path: "/committee/dashboard" }]
+      : []),
     { name: "RWA Committee", icon: <FaUserTie className="text-amber-400" />, path: "/resident/committee" },
     { name: "Notices", icon: <FaBell className="text-purple-400" />, path: "/resident/notices" },
     { name: "Complaints", icon: <FaExclamationCircle className="text-rose-400" />, path: "/resident/complaints" },
@@ -408,6 +413,17 @@ export default function ResidentLayout() {
           </div>
 
           <div className="flex items-center gap-3">
+            {user?.role === "committee" && (
+              <Link
+                to="/committee/dashboard"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-sm transition"
+                title="Open Committee Executive Console"
+              >
+                <FaSlidersH className="text-xs" />
+                <span className="hidden sm:inline">Committee Portal</span>
+              </Link>
+            )}
+
             {/* Theme Toggle Button */}
             <button
               type="button"
@@ -423,29 +439,39 @@ export default function ResidentLayout() {
         </header>
 
         {/* Mobile Header */}
-        <header className="lg:hidden sticky top-0 z-30 h-16 bg-slate-900 text-white flex items-center justify-between px-4 shadow-md border-b border-slate-800">
-          <div className="flex items-center gap-3">
+        <header className="lg:hidden sticky top-0 z-30 h-14 sm:h-16 bg-slate-900 text-white flex items-center justify-between px-3 sm:px-4 shadow-md border-b border-slate-800">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               type="button"
               onClick={() => setMobileDrawerOpen(true)}
-              className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white transition"
+              className="p-1.5 sm:p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white transition shrink-0"
               aria-label="Open menu"
             >
-              <FaBars className="text-lg" />
+              <FaBars className="text-base sm:text-lg" />
             </button>
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs shrink-0">
                 <FaBuilding />
               </div>
-              <h1 className="text-sm font-bold">Resident Portal</h1>
+              <h1 className="text-xs sm:text-sm font-bold truncate">Resident Portal</h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {user?.role === "committee" && (
+              <Link
+                to="/committee/dashboard"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-600 text-white text-[11px] sm:text-xs font-bold"
+                title="Committee Portal"
+              >
+                <FaSlidersH className="text-[10px]" />
+                <span className="hidden sm:inline">Committee</span>
+              </Link>
+            )}
             <button
               type="button"
               onClick={toggleTheme}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-xs bg-slate-800 text-slate-300 hover:text-white transition"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-xs bg-slate-800 text-slate-300 hover:text-white transition"
               title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
             >
               {darkMode ? <FaSun className="text-yellow-500" /> : <FaMoon />}
@@ -454,7 +480,7 @@ export default function ResidentLayout() {
             <button
               type="button"
               onClick={logout}
-              className="text-xs bg-red-600/80 hover:bg-red-600 text-white px-2.5 py-1.5 rounded-lg transition font-semibold"
+              className="text-[11px] sm:text-xs bg-red-600/80 hover:bg-red-600 text-white px-2 py-1 rounded-lg transition font-semibold"
             >
               Logout
             </button>
@@ -463,7 +489,20 @@ export default function ResidentLayout() {
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 custom-scrollbar">
-          <Outlet />
+          <ErrorBoundary>
+            <Suspense fallback={
+              <div className="min-h-[40vh] flex items-center justify-center p-8">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-700/50 flex items-center justify-center shadow-lg">
+                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                  <span className="text-xs text-slate-500 font-semibold tracking-wide">Loading...</span>
+                </div>
+              </div>
+            }>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </main>
 
         {/* Mobile Bottom Navigation */}

@@ -1,5 +1,3 @@
-import { useAuth } from "../../context/AuthContext";
-
 import { BillingProvider } from "../../context/BillingContext";
 import { ResidentProvider } from "../../context/ResidentContext";
 import { CollectorProvider } from "../../context/CollectorContext";
@@ -12,25 +10,14 @@ import { EventProvider } from "../../context/EventContext";
 import { CommitteeProvider } from "../../context/CommitteeContext";
 import { NotificationProvider } from "../../context/NotificationContext";
 import { BlockFlatProvider } from "../../context/BlockFlatContext";
+import { PropertyProvider } from "../../context/PropertyContext";
 import { ActivityProvider } from "../../context/ActivityContext";
 import { EmergencyContactProvider } from "../../context/EmergencyContactContext";
 import { GarbageProvider } from "../../context/GarbageContext";
 
-// Only mounts data providers when user has an approved role.
-// Prevents Firestore permission errors for pending/rejected users.
+// DataProviders provides a stable context tree for the application.
+// Individual providers safely guard their Firestore listeners when user is not authenticated or pending.
 export default function DataProviders({ children }) {
-  const { user, isImpersonating, realUser } = useAuth();
-
-  const currentUser = realUser || user;
-  const isApproved = isImpersonating || (currentUser &&
-    currentUser.role !== "pending_registration" &&
-    currentUser.status !== "pending" &&
-    currentUser.status !== "rejected");
-
-  if (!isApproved) {
-    return children;
-  }
-
   return (
     <BillingProvider>
       <ResidentProvider>
@@ -44,13 +31,15 @@ export default function DataProviders({ children }) {
                       <EventProvider>
                         <NotificationProvider>
                           <BlockFlatProvider>
-                            <ActivityProvider>
-                              <EmergencyContactProvider>
-                                <GarbageProvider>
-                                  {children}
-                                </GarbageProvider>
-                              </EmergencyContactProvider>
-                            </ActivityProvider>
+                            <PropertyProvider>
+                              <ActivityProvider>
+                                <EmergencyContactProvider>
+                                  <GarbageProvider>
+                                    {children}
+                                  </GarbageProvider>
+                                </EmergencyContactProvider>
+                              </ActivityProvider>
+                            </PropertyProvider>
                           </BlockFlatProvider>
                         </NotificationProvider>
                       </EventProvider>

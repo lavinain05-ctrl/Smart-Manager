@@ -1,15 +1,17 @@
 import { useEffect, useState, useMemo } from "react";
 import { FaCalendarAlt, FaMoneyBillWave, FaTimes, FaLayerGroup } from "react-icons/fa";
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December"
-];
+import {
+  MONTH_NAMES,
+  COLLECTION_START_MONTH,
+  COLLECTION_START_YEAR,
+  isPriorToCollectionStart,
+  getAvailableBillingMonths,
+} from "../../utils/billingCycle";
 
 export function getCoveredMonths(startMonth, startYear, count) {
   let startIndex = MONTH_NAMES.indexOf(startMonth);
-  if (startIndex === -1) startIndex = new Date().getMonth();
-  let currentYear = Number(startYear) || new Date().getFullYear();
+  if (startIndex === -1) startIndex = MONTH_NAMES.indexOf(COLLECTION_START_MONTH);
+  let currentYear = Math.max(COLLECTION_START_YEAR, Number(startYear) || COLLECTION_START_YEAR);
   const list = [];
 
   for (let i = 0; i < count; i++) {
@@ -31,8 +33,8 @@ export default function PaymentModal({
 }) {
   const [isAdvance, setIsAdvance] = useState(false);
   const [durationMonths, setDurationMonths] = useState(1);
-  const [startMonth, setStartMonth] = useState("");
-  const [startYear, setStartYear] = useState(new Date().getFullYear());
+  const [startMonth, setStartMonth] = useState(COLLECTION_START_MONTH);
+  const [startYear, setStartYear] = useState(COLLECTION_START_YEAR);
   const [monthlyRate, setMonthlyRate] = useState(80);
   const [amount, setAmount] = useState(80);
   const [method, setMethod] = useState("Cash");
@@ -42,11 +44,13 @@ export default function PaymentModal({
   useEffect(() => {
     if (open && bill) {
       const charge = Number(bill.amount) > 0 ? Number(bill.amount) : 80;
+      const bYear = Math.max(COLLECTION_START_YEAR, Number(bill.year) || COLLECTION_START_YEAR);
+      const bMonth = isPriorToCollectionStart(bill.month, bYear) ? COLLECTION_START_MONTH : (bill.month || COLLECTION_START_MONTH);
       setMonthlyRate(charge);
       setIsAdvance(false);
       setDurationMonths(1);
-      setStartMonth(bill.month || MONTH_NAMES[new Date().getMonth()]);
-      setStartYear(Number(bill.year) || new Date().getFullYear());
+      setStartMonth(bMonth);
+      setStartYear(bYear);
       setAmount(charge);
       setMethod("Cash");
       setRemarks("");
@@ -199,7 +203,7 @@ export default function PaymentModal({
                     onChange={(e) => setStartMonth(e.target.value)}
                     className="w-full bg-white border border-gray-200 rounded-xl p-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    {MONTH_NAMES.map((m) => (
+                    {getAvailableBillingMonths(startYear).map((m) => (
                       <option key={m} value={m}>{m}</option>
                     ))}
                   </select>

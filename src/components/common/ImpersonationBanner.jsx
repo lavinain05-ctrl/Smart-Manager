@@ -54,7 +54,7 @@ export default function ImpersonationBanner() {
       return [
         { label: "Dashboard", path: "/collector/dashboard" },
         { label: "Collect", path: "/collector/collect" },
-        { label: "History", path: "/collector/history" },
+        { label: "My History", path: "/collector/history" },
       ];
     }
     if (role === "committee") {

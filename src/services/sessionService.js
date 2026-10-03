@@ -9,7 +9,7 @@ import {
   onSnapshot,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../firebase/firebase";
+import { db, auth } from "../firebase/firebase";
 import { getClientDeviceInfo } from "./loginTrackerService";
 
 const sessionsRef = collection(db, "activeSessions");
@@ -17,6 +17,20 @@ const sessionsRef = collection(db, "activeSessions");
 /**
  * Get or create a persistent unique Session ID for this browser / device
  */
+export function startNewSessionId() {
+  const newId = "sess_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 10);
+  if (typeof window !== "undefined" && window.localStorage) {
+    localStorage.setItem("rwa_active_session_id", newId);
+  }
+  return newId;
+}
+
+export function resetSessionId() {
+  if (typeof window !== "undefined" && window.localStorage) {
+    localStorage.removeItem("rwa_active_session_id");
+  }
+}
+
 export function getOrCreateSessionId() {
   if (typeof window === "undefined" || !window.localStorage) {
     return "sess_" + Math.random().toString(36).substring(2, 15);
@@ -55,6 +69,7 @@ export async function initDeviceSession(user) {
         userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
         isActive: true,
         revokedReason: "",
+        revokedAt: null,
         lastActiveAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       },
@@ -63,7 +78,9 @@ export async function initDeviceSession(user) {
 
     return sessionId;
   } catch (error) {
-    console.warn("[SessionService] Failed to init device session:", error.message);
+    if (error.code !== "permission-denied" && error.code !== "PERMISSION_DENIED") {
+      console.warn("[SessionService] Failed to init device session:", error.message);
+    }
     return null;
   }
 }
@@ -85,12 +102,14 @@ export async function touchSession(sessionId) {
 
 /**
  * Listen to current device's session.
- * If another device or password change revokes this session (isActive == false),
- * immediately fire onRevoked callback to log the device out.
+ * If another device or administrator revokes this session (isActive == false),
+ * fire onRevoked callback to log the device out.
+ * Local sign-outs ("User signed out") are ignored to prevent self-revocation loops.
  */
 export function subscribeCurrentSession(sessionId, onRevoked) {
   if (!sessionId) return () => {};
 
+  const listenerStartTime = Date.now();
   const sessionDocRef = doc(db, "activeSessions", sessionId);
 
   return onSnapshot(
@@ -99,12 +118,29 @@ export function subscribeCurrentSession(sessionId, onRevoked) {
       if (snapshot.exists()) {
         const data = snapshot.data();
         if (data.isActive === false) {
+          // Ignore local user logout actions
+          if (data.revokedReason === "User signed out") {
+            return;
+          }
+
+          // If revocation happened before this listener was mounted, ignore stale event
+          const revokedTime = data.revokedAt?.toMillis
+            ? data.revokedAt.toMillis()
+            : data.revokedAt ? new Date(data.revokedAt).getTime() : 0;
+
+          if (revokedTime && revokedTime < listenerStartTime - 1000) {
+            console.log("[SessionService] Disregarding old revoked timestamp from previous session");
+            return;
+          }
+
           onRevoked(data.revokedReason || "You have been logged out from this device.");
         }
       }
     },
     (error) => {
-      console.warn("[SessionService] Current session listener error:", error.message);
+      if (error.code !== "permission-denied" && error.code !== "PERMISSION_DENIED") {
+        console.warn("[SessionService] Current session listener error:", error.message);
+      }
     }
   );
 }
@@ -207,6 +243,8 @@ export function subscribeUserActiveSessions(uid, callback) {
  */
 export async function terminateSession(sessionId, reason = "Logged out by administrator") {
   if (!sessionId) return;
+  // If user is not authenticated in Firebase Auth, skip writing to activeSessions (rules require isSignedIn)
+  if (!auth.currentUser) return;
   try {
     const sessionDocRef = doc(db, "activeSessions", sessionId);
     await setDoc(
@@ -219,7 +257,9 @@ export async function terminateSession(sessionId, reason = "Logged out by admini
       { merge: true }
     );
   } catch (err) {
-    console.warn("[SessionService] terminateSession warning:", err.message);
+    if (err.code !== "permission-denied" && err.code !== "PERMISSION_DENIED") {
+      console.warn("[SessionService] terminateSession warning:", err.message);
+    }
   }
 }
 

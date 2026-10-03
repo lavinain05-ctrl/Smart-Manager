@@ -6,6 +6,8 @@ import { useResidents } from "../../context/ResidentContext";
 import { useSettings } from "../../context/SettingsContext";
 import GarbageModuleTabs from "../../components/resident/GarbageModuleTabs";
 import { printPaymentReceipt } from "../../utils/printReceiptHelper";
+import { formatResidentFloor } from "../../services/propertyService";
+import PrinterQuickAction from "../../components/common/PrinterQuickAction";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -95,17 +97,28 @@ export default function ResidentReceipts() {
     doc.setFontSize(20);
     doc.text(society, 105, 18, { align: "center" });
     doc.setFontSize(12);
-    doc.text("Payment Receipt", 105, 28, { align: "center" });
+    doc.text("Garbage Collection Fee Receipt", 105, 28, { align: "center" });
     doc.text(`Receipt: ${payment.receiptNumber}`, 105, 36, { align: "center" });
+
+    const floorLabel = formatResidentFloor(payment.floor || resident?.floor);
+    const plotVal = payment.plotNumber || resident?.plotNumber || "";
+    const flatVal = payment.flat || resident?.flat || "—";
+    const unitVal = payment.unitNumber || resident?.unitNumber || "";
+    const blockVal = payment.block || resident?.block || "-";
+    const personVal = payment.personType || resident?.personType || "";
 
     autoTable(doc, {
       startY: 46,
       theme: "grid",
       head: [["Field", "Details"]],
       body: [
-        ["Resident", payment.residentName],
-        ["Flat", payment.flat],
-        ["Block", payment.block || "-"],
+        ["Resident", payment.residentName || resident?.owner || "-"],
+        ["Flat / Unit", flatVal],
+        ...(plotVal && plotVal !== flatVal ? [["Plot Number", `Plot ${plotVal}`]] : []),
+        ...(floorLabel ? [["Floor", floorLabel]] : []),
+        ...(unitVal ? [["Unit Number", `Unit ${unitVal}`]] : []),
+        ["Block", blockVal],
+        ...(personVal ? [["Resident Type", personVal]] : []),
         [
           "Amount",
           payment.isAdvance && payment.totalPaidAmount
@@ -136,16 +149,29 @@ export default function ResidentReceipts() {
   }
 
   function printReceipt(payment) {
-    printPaymentReceipt(payment);
+    printPaymentReceipt({
+      ...payment,
+      flat: payment.flat || resident?.flat || resident?.flatNumber || "—",
+      plotNumber: payment.plotNumber || resident?.plotNumber || resident?.flat || "",
+      floor: payment.floor || resident?.floor || "",
+      unitNumber: payment.unitNumber || resident?.unitNumber || "",
+      block: payment.block || resident?.block || "",
+      personType: payment.personType || resident?.personType || "",
+    });
   }
 
   return (
     <div className="space-y-6">
       <GarbageModuleTabs />
 
-      <div>
-        <h1 className="text-3xl font-bold">My Receipts</h1>
-        <p className="text-gray-500">{displayReceipts.length} receipt{displayReceipts.length === 1 ? "" : "s"}</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold">My Receipts</h1>
+          <p className="text-gray-500">{displayReceipts.length} receipt{displayReceipts.length === 1 ? "" : "s"}</p>
+        </div>
+        <div>
+          <PrinterQuickAction />
+        </div>
       </div>
 
       {displayReceipts.length === 0 ? (
@@ -167,6 +193,16 @@ export default function ResidentReceipts() {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-bold text-gray-800">{p.receiptNumber}</h3>
+                      {(p.flat || resident?.flat) && (
+                        <span className="text-[11px] font-bold bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
+                          Flat {p.flat || resident?.flat}
+                        </span>
+                      )}
+                      {formatResidentFloor(p.floor || resident?.floor) && (
+                        <span className="text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/70 px-2 py-0.5 rounded">
+                          {formatResidentFloor(p.floor || resident?.floor)}
+                        </span>
+                      )}
                       {p.isAdvance && (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
                           🎉 {p.advanceDuration ? `${p.advanceDuration} Mo Advance` : "Advance"}

@@ -22,6 +22,10 @@ import {
   FaEdit,
   FaUserTie,
   FaUsers,
+  FaLink,
+  FaChartBar,
+  FaTrashAlt,
+  FaHandHoldingHeart,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 
@@ -30,14 +34,27 @@ import { useBlockFlat } from "../../context/BlockFlatContext";
 import { normalizeMobile, validateMobile } from "../../services/authService";
 import { getResidents } from "../../services/residentService";
 import { validateProfilePhoto } from "../../services/committeeService";
+import { subscribeSpecialCollections } from "../../services/specialCollectionService";
 
 const DESIGNATIONS = [
   "President",
   "Vice President",
   "Secretary",
+  "Vice Secretary",
   "Joint Secretary",
   "Treasurer",
+  "Vice Treasurer",
+  "General Secretary",
+  "Spokesperson",
+  "Advisor",
+  "Legal Advisor",
+  "Technical Advisor",
+  "Cultural Secretary",
+  "Sports Secretary",
+  "Security Incharge",
+  "Maintenance Incharge",
   "Executive Member",
+  "Member",
 ];
 
 export default function CommitteeForm({
@@ -96,6 +113,16 @@ export default function CommitteeForm({
   const [showPassword, setShowPassword] = useState(false);
   const [mustChangePassword, setMustChangePassword] = useState(true);
 
+  // Available Special Collection Campaigns in Society
+  const [availableCampaigns, setAvailableCampaigns] = useState([]);
+
+  useEffect(() => {
+    const unsub = subscribeSpecialCollections((list) => {
+      setAvailableCampaigns(list || []);
+    });
+    return () => unsub && unsub();
+  }, []);
+
   // Delegated Powers & Collection Permissions
   const [permissions, setPermissions] = useState({
     canManageResidents: false,
@@ -105,11 +132,16 @@ export default function CommitteeForm({
     canManageAccountRecovery: false,
     canCollectGarbage: false,
     canCollectSpecial: false,
+    specialCollectionScope: "all", // "all" | "specific"
+    allowedSpecialCollections: [],
+    canViewGarbageReports: false,
   });
 
   // Photo
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoMode, setPhotoMode] = useState("file"); // "file" | "url"
   const [removePhoto, setRemovePhoto] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -148,17 +180,44 @@ export default function CommitteeForm({
       setOrder(member.order !== undefined && member.order !== null ? String(member.order) : "");
       setPassword("");
       setMustChangePassword(member.mustChangePassword ?? false);
+
+      const memberScope = member.permissions?.specialCollectionScope ||
+        (Array.isArray(member.permissions?.allowedSpecialCollections) && member.permissions.allowedSpecialCollections.length > 0 ? "specific" : "all");
+      const memberAllowedCols = Array.isArray(member.permissions?.allowedSpecialCollections)
+        ? member.permissions.allowedSpecialCollections
+        : [];
+
       setPermissions({
         canManageResidents: Boolean(member.permissions?.canManageResidents),
         canManageCollectors: Boolean(member.permissions?.canManageCollectors),
         canManageRegistrations: Boolean(member.permissions?.canManageRegistrations),
         canManageProfileRequests: Boolean(member.permissions?.canManageProfileRequests),
         canManageAccountRecovery: Boolean(member.permissions?.canManageAccountRecovery),
-        canCollectGarbage: Boolean(member.permissions?.canCollectGarbage),
-        canCollectSpecial: Boolean(member.permissions?.canCollectSpecial),
+        canCollectGarbage: Boolean(member.permissions?.canCollectGarbage ?? member.canCollectGarbage),
+        canCollectSpecial: Boolean(member.permissions?.canCollectSpecial ?? member.canCollectSpecial),
+        specialCollectionScope: memberScope,
+        allowedSpecialCollections: memberAllowedCols,
+        canViewGarbageReports: Boolean(member.permissions?.canViewGarbageReports ?? member.canViewGarbageReports),
       });
+      const initialPhoto = member.profilePhotoUrl || (
+        member.designation?.toLowerCase() === "president" || member.name?.toLowerCase().includes("dharmendra")
+          ? "/committee/president.jpg"
+          : member.designation?.toLowerCase() === "vice president" || member.name?.toLowerCase().includes("ankit")
+          ? "/committee/ankit-chaudhary.png"
+          : member.designation?.toLowerCase() === "vice treasurer" || member.name?.toLowerCase().includes("vinod")
+          ? "/committee/vinod-kumar.jpg"
+          : member.designation?.toLowerCase() === "spokesperson" || member.name?.toLowerCase().includes("narendra") || member.name?.toLowerCase().includes("dhama")
+          ? "/committee/narendra-dhama.png"
+          : member.designation?.toLowerCase() === "advisor" || member.name?.toLowerCase().includes("dinesh")
+          ? "/committee/dinesh-kumar.png"
+          : member.designation?.toLowerCase() === "vice secretary" || member.name?.toLowerCase().includes("manoj") || member.name?.toLowerCase().includes("tomar")
+          ? "/committee/manoj-tomar.jpg"
+          : ""
+      );
       setPhotoFile(null);
-      setPhotoPreview(member.profilePhotoUrl || "");
+      setPhotoPreview(initialPhoto);
+      setPhotoUrl(initialPhoto);
+      setPhotoMode(initialPhoto ? "url" : "file");
       setRemovePhoto(false);
       setResidentSearch("");
     } else {
@@ -182,9 +241,14 @@ export default function CommitteeForm({
         canManageAccountRecovery: false,
         canCollectGarbage: false,
         canCollectSpecial: false,
+        specialCollectionScope: "all",
+        allowedSpecialCollections: [],
+        canViewGarbageReports: false,
       });
       setPhotoFile(null);
       setPhotoPreview("");
+      setPhotoUrl("");
+      setPhotoMode("file");
       setRemovePhoto(false);
       setResidentSearch("");
     }
@@ -208,6 +272,14 @@ export default function CommitteeForm({
     const resFlat = res.flat || res.flatNumber || "";
     if (resFlat) setFlat(resFlat);
     if (res.block) setBlock(res.block);
+
+    const resName = (res.owner || res.name || "").toLowerCase();
+    if (resName.includes("manoj") || resName.includes("tomar")) {
+      setPhotoUrl("/committee/manoj-tomar.jpg");
+      setPhotoPreview("/committee/manoj-tomar.jpg");
+      setPhotoMode("url");
+      setDesignation("Vice Secretary");
+    }
 
     setIsDropdownOpen(false);
     setResidentSearch("");
@@ -315,6 +387,22 @@ export default function CommitteeForm({
       return;
     }
 
+    const isSpecialEnabled = Boolean(permissions.canCollectSpecial);
+    const specialScope = isSpecialEnabled ? (permissions.specialCollectionScope || "all") : "all";
+    const allowedSpecial = isSpecialEnabled && specialScope === "specific"
+      ? (permissions.allowedSpecialCollections || [])
+      : [];
+
+    if (isSpecialEnabled && specialScope === "specific" && allowedSpecial.length === 0 && availableCampaigns.length > 0) {
+      toast.error("Please select at least one campaign, or choose 'All Special Collections'.");
+      return;
+    }
+
+    const allowedNames = allowedSpecial.map((cId) => {
+      const c = availableCampaigns.find((item) => item.id === cId);
+      return c?.name || cId;
+    });
+
     setSubmitting(true);
     try {
       // Find block ID if block is selected
@@ -332,10 +420,25 @@ export default function CommitteeForm({
         tenure: tenure.trim(),
         introduction: introduction.trim(),
         order: order !== "" ? Number(order) : 99,
-        permissions,
+        permissions: {
+          ...permissions,
+          canCollectGarbage: Boolean(permissions.canCollectGarbage),
+          canCollectSpecial: isSpecialEnabled,
+          specialCollectionScope: specialScope,
+          allowedSpecialCollections: allowedSpecial,
+          allowedSpecialCollectionNames: allowedNames,
+          canViewGarbageReports: Boolean(permissions.canViewGarbageReports),
+        },
+        canCollectGarbage: Boolean(permissions.canCollectGarbage),
+        canCollectSpecial: isSpecialEnabled,
+        specialCollectionScope: specialScope,
+        allowedSpecialCollections: allowedSpecial,
+        allowedSpecialCollectionNames: allowedNames,
+        canViewGarbageReports: Boolean(permissions.canViewGarbageReports),
         password: password || undefined,
         mustChangePassword,
-        photoFile,
+        photoFile: photoMode === "file" ? photoFile : null,
+        photoUrl: photoMode === "url" ? photoUrl.trim() : "",
         removePhoto,
       });
     } catch (err) {
@@ -493,55 +596,132 @@ export default function CommitteeForm({
           <span>Official Details</span>
         </div>
 
-        {/* Profile Photo */}
-        <div>
-          <label className="block mb-2 text-xs font-medium text-gray-700">
-            Profile Photo
-          </label>
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center overflow-hidden shrink-0">
+        {/* Profile Photo - Dual Mode (File Upload or Image URL/Path) */}
+        <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+              <FaCamera className="text-indigo-600" />
+              <span>Official Profile Photo</span>
+            </label>
+            <div className="flex items-center bg-gray-200/70 p-0.5 rounded-lg text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setPhotoMode("file")}
+                className={`px-2.5 py-1 rounded-md transition ${
+                  photoMode === "file"
+                    ? "bg-white text-indigo-700 font-semibold shadow-xs"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                Upload File
+              </button>
+              <button
+                type="button"
+                onClick={() => setPhotoMode("url")}
+                className={`px-2.5 py-1 rounded-md transition ${
+                  photoMode === "url"
+                    ? "bg-white text-indigo-700 font-semibold shadow-xs"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                URL / Path
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-4">
+            {/* Photo Avatar Preview */}
+            <div className="w-20 h-20 rounded-2xl bg-indigo-50 border-2 border-indigo-200 flex items-center justify-center overflow-hidden shrink-0 shadow-inner relative group">
               {photoPreview ? (
                 <img
                   src={photoPreview}
                   alt="Preview"
                   className="w-full h-full object-cover"
+                  onError={() => {
+                    // Fallback if URL is invalid
+                  }}
                 />
               ) : (
-                <FaUser className="text-2xl text-indigo-300" />
+                <div className="flex flex-col items-center justify-center text-indigo-300">
+                  <FaUser className="text-2xl" />
+                  <span className="text-[9px] font-semibold text-indigo-400 mt-1">No Photo</span>
+                </div>
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handlePhotoChange}
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                id="committee-photo-upload"
-              />
-              <label
-                htmlFor="committee-photo-upload"
-                className="cursor-pointer px-3 py-2 rounded-xl border border-gray-300 hover:bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-1.5 transition"
-              >
-                <FaCamera className="text-gray-400" />
-                <span>{photoPreview ? "Change Photo" : "Upload Photo"}</span>
-              </label>
+            <div className="flex-1 min-w-0 space-y-2">
+              {photoMode === "file" ? (
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handlePhotoChange}
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      id="committee-photo-upload"
+                    />
+                    <label
+                      htmlFor="committee-photo-upload"
+                      className="cursor-pointer px-3.5 py-2 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-1.5 transition shadow-xs"
+                    >
+                      <FaCamera className="text-indigo-500" />
+                      <span>{photoPreview && photoFile ? "Change Photo File" : "Choose Image File"}</span>
+                    </label>
 
-              {photoPreview && (
-                <button
-                  type="button"
-                  onClick={handleRemovePhoto}
-                  className="px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 border border-red-200 transition"
-                >
-                  Remove
-                </button>
+                    {photoPreview && (
+                      <button
+                        type="button"
+                        onClick={handleRemovePhoto}
+                        className="px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 border border-red-200 transition"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1.5">
+                    JPG, PNG, or WebP. Max 5MB. Automatically uploaded to secure society storage.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <div className="relative">
+                    <FaLink className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="e.g. /committee/president.jpg or https://..."
+                      value={photoUrl}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPhotoUrl(val);
+                        setPhotoPreview(val.trim());
+                        setRemovePhoto(false);
+                      }}
+                      className="w-full pl-9 pr-3.5 py-2 bg-white border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-1.5">
+                    <p className="text-[11px] text-gray-500">
+                      Enter image link or local path (e.g. <code className="bg-slate-200 text-slate-700 px-1 py-0.5 rounded font-mono text-[10px]">/committee/name.jpg</code>)
+                    </p>
+                    {photoPreview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhotoUrl("");
+                          setPhotoPreview("");
+                          setRemovePhoto(true);
+                        }}
+                        className="text-[11px] font-semibold text-red-600 hover:text-red-700 shrink-0"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </div>
-          <p className="text-[11px] text-gray-400 mt-1">
-            JPG, PNG, or WebP. Max 5MB.
-          </p>
         </div>
 
         {/* Name & Designation */}
@@ -965,53 +1145,264 @@ export default function CommitteeForm({
           </div>
         </div>
 
-        {/* 2. Collection Powers */}
-        <div className="space-y-2 pt-2 border-t border-indigo-200/60">
+        {/* 2. Fee & Maintenance Collection Powers (ADMIN OPTION) */}
+        <div className="space-y-3 pt-2 border-t border-indigo-200/60">
           <p className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-            <FaMoneyBillWave className="text-emerald-600" /> Work as Collector (Fee Collection Powers)
-          </p>
-          <p className="text-xs text-gray-500">
-            Allow this committee member to collect funds directly from residents and generate receipts.
+            <FaMoneyBillWave className="text-emerald-600" /> Fee & Maintenance Collection Privileges
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-            {/* Collect Garbage */}
-            <label className={`flex items-start gap-3 p-3 rounded-xl border transition cursor-pointer select-none ${
+          <div className="grid grid-cols-1 gap-3">
+            {/* 2A. Garbage Collection (GC Powers) */}
+            <label className={`flex items-start gap-3 p-3.5 rounded-xl border-2 transition cursor-pointer select-none ${
               permissions.canCollectGarbage
-                ? "bg-white border-emerald-500 ring-2 ring-emerald-300 shadow-sm"
+                ? "bg-emerald-50/90 border-emerald-500 ring-2 ring-emerald-300/50 shadow-sm"
                 : "bg-white/70 border-gray-200 hover:bg-white"
             }`}>
               <input
                 type="checkbox"
-                checked={permissions.canCollectGarbage}
+                checked={Boolean(permissions.canCollectGarbage)}
                 onChange={(e) => setPermissions((p) => ({ ...p, canCollectGarbage: e.target.checked }))}
                 className="w-4 h-4 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer"
               />
               <div className="text-xs">
-                <span className="font-bold text-emerald-950 block">Garbage Collection</span>
-                <span className="text-gray-500">Collect monthly door-to-door waste/garbage collection fees.</span>
+                <span className="font-bold text-gray-900 block flex items-center gap-1.5 text-sm">
+                  <FaTrashAlt className="text-emerald-600 text-xs" /> Grant Garbage Collection Powers (GC Collector)
+                </span>
+                <span className="text-gray-600 block mt-0.5">
+                  When enabled by Admin, this committee official has authorization to collect monthly society garbage fees, record payments, and issue official garbage collection receipts.
+                </span>
+                {permissions.canCollectGarbage ? (
+                  <span className="inline-block mt-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                    ✓ GC Collection Privileges Enabled
+                  </span>
+                ) : (
+                  <span className="inline-block mt-1 text-[11px] font-semibold text-slate-500">
+                    Disabled: Only society Admins and assigned Collectors have GC collection powers by default.
+                  </span>
+                )}
               </div>
             </label>
 
-            {/* Collect Special */}
-            <label className={`flex items-start gap-3 p-3 rounded-xl border transition cursor-pointer select-none ${
+            {/* 2B. Special Collections Powers */}
+            <div className={`p-3.5 rounded-xl border-2 transition ${
               permissions.canCollectSpecial
-                ? "bg-white border-purple-500 ring-2 ring-purple-300 shadow-sm"
+                ? "bg-indigo-50/90 border-indigo-500 ring-2 ring-indigo-300/50 shadow-sm"
                 : "bg-white/70 border-gray-200 hover:bg-white"
             }`}>
-              <input
-                type="checkbox"
-                checked={permissions.canCollectSpecial}
-                onChange={(e) => setPermissions((p) => ({ ...p, canCollectSpecial: e.target.checked }))}
-                className="w-4 h-4 mt-0.5 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
-              />
-              <div className="text-xs">
-                <span className="font-bold text-purple-950 block">Special Campaign Collection</span>
-                <span className="text-gray-500">Collect festival, development, and special campaign funds.</span>
-              </div>
-            </label>
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={Boolean(permissions.canCollectSpecial)}
+                  onChange={(e) => setPermissions((p) => ({ ...p, canCollectSpecial: e.target.checked }))}
+                  className="w-4 h-4 mt-0.5 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-gray-900 block flex items-center gap-1.5 text-sm">
+                    <FaHandHoldingHeart className="text-indigo-600 text-xs" /> Grant Special Collection Powers (Campaigns & Festivals)
+                  </span>
+                  <span className="text-gray-600 block mt-0.5">
+                    When enabled by Admin, this committee official has authorization to collect festival, event, and campaign donations/contributions and issue official receipts.
+                  </span>
+                  {permissions.canCollectSpecial ? (
+                    <span className="inline-block mt-1 text-[11px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
+                      ✓ Special Collection Privileges Enabled
+                    </span>
+                  ) : (
+                    <span className="inline-block mt-1 text-[11px] font-semibold text-slate-500">
+                      Disabled: Only society Admins and assigned Collectors have Special collection powers by default.
+                    </span>
+                  )}
+                </div>
+              </label>
+
+              {/* Specific Campaign Selection Option */}
+              {permissions.canCollectSpecial && (
+                <div className="mt-3.5 pt-3 border-t border-indigo-200/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                      <span>Campaign Authorization Scope</span>
+                    </span>
+                    <span className="text-[11px] text-indigo-700 font-semibold bg-indigo-100/80 px-2 py-0.5 rounded-md">
+                      {permissions.specialCollectionScope === "specific"
+                        ? `${permissions.allowedSpecialCollections?.length || 0} of ${availableCampaigns.length} Campaign(s) Selected`
+                        : "All Society Campaigns Authorized"}
+                    </span>
+                  </div>
+
+                  {/* Radio Scope Options */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <label className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition cursor-pointer ${
+                      permissions.specialCollectionScope !== "specific"
+                        ? "bg-white border-indigo-500 ring-2 ring-indigo-200 font-semibold text-indigo-900 shadow-xs"
+                        : "bg-white/60 border-indigo-200 text-gray-700 hover:bg-white"
+                    }`}>
+                      <input
+                        type="radio"
+                        name="specialCollectionScope"
+                        value="all"
+                        checked={permissions.specialCollectionScope !== "specific"}
+                        onChange={() => setPermissions(p => ({ ...p, specialCollectionScope: "all" }))}
+                        className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="block font-bold">All Special Collections</span>
+                        <span className="text-[11px] text-gray-500 font-normal">Can collect for all current and future festival/event campaigns</span>
+                      </div>
+                    </label>
+
+                    <label className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition cursor-pointer ${
+                      permissions.specialCollectionScope === "specific"
+                        ? "bg-white border-indigo-500 ring-2 ring-indigo-200 font-semibold text-indigo-900 shadow-xs"
+                        : "bg-white/60 border-indigo-200 text-gray-700 hover:bg-white"
+                    }`}>
+                      <input
+                        type="radio"
+                        name="specialCollectionScope"
+                        value="specific"
+                        checked={permissions.specialCollectionScope === "specific"}
+                        onChange={() => setPermissions(p => ({ ...p, specialCollectionScope: "specific" }))}
+                        className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="block font-bold">Particular Campaign(s) Only</span>
+                        <span className="text-[11px] text-gray-500 font-normal">Limit collection power strictly to chosen campaigns</span>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Particular Campaign Selection Checkboxes */}
+                  {permissions.specialCollectionScope === "specific" && (
+                    <div className="bg-white rounded-xl border border-indigo-200 p-3 space-y-2.5">
+                      <div className="flex items-center justify-between pb-1 border-b border-gray-100">
+                        <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                          Assign Specific Campaigns ({availableCampaigns.length} Total)
+                        </span>
+                        {availableCampaigns.length > 0 && (
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => setPermissions(p => ({ ...p, allowedSpecialCollections: availableCampaigns.map(c => c.id) }))}
+                              className="text-indigo-600 hover:text-indigo-800 font-bold"
+                            >
+                              Select All
+                            </button>
+                            <span className="text-gray-300">•</span>
+                            <button
+                              type="button"
+                              onClick={() => setPermissions(p => ({ ...p, allowedSpecialCollections: [] }))}
+                              className="text-gray-500 hover:text-gray-700 font-medium"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {availableCampaigns.length === 0 ? (
+                        <div className="py-3 px-3 text-center text-xs text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                          <p className="font-semibold text-gray-700">No Special Collection campaigns found.</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5">
+                            Create campaigns in <strong>Society & Services → Special Collections</strong> first, or select <em>"All Special Collections"</em> for this official.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                          {availableCampaigns.map((c) => {
+                            const isChecked = (permissions.allowedSpecialCollections || []).includes(c.id);
+                            return (
+                              <label
+                                key={c.id}
+                                className={`flex items-center justify-between p-2.5 rounded-lg border transition cursor-pointer text-xs ${
+                                  isChecked
+                                    ? "bg-indigo-50/80 border-indigo-300 font-semibold text-indigo-950"
+                                    : "bg-gray-50/60 border-gray-200 text-gray-700 hover:bg-gray-100/60"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setPermissions(p => {
+                                        const current = Array.isArray(p.allowedSpecialCollections) ? p.allowedSpecialCollections : [];
+                                        const next = checked
+                                          ? [...current, c.id]
+                                          : current.filter(id => id !== c.id);
+                                        return { ...p, allowedSpecialCollections: next };
+                                      });
+                                    }}
+                                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer"
+                                  />
+                                  <div className="truncate">
+                                    <span className="block font-bold text-gray-900 truncate">{c.name}</span>
+                                    <span className="text-[10px] text-gray-500 font-normal">
+                                      {c.collectionType || "Campaign"} {c.fixedAmount ? `• Fixed ₹${c.fixedAmount}` : c.targetAmount ? `• Target ₹${c.targetAmount}` : ""}
+                                    </span>
+                                  </div>
+                                </div>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                                  c.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-gray-200 text-gray-600"
+                                }`}>
+                                  {c.status || "active"}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {permissions.specialCollectionScope === "specific" && (permissions.allowedSpecialCollections || []).length === 0 && availableCampaigns.length > 0 && (
+                        <p className="text-[11px] font-semibold text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                          ⚠️ Please check at least one campaign above, or select "All Special Collections".
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
+
+        {/* 3. Society Analytics & Reports Access (ADMIN OPTION) */}
+        <div className="space-y-2 pt-2 border-t border-indigo-200/60">
+          <p className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+            <FaChartBar className="text-teal-600" /> Society Analytics & Financial Reports Access
+          </p>
+
+          <label className={`flex items-start gap-3 p-3.5 rounded-xl border-2 transition cursor-pointer select-none ${
+            permissions.canViewGarbageReports
+              ? "bg-teal-50/90 border-teal-500 ring-2 ring-teal-300/50 shadow-sm"
+              : "bg-white/70 border-gray-200 hover:bg-white"
+          }`}>
+            <input
+              type="checkbox"
+              checked={Boolean(permissions.canViewGarbageReports)}
+              onChange={(e) => setPermissions((p) => ({ ...p, canViewGarbageReports: e.target.checked }))}
+              className="w-4 h-4 mt-0.5 text-teal-600 rounded focus:ring-teal-500 cursor-pointer"
+            />
+            <div className="text-xs">
+              <span className="font-bold text-gray-900 block flex items-center gap-1.5 text-sm">
+                <FaChartBar className="text-teal-600 text-xs" /> Grant Society Analytics & Financial Reports Access
+              </span>
+              <span className="text-gray-600 block mt-0.5">
+                When enabled by Admin, this committee member can view macro society collection analytics, financial summaries, collection percentages, and defaulter reports in the Committee Portal.
+              </span>
+              {permissions.canViewGarbageReports ? (
+                <span className="inline-block mt-1 text-[11px] font-bold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-md">
+                  ✓ Society Analytics & Reports Access Enabled
+                </span>
+              ) : (
+                <span className="inline-block mt-1 text-[11px] font-semibold text-slate-500">
+                  Disabled: By default, committee members only see their flat's personal status.
+                </span>
+              )}
+            </div>
+          </label>
+        </div>
+
       </div>
 
       {/* Info Notice */}

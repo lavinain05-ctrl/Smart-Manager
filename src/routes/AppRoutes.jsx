@@ -1,83 +1,122 @@
+import React, { Suspense, lazy as reactLazy, useEffect } from "react";
 import {
   BrowserRouter,
   Routes,
   Route,
   Navigate,
+  useNavigate,
+  useLocation,
 } from "react-router-dom";
+import { getHomeRouteForRole } from "../services/authService";
+
+// Safe dynamic lazy import that automatically purges caches and refreshes
+// when a deployment updates chunk hashes, eliminating "Failed to fetch dynamically imported module"
+function lazy(importFn) {
+  return reactLazy(async () => {
+    try {
+      return await importFn();
+    } catch (err) {
+      console.warn("[AppRoutes] Dynamic chunk import failed:", err);
+      const isChunkError =
+        err?.message?.includes("Failed to fetch dynamically imported module") ||
+        err?.message?.includes("Expected a JavaScript-or-Wasm module script") ||
+        err?.message?.includes("error loading dynamically imported module") ||
+        (err?.message?.includes("text/html") && err?.message?.includes("MIME")) ||
+        err?.message?.includes("Loading chunk");
+
+      if (isChunkError) {
+        const lastReload = sessionStorage.getItem("rwa_chunk_retry");
+        const now = Date.now();
+        if (!lastReload || now - Number(lastReload) > 15000) {
+          sessionStorage.setItem("rwa_chunk_retry", String(now));
+          if (typeof window !== "undefined" && "caches" in window) {
+            try {
+              const cacheKeys = await caches.keys();
+              await Promise.all(cacheKeys.map((k) => caches.delete(k)));
+            } catch {}
+          }
+          window.location.reload();
+          return new Promise(() => {});
+        }
+      }
+      throw err;
+    }
+  });
+}
 
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
-import PendingApproval from "../pages/auth/PendingApproval";
-import ForgotPassword from "../pages/auth/ForgotPassword";
-import ForceChangePassword from "../pages/auth/ForceChangePassword";
+const PendingApproval = lazy(() => import("../pages/auth/PendingApproval"));
+const ForgotPassword = lazy(() => import("../pages/auth/ForgotPassword"));
+const ForceChangePassword = lazy(() => import("../pages/auth/ForceChangePassword"));
 
-import PublicNotice from "../pages/public/PublicNotice";
-import PublicEvent from "../pages/public/PublicEvent";
-import PublicSpecialCollection from "../pages/public/PublicSpecialCollection";
+const PublicNotice = lazy(() => import("../pages/public/PublicNotice"));
+const PublicEvent = lazy(() => import("../pages/public/PublicEvent"));
+const PublicSpecialCollection = lazy(() => import("../pages/public/PublicSpecialCollection"));
 
 import MainLayout from "../components/layout/MainLayout";
 
-import Dashboard from "../pages/admin/Dashboard";
-import Residents from "../pages/admin/Residents";
-import SpecialCollections from "../pages/admin/SpecialCollections";
-import Collections from "../pages/admin/Collections";
-import Collectors from "../pages/admin/Collectors";
-import Settings from "../pages/admin/Settings";
-import PaymentHistory from "../pages/admin/PaymentHistory";
-import Receipts from "../pages/admin/Receipts";
-import Bills from "../pages/admin/Bills";
-import CollectorDailyReport from "../pages/admin/CollectorDailyReport";
-import Notices from "../pages/admin/Notices";
-import Complaints from "../pages/admin/Complaints";
-import Suggestions from "../pages/admin/Suggestions";
-import Events from "../pages/admin/Events";
-import PendingRegistrations from "../pages/admin/PendingRegistrations";
-import ManageFamilyMembers from "../pages/admin/ManageFamilyMembers";
-import ManageCommittee from "../pages/admin/ManageCommittee";
-import ProfileRequests from "../pages/admin/ProfileRequests";
-import BlocksAndFlats from "../pages/admin/BlocksAndFlats";
-import Activities from "../pages/admin/Activities";
-import ActivityLogs from "../pages/admin/ActivityLogs";
-import ActiveDevices from "../pages/admin/ActiveDevices";
-import EmergencyContacts from "../pages/admin/EmergencyContacts";
-import RegistrationRequests from "../pages/admin/RegistrationRequests";
-import DeletedAccounts from "../pages/admin/DeletedAccounts";
-import BlockedAccounts from "../pages/admin/BlockedAccounts";
-import ResetData from "../pages/admin/ResetData";
-import AccountRecovery from "../pages/admin/AccountRecovery";
-import ManageSupport from "../pages/admin/ManageSupport";
+const Dashboard = lazy(() => import("../pages/admin/Dashboard"));
+const Residents = lazy(() => import("../pages/admin/Residents"));
+const SpecialCollections = lazy(() => import("../pages/admin/SpecialCollections"));
+const Collections = lazy(() => import("../pages/admin/Collections"));
+const Collectors = lazy(() => import("../pages/admin/Collectors"));
+const Settings = lazy(() => import("../pages/admin/Settings"));
+const PaymentHistory = lazy(() => import("../pages/admin/PaymentHistory"));
+const Receipts = lazy(() => import("../pages/admin/Receipts"));
+const Bills = lazy(() => import("../pages/admin/Bills"));
+const CollectorDailyReport = lazy(() => import("../pages/admin/CollectorDailyReport"));
+const Notices = lazy(() => import("../pages/admin/Notices"));
+const Complaints = lazy(() => import("../pages/admin/Complaints"));
+const Suggestions = lazy(() => import("../pages/admin/Suggestions"));
+const Events = lazy(() => import("../pages/admin/Events"));
+const PendingRegistrations = lazy(() => import("../pages/admin/PendingRegistrations"));
+const ManageFamilyMembers = lazy(() => import("../pages/admin/ManageFamilyMembers"));
+const ManageCommittee = lazy(() => import("../pages/admin/ManageCommittee"));
+const ProfileRequests = lazy(() => import("../pages/admin/ProfileRequests"));
+const BlocksAndFlats = lazy(() => import("../pages/admin/BlocksAndFlats"));
+const Activities = lazy(() => import("../pages/admin/Activities"));
+const ActivityLogs = lazy(() => import("../pages/admin/ActivityLogs"));
+const ActiveDevices = lazy(() => import("../pages/admin/ActiveDevices"));
+const EmergencyContacts = lazy(() => import("../pages/admin/EmergencyContacts"));
+const RegistrationRequests = lazy(() => import("../pages/admin/RegistrationRequests"));
+const DeletedAccounts = lazy(() => import("../pages/admin/DeletedAccounts"));
+const BlockedAccounts = lazy(() => import("../pages/admin/BlockedAccounts"));
+const ResetData = lazy(() => import("../pages/admin/ResetData"));
+const AccountRecovery = lazy(() => import("../pages/admin/AccountRecovery"));
+const ManageSupport = lazy(() => import("../pages/admin/ManageSupport"));
 
-import GarbageDashboard from "../pages/admin/GarbageDashboard";
-import GarbageCollectors from "../pages/admin/GarbageCollectors";
-import GarbageReports from "../pages/admin/GarbageReports";
-import GarbageRequests from "../pages/admin/GarbageRequests";
-import GarbageSettings from "../pages/admin/GarbageSettings";
+const GarbageDashboard = lazy(() => import("../pages/admin/GarbageDashboard"));
+const GarbageCollectors = lazy(() => import("../pages/admin/GarbageCollectors"));
+const GarbageReports = lazy(() => import("../pages/admin/GarbageReports"));
+const GarbageRequests = lazy(() => import("../pages/admin/GarbageRequests"));
+const GarbageSettings = lazy(() => import("../pages/admin/GarbageSettings"));
 
 import CollectorLayout from "../components/layout/CollectorLayout";
-import CollectorDashboard from "../pages/collector/CollectorDashboard";
-import CollectorCollect from "../pages/collector/CollectorCollect";
-import CollectorHistory from "../pages/collector/CollectorHistory";
+const CollectorDashboard = lazy(() => import("../pages/collector/CollectorDashboard"));
+const CollectorCollect = lazy(() => import("../pages/collector/CollectorCollect"));
+const CollectorHistory = lazy(() => import("../pages/collector/CollectorHistory"));
 
-import GarbageCollectorDashboard from "../pages/collector/GarbageCollectorDashboard";
-import GarbageCollectorCollect from "../pages/collector/GarbageCollectorCollect";
-import GarbageCollectorHistory from "../pages/collector/GarbageCollectorHistory";
+const GarbageCollectorDashboard = lazy(() => import("../pages/collector/GarbageCollectorDashboard"));
+const GarbageCollectorCollect = lazy(() => import("../pages/collector/GarbageCollectorCollect"));
+const GarbageCollectorHistory = lazy(() => import("../pages/collector/GarbageCollectorHistory"));
 
 import ResidentLayout from "../components/layout/ResidentLayout";
-import ResidentDashboard from "../pages/resident/ResidentDashboard";
-import ResidentBills from "../pages/resident/ResidentBills";
-import ResidentPayments from "../pages/resident/ResidentPayments";
-import ResidentReceipts from "../pages/resident/ResidentReceipts";
-import ResidentNotices from "../pages/resident/ResidentNotices";
-import ResidentProfile from "../pages/resident/ResidentProfile";
-import ResidentComplaints from "../pages/resident/ResidentComplaints";
-import ResidentSuggestions from "../pages/resident/ResidentSuggestions";
-import ResidentEvents from "../pages/resident/ResidentEvents";
-import ResidentActivities from "../pages/resident/ResidentActivities";
-import ResidentEmergency from "../pages/resident/ResidentEmergency";
-import ResidentGarbage from "../pages/resident/ResidentGarbage";
-import ResidentCommittee from "../pages/resident/ResidentCommittee";
-import ResidentSpecialCollections from "../pages/resident/ResidentSpecialCollections";
-import ResidentSupport from "../pages/resident/ResidentSupport";
+const ResidentDashboard = lazy(() => import("../pages/resident/ResidentDashboard"));
+const ResidentBills = lazy(() => import("../pages/resident/ResidentBills"));
+const ResidentPayments = lazy(() => import("../pages/resident/ResidentPayments"));
+const ResidentReceipts = lazy(() => import("../pages/resident/ResidentReceipts"));
+const ResidentNotices = lazy(() => import("../pages/resident/ResidentNotices"));
+const ResidentProfile = lazy(() => import("../pages/resident/ResidentProfile"));
+const ResidentComplaints = lazy(() => import("../pages/resident/ResidentComplaints"));
+const ResidentSuggestions = lazy(() => import("../pages/resident/ResidentSuggestions"));
+const ResidentEvents = lazy(() => import("../pages/resident/ResidentEvents"));
+const ResidentActivities = lazy(() => import("../pages/resident/ResidentActivities"));
+const ResidentEmergency = lazy(() => import("../pages/resident/ResidentEmergency"));
+const ResidentGarbage = lazy(() => import("../pages/resident/ResidentGarbage"));
+const ResidentCommittee = lazy(() => import("../pages/resident/ResidentCommittee"));
+const ResidentSpecialCollections = lazy(() => import("../pages/resident/ResidentSpecialCollections"));
+const ResidentSupport = lazy(() => import("../pages/resident/ResidentSupport"));
 
 import ProtectedRoute from "../pages/auth/ProtectedRoute";
 import AdminRoute from "../pages/auth/AdminRoute";
@@ -86,20 +125,68 @@ import ResidentRoute from "../pages/auth/ResidentRoute";
 import FamilyRoute from "../pages/auth/FamilyRoute";
 
 import FamilyLayout from "../components/layout/FamilyLayout";
-import FamilyDashboard from "../pages/family/FamilyDashboard";
+const FamilyDashboard = lazy(() => import("../pages/family/FamilyDashboard"));
 
 import CommitteeRoute from "../pages/auth/CommitteeRoute";
 import CommitteeLayout from "../components/layout/CommitteeLayout";
-import CommitteeDashboard from "../pages/committee/CommitteeDashboard";
-import CommitteeGarbage from "../pages/committee/CommitteeGarbage";
-import CommitteeCollect from "../pages/committee/CommitteeCollect";
-import CommitteeCollectionHistory from "../pages/committee/CommitteeCollectionHistory";
+const CommitteeDashboard = lazy(() => import("../pages/committee/CommitteeDashboard"));
+const CommitteeGarbage = lazy(() => import("../pages/committee/CommitteeGarbage"));
+const CommitteeCollect = lazy(() => import("../pages/committee/CommitteeCollect"));
+const CommitteeCollectionHistory = lazy(() => import("../pages/committee/CommitteeCollectionHistory"));
 import ImpersonationBanner from "../components/common/ImpersonationBanner";
 import ImpersonatedMobileFrame from "../components/common/ImpersonatedMobileFrame";
 import { useAuth } from "../context/AuthContext";
 
+function RouteFallback() {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center p-8">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-700/50 flex items-center justify-center shadow-lg">
+          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+        <span className="text-xs text-slate-400 font-semibold tracking-wide">Loading page...</span>
+      </div>
+    </div>
+  );
+}
+
+function CommitteeCollectorRouteGuard({ children }) {
+  const { user } = useAuth();
+  const canCollect = Boolean(
+    user?.role === "admin" ||
+    user?.canCollectGarbage ||
+    user?.permissions?.canCollectGarbage ||
+    user?.canCollectSpecial ||
+    user?.permissions?.canCollectSpecial
+  );
+
+  if (!canCollect) {
+    return <Navigate to="/committee/dashboard" replace />;
+  }
+
+  return children;
+}
+
 function AppContent() {
-  const { isImpersonating, impersonatedDeviceMode } = useAuth();
+  const { user, isImpersonating, impersonatedDeviceMode } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    sessionStorage.setItem("rwa_session_active", "true");
+    // If authenticated user lands on login or root routes, immediately navigate to their portal
+    if (user && user.role) {
+      const homeRoute = getHomeRouteForRole(user.role);
+      const isAuthRoute =
+        location.pathname === "/" ||
+        location.pathname === "/login" ||
+        location.pathname === "/resident/login";
+      if (homeRoute && isAuthRoute) {
+        navigate(homeRoute, { replace: true });
+      }
+    }
+  }, [user, navigate, location.pathname]);
+
   const isInsideFrame =
     typeof window !== "undefined" &&
     (window.self !== window.top ||
@@ -117,12 +204,23 @@ function AppContent() {
   return (
     <>
       <ImpersonationBanner />
-      <Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
 
-        {/* Login */}
+        {/* Login Routes */}
 
         <Route
           path="/"
+          element={<Login />}
+        />
+
+        <Route
+          path="/login"
+          element={<Login />}
+        />
+
+        <Route
+          path="/resident/login"
           element={<Login />}
         />
 
@@ -172,11 +270,9 @@ function AppContent() {
         <Route
           path="/admin"
           element={
-            <ProtectedRoute>
-              <AdminRoute>
-                <MainLayout />
-              </AdminRoute>
-            </ProtectedRoute>
+            <AdminRoute>
+              <MainLayout />
+            </AdminRoute>
           }
         >
           <Route
@@ -396,11 +492,9 @@ function AppContent() {
         <Route
           path="/collector"
           element={
-            <ProtectedRoute>
-              <CollectorRoute>
-                <CollectorLayout />
-              </CollectorRoute>
-            </ProtectedRoute>
+            <CollectorRoute>
+              <CollectorLayout />
+            </CollectorRoute>
           }
         >
           <Route
@@ -448,11 +542,9 @@ function AppContent() {
         <Route
           path="/resident"
           element={
-            <ProtectedRoute>
-              <ResidentRoute>
-                <ResidentLayout />
-              </ResidentRoute>
-            </ProtectedRoute>
+            <ResidentRoute>
+              <ResidentLayout />
+            </ResidentRoute>
           }
         >
           <Route
@@ -546,11 +638,9 @@ function AppContent() {
         <Route
           path="/family"
           element={
-            <ProtectedRoute>
-              <FamilyRoute>
-                <FamilyLayout />
-              </FamilyRoute>
-            </ProtectedRoute>
+            <FamilyRoute>
+              <FamilyLayout />
+            </FamilyRoute>
           }
         >
           <Route
@@ -614,6 +704,11 @@ function AppContent() {
           />
 
           <Route
+            path="committee"
+            element={<ResidentCommittee />}
+          />
+
+          <Route
             path="profile"
             element={<ResidentProfile />}
           />
@@ -629,11 +724,9 @@ function AppContent() {
         <Route
           path="/committee"
           element={
-            <ProtectedRoute>
-              <CommitteeRoute>
-                <CommitteeLayout />
-              </CommitteeRoute>
-            </ProtectedRoute>
+            <CommitteeRoute>
+              <CommitteeLayout />
+            </CommitteeRoute>
           }
         >
           <Route
@@ -673,7 +766,15 @@ function AppContent() {
 
           <Route
             path="directory"
-            element={<CommitteeDashboard />}
+            element={<ResidentCommittee />}
+          />
+          <Route
+            path="committee"
+            element={<ResidentCommittee />}
+          />
+          <Route
+            path="members"
+            element={<ResidentCommittee />}
           />
 
           <Route
@@ -714,11 +815,35 @@ function AppContent() {
           />
           <Route
             path="collect"
-            element={<CommitteeCollect />}
+            element={
+              <CommitteeCollectorRouteGuard>
+                <CommitteeCollect />
+              </CommitteeCollectorRouteGuard>
+            }
+          />
+          <Route
+            path="collect-garbage"
+            element={
+              <CommitteeCollectorRouteGuard>
+                <CommitteeCollect defaultModule="garbage" />
+              </CommitteeCollectorRouteGuard>
+            }
+          />
+          <Route
+            path="collect-special"
+            element={
+              <CommitteeCollectorRouteGuard>
+                <CommitteeCollect defaultModule="special_collections" />
+              </CommitteeCollectorRouteGuard>
+            }
           />
           <Route
             path="history"
-            element={<CommitteeCollectionHistory />}
+            element={
+              <CommitteeCollectorRouteGuard>
+                <CommitteeCollectionHistory />
+              </CommitteeCollectorRouteGuard>
+            }
           />
 
           <Route
@@ -744,6 +869,7 @@ function AppContent() {
         />
 
       </Routes>
+      </Suspense>
     </>
   );
 }

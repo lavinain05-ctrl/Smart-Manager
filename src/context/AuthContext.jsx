@@ -3,17 +3,20 @@ import {
   useContext,
   useEffect,
   useState,
+  useCallback,
+  useRef,
 } from "react";
 
 import toast from "react-hot-toast";
 
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, getDocs, collection, query, where, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/firebase";
 import {
   login as loginService,
   logout as logoutService,
   subscribeAuth,
   fetchUserProfile,
+  normalizeMobile,
 } from "../services/authService";
 import { ensureActiveSessionLogged } from "../services/loginTrackerService";
 import {
@@ -22,13 +25,39 @@ import {
   subscribeCurrentSession,
   terminateSession,
   getOrCreateSessionId,
+  startNewSessionId,
+  resetSessionId,
 } from "../services/sessionService";
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const sessionUnsubscribeRef = useRef(null);
+  const touchIntervalRef = useRef(null);
+  const isLoggingOutRef = useRef(false);
+
+  const [user, setUser] = useState(() => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        const cached = localStorage.getItem("rwa_cached_user_profile");
+        return cached ? JSON.parse(cached) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        return !localStorage.getItem("rwa_cached_user_profile");
+      } catch {
+        return true;
+      }
+    }
+    return true;
+  });
 
   const [impersonatedUser, setImpersonatedUser] = useState(() => {
     if (typeof window !== "undefined" && window.sessionStorage) {
@@ -58,14 +87,50 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    let sessionUnsubscribe = null;
-    let touchInterval = null;
     let userDocUnsub = null;
     let regDocUnsub = null;
 
+    // Liveness fallback: never leave user stuck on loader if network is slow
+    const livenessTimer = setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) {
+          console.warn("[Auth] Auth state check timed out on slow network — clearing loader");
+          return false;
+        }
+        return prev;
+      });
+    }, 3000);
+
     const unsubscribe = subscribeAuth((currentUser) => {
+      clearTimeout(livenessTimer);
       setUser(currentUser);
       setLoading(false);
+
+      if (currentUser?.uid) {
+        try {
+          localStorage.setItem("rwa_cached_user_profile", JSON.stringify(currentUser));
+        } catch {}
+
+        try {
+          if (!sessionStorage.getItem("rwa_session_counted")) {
+            sessionStorage.setItem("rwa_session_counted", "true");
+            const prevCount = parseInt(localStorage.getItem("rwa_user_login_count") || "0", 10);
+            localStorage.setItem("rwa_user_login_count", String(prevCount + 1));
+          }
+        } catch {}
+      } else {
+        try {
+          localStorage.removeItem("rwa_cached_user_profile");
+        } catch {}
+        if (sessionUnsubscribeRef.current) {
+          sessionUnsubscribeRef.current();
+          sessionUnsubscribeRef.current = null;
+        }
+        if (touchIntervalRef.current) {
+          clearInterval(touchIntervalRef.current);
+          touchIntervalRef.current = null;
+        }
+      }
 
       if (userDocUnsub) {
         userDocUnsub();
@@ -77,18 +142,27 @@ export function AuthProvider({ children }) {
       }
 
       if (currentUser?.uid) {
+        isLoggingOutRef.current = false;
         ensureActiveSessionLogged(currentUser);
 
         // Register active device session & listen for remote logout
         initDeviceSession(currentUser);
         const currentSessionId = getOrCreateSessionId();
 
-        if (sessionUnsubscribe) {
-          sessionUnsubscribe();
+        if (sessionUnsubscribeRef.current) {
+          sessionUnsubscribeRef.current();
+          sessionUnsubscribeRef.current = null;
         }
 
-        sessionUnsubscribe = subscribeCurrentSession(currentSessionId, async (reason) => {
+        sessionUnsubscribeRef.current = subscribeCurrentSession(currentSessionId, async (reason) => {
+          if (isLoggingOutRef.current || reason === "User signed out") {
+            return;
+          }
           console.warn("[AuthContext] Active session revoked remotely:", reason);
+          if (sessionUnsubscribeRef.current) {
+            sessionUnsubscribeRef.current();
+            sessionUnsubscribeRef.current = null;
+          }
           stopImpersonating();
           await logoutService();
           setUser(null);
@@ -99,19 +173,46 @@ export function AuthProvider({ children }) {
         });
 
         // Touch session every 5 minutes to keep lastActive timestamp fresh
-        if (touchInterval) clearInterval(touchInterval);
-        touchInterval = setInterval(() => {
+        if (touchIntervalRef.current) clearInterval(touchIntervalRef.current);
+        touchIntervalRef.current = setInterval(() => {
           touchSession(currentSessionId);
         }, 5 * 60 * 1000);
 
         // Real-time Firestore profile listener on users/{uid}
         // Guarantees immediate UI sync when admin approves registration, activates account, or changes role
-        userDocUnsub = onSnapshot(doc(db, "users", currentUser.uid), (docSnap) => {
+        userDocUnsub = onSnapshot(doc(db, "users", currentUser.uid), async (docSnap) => {
           if (docSnap.exists()) {
-            const data = docSnap.data();
+            let data = docSnap.data();
+
+            // Self-healing: If user is an active committee member, guarantee role is 'committee'
+            if (data.role !== "admin" && data.role !== "committee") {
+              const emailPrefix = (currentUser.email || "").split("@")[0];
+              const fallbackMob = /^\d{10}$/.test(emailPrefix) ? emailPrefix : "";
+              const mob = normalizeMobile(data.phone || data.mobile || fallbackMob);
+              if (mob) {
+                try {
+                  const commSnap = await getDocs(query(collection(db, "committee"), where("phone", "==", mob)));
+                  if (!commSnap.empty) {
+                    const cData = commSnap.docs[0].data();
+                    data.role = "committee";
+                    data.isResident = true;
+                    data.designation = cData.designation || data.designation || "Member";
+                    data.permissions = cData.permissions || data.permissions || {};
+                    setDoc(
+                      doc(db, "users", currentUser.uid),
+                      { role: "committee", isResident: true, designation: data.designation, permissions: data.permissions },
+                      { merge: true }
+                    ).catch(() => {});
+                  }
+                } catch (checkErr) {
+                  console.warn("[AuthContext] Committee check error:", checkErr.message);
+                }
+              }
+            }
+
             setUser((prev) => {
               if (!prev) return null;
-              return {
+              const updated = {
                 ...prev,
                 ...data,
                 role: (data.role || prev.role || "").toLowerCase(),
@@ -120,6 +221,10 @@ export function AuthProvider({ children }) {
                 phone: data.phone || data.mobile || prev.phone || prev.mobile || "",
                 mustChangePassword: data.mustChangePassword === true,
               };
+              try {
+                localStorage.setItem("rwa_cached_user_profile", JSON.stringify(updated));
+              } catch {}
+              return updated;
             });
           }
         }, (err) => {
@@ -133,11 +238,15 @@ export function AuthProvider({ children }) {
               const regData = docSnap.data();
               if (regData.status === "approved") {
                 console.log("[AuthContext] Real-time approval detected for:", currentUser.uid);
+                if (regDocUnsub) {
+                  regDocUnsub();
+                  regDocUnsub = null;
+                }
                 if (auth.currentUser) {
                   const refreshed = await fetchUserProfile(auth.currentUser);
                   if (refreshed) {
                     setUser(refreshed);
-                    toast.success("🎉 Your registration has been approved!");
+                    toast.success("🎉 Your registration has been approved!", { id: "reg-approved" });
                   }
                 }
               } else if (regData.status === "rejected") {
@@ -161,13 +270,13 @@ export function AuthProvider({ children }) {
           }
         }
       } else {
-        if (sessionUnsubscribe) {
-          sessionUnsubscribe();
-          sessionUnsubscribe = null;
+        if (sessionUnsubscribeRef.current) {
+          sessionUnsubscribeRef.current();
+          sessionUnsubscribeRef.current = null;
         }
-        if (touchInterval) {
-          clearInterval(touchInterval);
-          touchInterval = null;
+        if (touchIntervalRef.current) {
+          clearInterval(touchIntervalRef.current);
+          touchIntervalRef.current = null;
         }
         setImpersonatedUser(null);
         setImpersonatedDeviceModeState("desktop");
@@ -176,8 +285,14 @@ export function AuthProvider({ children }) {
 
     return () => {
       unsubscribe();
-      if (sessionUnsubscribe) sessionUnsubscribe();
-      if (touchInterval) clearInterval(touchInterval);
+      if (sessionUnsubscribeRef.current) {
+        sessionUnsubscribeRef.current();
+        sessionUnsubscribeRef.current = null;
+      }
+      if (touchIntervalRef.current) {
+        clearInterval(touchIntervalRef.current);
+        touchIntervalRef.current = null;
+      }
       if (userDocUnsub) userDocUnsub();
       if (regDocUnsub) regDocUnsub();
     };
@@ -189,9 +304,21 @@ export function AuthProvider({ children }) {
 
   async function login(identifier, password) {
     try {
+      isLoggingOutRef.current = false;
+      // Ensure this new login gets a clean, fresh session ID
+      startNewSessionId();
+      try {
+        const prevCount = parseInt(localStorage.getItem("rwa_user_login_count") || "0", 10);
+        localStorage.setItem("rwa_user_login_count", String(prevCount + 1));
+        sessionStorage.setItem("rwa_session_counted", "true");
+        sessionStorage.removeItem("rwa_notif_banner_dismissed_session");
+      } catch {}
       const user = await loginService(identifier, password);
       // Synchronously set in context immediately to avoid navigation race condition
       setUser(user);
+      try {
+        localStorage.setItem("rwa_cached_user_profile", JSON.stringify(user));
+      } catch {}
 
       if (user.mustChangePassword) {
         toast("You must set a new password to continue", { icon: "🔐" });
@@ -205,14 +332,7 @@ export function AuthProvider({ children }) {
 
       return user;
     } catch (error) {
-      console.error(error);
-
-      if (error.code === "auth/invalid-credential") {
-        toast.error("Invalid mobile number or password");
-      } else {
-        toast.error(error.message || "Login failed");
-      }
-
+      console.error("[AuthContext] Login error:", error);
       throw error;
     }
   }
@@ -265,7 +385,11 @@ export function AuthProvider({ children }) {
 
   function clearMustChangePassword() {
     if (user) {
-      setUser({ ...user, mustChangePassword: false });
+      const updated = { ...user, mustChangePassword: false };
+      setUser(updated);
+      try {
+        localStorage.setItem("rwa_cached_user_profile", JSON.stringify(updated));
+      } catch {}
     }
   }
 
@@ -274,10 +398,30 @@ export function AuthProvider({ children }) {
   // =============================
 
   async function logout() {
+    isLoggingOutRef.current = true;
     try {
+      // 1. Immediately unsubscribe from session changes before modifying Firestore or Auth
+      if (sessionUnsubscribeRef.current) {
+        sessionUnsubscribeRef.current();
+        sessionUnsubscribeRef.current = null;
+      }
+      if (touchIntervalRef.current) {
+        clearInterval(touchIntervalRef.current);
+        touchIntervalRef.current = null;
+      }
+
       stopImpersonating(true);
       try {
-        const currentSessionId = getOrCreateSessionId();
+        localStorage.removeItem("rwa_cached_user_profile");
+        sessionStorage.removeItem("rwa_session_counted");
+        sessionStorage.removeItem("rwa_notif_banner_dismissed_session");
+      } catch {}
+
+      const currentSessionId = getOrCreateSessionId();
+      resetSessionId();
+
+      // Graceful session termination in Firestore (best effort)
+      try {
         await terminateSession(currentSessionId, "User signed out");
       } catch (sessErr) {
         console.warn("[AuthContext] Session terminate on logout error:", sessErr.message);
@@ -289,10 +433,14 @@ export function AuthProvider({ children }) {
     } catch (error) {
       console.error(error);
       toast.error("Logout failed");
+    } finally {
+      setTimeout(() => {
+        isLoggingOutRef.current = false;
+      }, 1000);
     }
   }
 
-  async function refreshUser() {
+  const refreshUser = useCallback(async () => {
     if (auth.currentUser) {
       const refreshed = await fetchUserProfile(auth.currentUser);
       if (refreshed) {
@@ -301,7 +449,7 @@ export function AuthProvider({ children }) {
       }
     }
     return null;
-  }
+  }, []);
 
   // Effective user: if admin is viewing as another user, return that user profile
   const effectiveUser = impersonatedUser || user;

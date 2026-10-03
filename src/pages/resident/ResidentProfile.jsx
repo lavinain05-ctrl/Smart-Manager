@@ -18,6 +18,8 @@ import {
   FaUserFriends,
   FaExclamationTriangle,
   FaRecycle,
+  FaEye,
+  FaEyeSlash,
 } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
@@ -25,6 +27,7 @@ import { useResidents } from "../../context/ResidentContext";
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from "firebase/auth";
 import { terminateAllOtherSessions, getOrCreateSessionId } from "../../services/sessionService";
 import { auth } from "../../firebase/firebase";
+import { mobileToAuthEmail } from "../../services/authService";
 
 import RoleBadge from "../../components/common/RoleBadge";
 
@@ -62,19 +65,39 @@ export function getDisplayEmail(resident, user) {
 
 export default function ResidentProfile() {
   const { user } = useAuth();
-  const { residents } = useResidents();
+  const { residents, loading: residentsLoading } = useResidents();
+
+  const cleanPhone = useMemo(() => {
+    const raw = user?.phone || user?.mobile || (user?.email?.includes("@") ? user.email.split("@")[0] : "");
+    const digits = String(raw).replace(/\D/g, "");
+    return digits.length >= 10 ? digits.slice(-10) : digits;
+  }, [user]);
 
   const resident = useMemo(() => {
     const lookupId = user?.role === "family" ? user?.parentResidentId : user?.residentId;
-    return (
-      residents.find(
-        (r) =>
-          r.id === lookupId ||
-          r.id === user?.uid ||
-          (user?.phone && r.mobile === user?.phone)
-      ) || null
+    const found = residents.find(
+      (r) =>
+        r.id === lookupId ||
+        r.id === user?.uid ||
+        (cleanPhone && String(r.mobile || "").replace(/\D/g, "").slice(-10) === cleanPhone) ||
+        (user?.name && r.owner?.toLowerCase() === user.name.toLowerCase())
     );
-  }, [residents, user]);
+    if (found) return found;
+
+    if (user?.flat || user?.role === "committee" || user?.role === "admin") {
+      return {
+        id: user?.residentId || user?.uid,
+        owner: user?.name || "Resident",
+        name: user?.name || "Resident",
+        flat: user?.flat || "",
+        block: user?.block || "",
+        mobile: user?.phone || user?.mobile || cleanPhone || "",
+        status: "active",
+        isFallback: true,
+      };
+    }
+    return null;
+  }, [residents, user, cleanPhone]);
 
   // Password change
   const [currentPassword, setCurrentPassword] = useState("");
@@ -82,6 +105,9 @@ export default function ResidentProfile() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPw, setChangingPw] = useState(false);
   const [sendingResetLink, setSendingResetLink] = useState(false);
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   // Profile update request
   const [showRequestForm, setShowRequestForm] = useState(false);
@@ -159,8 +185,13 @@ export default function ResidentProfile() {
     e.preventDefault();
     if (changingPw) return;
 
+    if (!currentPassword) {
+      toast.error("Please enter your current password");
+      return;
+    }
+
     if (newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters");
+      toast.error("New password must be at least 6 characters");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -170,14 +201,29 @@ export default function ResidentProfile() {
 
     setChangingPw(true);
     try {
-      const credential = EmailAuthProvider.credential(auth.currentUser.email, currentPassword);
-      await reauthenticateWithCredential(auth.currentUser, credential);
-      await updatePassword(auth.currentUser, newPassword);
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        toast.error("Session expired. Please log in again.");
+        return;
+      }
+
+      const emailForAuth = currentUser.email || (user?.phone ? mobileToAuthEmail(user.phone) : user?.email);
+      if (!emailForAuth) {
+        toast.error("Could not verify your account identity.");
+        return;
+      }
+
+      // Re-authenticate user with current password
+      const credential = EmailAuthProvider.credential(emailForAuth, currentPassword);
+      await reauthenticateWithCredential(currentUser, credential);
+
+      // Update to new password
+      await updatePassword(currentUser, newPassword);
 
       try {
         const currentSessionId = getOrCreateSessionId();
         await terminateAllOtherSessions(
-          auth.currentUser.uid,
+          currentUser.uid,
           currentSessionId,
           "Your password was changed. You were logged out from other devices."
         );
@@ -190,8 +236,28 @@ export default function ResidentProfile() {
       setNewPassword("");
       setConfirmPassword("");
     } catch (error) {
-      console.error(error);
-      toast.error(error.message || "Failed to change password");
+      console.error("[ResidentProfile] Change password error:", error);
+      const code = error.code || "";
+      const msg = error.message || "";
+
+      if (
+        code === "auth/invalid-credential" ||
+        code === "auth/wrong-password" ||
+        msg.includes("invalid-credential") ||
+        msg.includes("wrong-password")
+      ) {
+        toast.error("Incorrect current password. Please check what you typed and try again.", {
+          duration: 5000,
+        });
+      } else if (code === "auth/weak-password" || msg.includes("weak-password")) {
+        toast.error("New password is too weak. Please use at least 6 characters.");
+      } else if (code === "auth/requires-recent-login" || msg.includes("requires-recent-login")) {
+        toast.error("For security, please log out and log in again before changing password.");
+      } else if (code === "auth/too-many-requests" || msg.includes("too-many-requests")) {
+        toast.error("Too many failed attempts. Please wait a few minutes or reset your password.");
+      } else {
+        toast.error(error.message || "Failed to change password. Please check your current password.");
+      }
     } finally {
       setChangingPw(false);
     }
@@ -289,6 +355,13 @@ export default function ResidentProfile() {
   }
 
   if (!resident && user?.role !== "family" && user?.role !== "committee") {
+    if (residentsLoading || residents.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-96">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center h-96 text-gray-500">
         <p>Profile not linked. Contact admin.</p>
@@ -606,37 +679,73 @@ export default function ResidentProfile() {
         <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><FaLock className="text-red-600" /> Change Password</h3>
         <p className="text-xs text-gray-500 mb-3">Password changes take effect immediately. No admin approval needed.</p>
         <form onSubmit={handleChangePassword} className="space-y-3 max-w-md">
-          <input
-            type="password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            placeholder="Current Password"
-            className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none"
-            required
-            disabled={changingPw}
-            autoComplete="current-password"
-          />
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="New Password"
-            className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none"
-            required
-            disabled={changingPw}
-            autoComplete="new-password"
-          />
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Confirm New Password"
-            className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none"
-            required
-            disabled={changingPw}
-            autoComplete="new-password"
-          />
-          <button type="submit" disabled={changingPw} className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl font-medium transition">
+          {/* Current Password */}
+          <div className="relative">
+            <input
+              type={showCurrentPw ? "text" : "password"}
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Current Password"
+              className="w-full border rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900"
+              required
+              disabled={changingPw}
+              autoComplete="current-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowCurrentPw(!showCurrentPw)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition p-1 cursor-pointer"
+              title={showCurrentPw ? "Hide password" : "Show password"}
+            >
+              {showCurrentPw ? <FaEyeSlash /> : <FaEye />}
+            </button>
+          </div>
+
+          {/* New Password */}
+          <div className="relative">
+            <input
+              type={showNewPw ? "text" : "password"}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="New Password (min 6 characters)"
+              className="w-full border rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900"
+              required
+              disabled={changingPw}
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowNewPw(!showNewPw)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition p-1 cursor-pointer"
+              title={showNewPw ? "Hide password" : "Show password"}
+            >
+              {showNewPw ? <FaEyeSlash /> : <FaEye />}
+            </button>
+          </div>
+
+          {/* Confirm New Password */}
+          <div className="relative">
+            <input
+              type={showConfirmPw ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm New Password"
+              className="w-full border rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900"
+              required
+              disabled={changingPw}
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPw(!showConfirmPw)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition p-1 cursor-pointer"
+              title={showConfirmPw ? "Hide password" : "Show password"}
+            >
+              {showConfirmPw ? <FaEyeSlash /> : <FaEye />}
+            </button>
+          </div>
+
+          <button type="submit" disabled={changingPw} className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl font-medium transition cursor-pointer">
             {changingPw ? "Changing..." : "Change Password"}
           </button>
         </form>

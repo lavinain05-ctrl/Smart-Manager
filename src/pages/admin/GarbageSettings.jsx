@@ -17,8 +17,11 @@ import { useResidents } from "../../context/ResidentContext";
 import { useBilling } from "../../context/BillingContext";
 import { useBills } from "../../context/BillContext";
 import { usePayments } from "../../context/PaymentContext";
+import { useAuth } from "../../context/AuthContext";
+import { synchronizeAllSocietyData } from "../../utils/propertyMigration";
 
 export default function GarbageSettings() {
+  const { user } = useAuth();
   const { garbageSettings, updateGarbageSettings, reconcileGarbageAccounts } =
     useGarbage();
   const { settings, updateSettings } = useSettings();
@@ -95,12 +98,15 @@ export default function GarbageSettings() {
         });
       }
 
-      // 3. Reconcile accounts, resident charges, and bills
+      // 3. Run master full data synchronization (properties, residents, auth lookups, garbage accounts)
+      const masterSync = await synchronizeAllSocietyData({ adminUserId: "admin" });
+
+      // 4. Reconcile accounts, resident charges, and bills
       const res = await reconcileGarbageAccounts({ silent: true });
-      setSyncReport(res);
+      setSyncReport({ ...res, masterSync });
 
       toast.success(
-        `Settings unified & all accounts synchronized at ₹${chargeVal}/month`
+        `Settings unified & all data synchronized completely at ₹${chargeVal}/month`
       );
     } catch (err) {
       console.error(err);
@@ -133,9 +139,14 @@ export default function GarbageSettings() {
         });
       }
 
-      // 2. Run deep reconciliation
+      // 2. Run master full data synchronization (properties, authLookups, garbageAccounts)
+      const masterSync = await synchronizeAllSocietyData({ adminUserId: user?.uid || "admin" });
+
+      // 3. Run deep garbage context reconciliation
       const res = await reconcileGarbageAccounts({ silent: false });
-      setSyncReport(res);
+      setSyncReport({ ...res, masterSync });
+
+      toast.success("Complete society data synchronization successful!");
     } catch (e) {
       console.error(e);
       toast.error("Reconciliation error: " + e.message);
@@ -425,19 +436,39 @@ export default function GarbageSettings() {
         </div>
 
         {syncReport && (
-          <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 text-xs space-y-1">
-            <div className="font-bold flex items-center gap-1.5">
-              <FaCheckCircle className="text-blue-600" />
-              Latest Reconciliation Result:
+          <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 text-xs space-y-1.5">
+            <div className="font-bold flex items-center gap-1.5 text-sm text-blue-950">
+              <FaCheckCircle className="text-emerald-600" />
+              Full Society Synchronization Result:
+            </div>
+            {syncReport.masterSync && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 py-1">
+                <div className="bg-white/80 rounded-xl p-2 border border-blue-100">
+                  <div className="text-[10px] text-slate-500 font-bold uppercase">Properties Created</div>
+                  <div className="text-base font-black text-blue-800">{syncReport.masterSync.propertiesCreated}</div>
+                </div>
+                <div className="bg-white/80 rounded-xl p-2 border border-blue-100">
+                  <div className="text-[10px] text-slate-500 font-bold uppercase">Residents Linked</div>
+                  <div className="text-base font-black text-emerald-700">{syncReport.masterSync.residentsUpdated}</div>
+                </div>
+                <div className="bg-white/80 rounded-xl p-2 border border-blue-100">
+                  <div className="text-[10px] text-slate-500 font-bold uppercase">GC Accounts Synced</div>
+                  <div className="text-base font-black text-indigo-700">{syncReport.masterSync.garbageAccountsUpdated}</div>
+                </div>
+                <div className="bg-white/80 rounded-xl p-2 border border-blue-100">
+                  <div className="text-[10px] text-slate-500 font-bold uppercase">Auth Keys Verified</div>
+                  <div className="text-base font-black text-teal-700">{syncReport.masterSync.authLookupsSynced}</div>
+                </div>
+              </div>
+            )}
+            <div>
+              • Standard Fee: ₹{syncReport.effectiveFee || form.defaultCharge || 80} | Participating Residents: {syncReport.totalParticipating || participatingCount}
             </div>
             <div>
-              • Standard Fee: ₹{syncReport.effectiveFee} | Participating Residents: {syncReport.totalParticipating}
+              • Accounts Enrolled: {syncReport.accountsCreated || 0} | Charges Standardized: {syncReport.chargesSynced || 0}
             </div>
             <div>
-              • Accounts Created: {syncReport.accountsCreated} | Charges Standardized: {syncReport.chargesSynced}
-            </div>
-            <div>
-              • Monthly Bills Synchronized: {syncReport.billsSynced} | Flats Linked: {syncReport.flatsLinked}
+              • Monthly Bills Synchronized: {syncReport.billsSynced || 0} | Flats Linked: {syncReport.flatsLinked || 0}
             </div>
           </div>
         )}

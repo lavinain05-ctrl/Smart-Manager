@@ -1,19 +1,8 @@
 import { useBilling } from "../../context/BillingContext";
-
-const months = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
+import {
+  getAvailableBillingYears,
+  getAvailableBillingMonths,
+} from "../../utils/billingCycle";
 
 export default function MonthSelector() {
   const {
@@ -23,13 +12,8 @@ export default function MonthSelector() {
     setSelectedYear,
   } = useBilling();
 
-  const currentYear = new Date().getFullYear();
-
-  const years = [];
-
-  for (let year = currentYear - 5; year <= currentYear + 5; year++) {
-    years.push(year);
-  }
+  const years = getAvailableBillingYears();
+  const availableMonths = getAvailableBillingMonths(selectedYear);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-5 flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center justify-between">
@@ -40,7 +24,7 @@ export default function MonthSelector() {
         </h2>
 
         <p className="text-slate-500 text-xs sm:text-sm">
-          Select month and year
+          Select month and year (from Oct 2026)
         </p>
       </div>
 
@@ -53,7 +37,7 @@ export default function MonthSelector() {
           }
           className="border border-slate-200 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium bg-slate-50 sm:bg-white focus:ring-2 focus:ring-emerald-500 outline-none w-full sm:w-auto"
         >
-          {months.map((month) => (
+          {availableMonths.map((month) => (
             <option
               key={month}
               value={month}
@@ -84,4 +68,4 @@ export default function MonthSelector() {
 
     </div>
   );
-}
+}

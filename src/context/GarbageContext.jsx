@@ -22,7 +22,7 @@ import {
 
 import toast from "react-hot-toast";
 
-import { db } from "../firebase/firebase";
+import { db, auth } from "../firebase/firebase";
 
 import {
   subscribeGarbageAccounts,
@@ -57,6 +57,7 @@ import {
   getGarbageAccountByResidentId,
   relinkGarbageAccount as relinkAccountSvc,
 } from "../services/garbageService";
+import { isPriorToCollectionStart } from "../utils/billingCycle";
 
 import { linkResidentToFlat } from "../services/blockFlatService";
 
@@ -352,7 +353,7 @@ export function GarbageProvider({ children }) {
         details,
         targetId: targetId || "",
         targetName: targetName || "",
-      }).catch(console.error);
+      }).catch(() => {});
     },
     [user]
   );
@@ -398,7 +399,7 @@ export function GarbageProvider({ children }) {
           message: `You have been enrolled in garbage collection. Monthly charge: ₹${data.monthlyCharge || garbageSettings.defaultCharge}`,
           type: "info",
           link: "/resident/garbage",
-        }).catch(console.error);
+        }).catch(() => {});
       }
 
       toast.success("Garbage account created");
@@ -483,7 +484,7 @@ export function GarbageProvider({ children }) {
           message: "Your garbage collection account has been removed.",
           type: "warning",
           link: "/resident/garbage",
-        }).catch(console.error);
+        }).catch(() => {});
       }
 
       toast.success("Garbage account deleted");
@@ -518,7 +519,7 @@ export function GarbageProvider({ children }) {
           message: `Your garbage collection has been ${newStatus === "active" ? "activated" : "deactivated"}.`,
           type: newStatus === "active" ? "info" : "warning",
           link: "/resident/garbage",
-        }).catch(console.error);
+        }).catch(() => {});
       }
 
       toast.success(`Account ${newStatus}`);
@@ -535,6 +536,11 @@ export function GarbageProvider({ children }) {
   // =============================================
 
   async function generateBills() {
+    if (isPriorToCollectionStart(selectedMonth, selectedYear)) {
+      toast.error("Collection starts from October 2026. Cannot generate bills for previous periods.");
+      return;
+    }
+
     if (garbageAccounts.length === 0) {
       toast.error("No garbage accounts found");
       return;
@@ -675,7 +681,7 @@ export function GarbageProvider({ children }) {
           message: `₹${finalAmount} received for ${bill?.month} ${bill?.year}. Method: ${paymentData.paymentMethod || "Cash"}.`,
           type: "success",
           link: "/resident/garbage",
-        }).catch(console.error);
+        }).catch(() => {});
       }
 
       toast.success("Payment recorded");
@@ -929,7 +935,7 @@ export function GarbageProvider({ children }) {
           message: `Your ${req.requestType === "opt_in" ? "enrollment" : "opt-out"} request has been approved.`,
           type: "success",
           link: "/resident/garbage",
-        }).catch(console.error);
+        }).catch(() => {});
       }
 
       toast.success("Request approved");
@@ -985,7 +991,7 @@ export function GarbageProvider({ children }) {
           message: `Your ${req?.requestType === "opt_in" ? "enrollment" : "opt-out"} request has been rejected.`,
           type: "warning",
           link: "/resident/garbage",
-        }).catch(console.error);
+        }).catch(() => {});
       }
 
       toast.success("Request rejected");
@@ -1035,7 +1041,7 @@ export function GarbageProvider({ children }) {
           message: `${collector?.name || "A collector"} has been assigned as your garbage collector.`,
           type: "info",
           link: "/resident/garbage",
-        }).catch(console.error);
+        }).catch(() => {});
       }
 
       toast.success("Collector assigned to account");
@@ -1068,12 +1074,16 @@ export function GarbageProvider({ children }) {
     let orphansCleaned = 0;
     let orphansRelinked = 0;
     let flatsLinked = 0;
-
+    let chargesSynced = 0;
+    let billsSynced = 0;
+    let effectiveStandardFee = 80;
     const participatingResidents = (residents || []).filter(
       (r) =>
         isGcParticipating(r) &&
         r.status !== "Inactive" && r.status !== "inactive"
     );
+
+    try {
     const residentMapById = {};
     (residents || []).forEach((r) => { residentMapById[r.id] = r; });
 
@@ -1156,14 +1166,14 @@ export function GarbageProvider({ children }) {
     }
 
     // 2. Standardize charges and create missing accounts for participating residents
-    let chargesSynced = 0;
-    const effectiveStandardFee =
+    chargesSynced = 0;
+    effectiveStandardFee =
       Number(garbageSettings.defaultCharge) > 0
         ? Number(garbageSettings.defaultCharge)
         : 80;
 
-    // Auto-fix garbageSettings in Firestore if defaultCharge is 0 or empty
-    if (!garbageSettings.defaultCharge || Number(garbageSettings.defaultCharge) <= 0) {
+    // Only write default garbageSettings if explicitly requested in options
+    if (options.forceSaveSettings && (!garbageSettings.defaultCharge || Number(garbageSettings.defaultCharge) <= 0)) {
       try {
         await saveSettingsSvc({
           defaultCharge: effectiveStandardFee,
@@ -1431,7 +1441,21 @@ export function GarbageProvider({ children }) {
       totalParticipating: participatingResidents.length,
       effectiveFee: effectiveStandardFee,
     };
+  } catch (reconcileErr) {
+    console.warn("[Reconcile] Reconciliation warning:", reconcileErr?.message || reconcileErr);
+    return {
+      accountsCreated: 0,
+      chargesSynced: 0,
+      billsSynced: 0,
+      statusSynced: 0,
+      orphansRelinked: 0,
+      orphansCleaned: 0,
+      flatsLinked: 0,
+      totalParticipating: participatingResidents.length,
+      effectiveFee: effectiveStandardFee,
+    };
   }
+}
 
   // =============================================
   // Auto-reconcile: create GC accounts for participating residents
@@ -1441,22 +1465,24 @@ export function GarbageProvider({ children }) {
   const reconcileRanRef = useRef(false);
 
   useEffect(() => {
+    // Only attempt silent auto-reconcile if user is authenticated and verified as admin
     if (
       reconcileRanRef.current ||
+      !auth?.currentUser ||
       !user ||
       user.role !== "admin" ||
+      user.uid !== auth?.currentUser?.uid ||
       !residents ||
       residents.length === 0
     ) {
       return;
     }
 
-    // Mark as ran immediately to prevent re-runs
     reconcileRanRef.current = true;
-
-    // Run reconciliation silently (no toast on startup unless manually initiated)
-    reconcileGarbageAccounts({ silent: true }).catch(console.error);
-  }, [user, residents, garbageAccounts]);
+    reconcileGarbageAccounts({ silent: true }).catch((err) => {
+      console.warn("[GarbageContext] Silent reconcile skipped:", err?.message || err);
+    });
+  }, [user, residents]);
 
   // =============================================
   // Provider — expose RESOLVED data, not raw
@@ -1534,5 +1560,21 @@ export function GarbageProvider({ children }) {
 }
 
 export function useGarbage() {
-  return useContext(GarbageContext);
+  const ctx = useContext(GarbageContext);
+  return ctx || {
+    garbageAccounts: [],
+    garbageBills: [],
+    garbageCollections: [],
+    garbageCollectors: [],
+    garbageRoutes: [],
+    garbageSettings: {},
+    garbageRequests: [],
+    garbageLogs: [],
+    resolvedBills: [],
+    resolvedRequests: [],
+    resolvedCollectors: [],
+    loading: false,
+    selectedMonth: new Date().toLocaleString("default", { month: "long" }),
+    selectedYear: new Date().getFullYear(),
+  };
 }

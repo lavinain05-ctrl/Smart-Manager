@@ -537,130 +537,25 @@ export default function ResidentSupport() {
         )}
       </div>
 
-      {/* ═══════════ RWA Contact & Helpdesk Directory ═══════════ */}
+      {/* ═══════════ RWA Contact & Helpdesk ═══════════ */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 pb-6 border-b border-gray-100">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold text-gray-800 tracking-tight">
               {helpdeskConfig.sectionTitle || "RWA Management & Helpdesk"}
             </h2>
             <p className="text-gray-500 text-sm mt-1">
               {helpdeskConfig.tagline ||
-                "Need direct assistance? Get in touch with our office bearers or visit the society office."}
+                "Need direct assistance? Get in touch with our office bearers or submit a request directly."}
             </p>
           </div>
           <button
             onClick={() => setShowContactModal(true)}
-            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs shadow-sm transition inline-flex items-center gap-2 shrink-0"
+            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs shadow-sm transition inline-flex items-center gap-2 shrink-0 cursor-pointer"
           >
             <FaPaperPlane className="text-xs" /> Message RWA Helpdesk
           </button>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
-          {/* Office Hours */}
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 text-base">
-              <FaClock />
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Office Timings</p>
-              <h4 className="font-bold text-sm text-gray-800 mt-0.5">
-                {helpdeskConfig.officeTimingsWeekday || settings.officeTiming || "Mon - Sat: 9:00 AM - 6:00 PM"}
-              </h4>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {helpdeskConfig.officeTimingsWeekend || "Sunday: 10:00 AM - 2:00 PM"}
-              </p>
-            </div>
-          </div>
-
-          {/* Helpline Phone */}
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 text-base">
-              <FaPhone />
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Helpline & Security</p>
-              <h4 className="font-bold text-sm text-gray-800 mt-0.5">
-                {helpdeskConfig.helplinePhone || settings.supportPhone || settings.contactNumber || "011-23456789"}
-              </h4>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {helpdeskConfig.helplineNote || "Available 24/7 for urgent matters"}
-              </p>
-            </div>
-          </div>
-
-          {/* Email Address */}
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 text-base">
-              <FaEnvelope />
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Official Email</p>
-              <h4 className="font-bold text-sm text-gray-800 mt-0.5 truncate max-w-[170px]">
-                {helpdeskConfig.officialEmail || settings.supportEmail || "rwa.dblock@indraprastha.org"}
-              </h4>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {helpdeskConfig.emailNote || "Responses within 24 hours"}
-              </p>
-            </div>
-          </div>
-
-          {/* Society Office Location */}
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 text-base">
-              <FaMapMarkerAlt />
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">RWA Office</p>
-              <h4 className="font-bold text-sm text-gray-800 mt-0.5 leading-snug">
-                {helpdeskConfig.officeAddress || "Community Center, D Block, Indraprastha Society"}
-              </h4>
-            </div>
-          </div>
-        </div>
-
-        {/* Committee Leaders Banner */}
-        {(president || secretary) && (
-          <div className="mt-8 pt-6 border-t border-gray-100 flex flex-wrap items-center justify-between gap-4 text-xs">
-            <div className="flex flex-wrap items-center gap-6">
-              {president && (
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-500">President:</span>
-                  <span className="font-bold text-gray-800">{president.name}</span>
-                  {president.mobile && (
-                    <a
-                      href={`tel:${president.mobile}`}
-                      className="text-blue-600 hover:underline font-mono"
-                    >
-                      ({president.mobile})
-                    </a>
-                  )}
-                </div>
-              )}
-              {secretary && (
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-500">General Secretary:</span>
-                  <span className="font-bold text-gray-800">{secretary.name}</span>
-                  {secretary.mobile && (
-                    <a
-                      href={`tel:${secretary.mobile}`}
-                      className="text-blue-600 hover:underline font-mono"
-                    >
-                      ({secretary.mobile})
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
-            <Link
-              to="/resident/committee"
-              className="text-blue-600 font-bold hover:underline inline-flex items-center gap-1"
-            >
-              Full Committee Directory <FaArrowRight className="text-[10px]" />
-            </Link>
-          </div>
-        )}
       </div>
 
       {/* ═══════════ Helpdesk Message Modal ═══════════ */}

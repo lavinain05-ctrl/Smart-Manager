@@ -1,17 +1,22 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useBills } from "../../context/BillContext";
 import { useBilling } from "../../context/BillingContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useResidents } from "../../context/ResidentContext";
+import { useSettings } from "../../context/SettingsContext";
 import { getDisplayStatus } from "../../utils/billStatus";
-import { FaFileInvoiceDollar } from "react-icons/fa";
+import { FaFileInvoiceDollar, FaMoneyBillWave, FaReceipt } from "react-icons/fa";
 import GarbageModuleTabs from "../../components/resident/GarbageModuleTabs";
-
-const MONTHS = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
-];
+import OnlinePaymentModal from "../../components/payments/OnlinePaymentModal";
+import {
+  MONTH_NAMES,
+  isPriorToCollectionStart,
+  getAvailableBillingMonths,
+  isPriorToResidentBillingStart,
+  getAvailableBillingMonthsForResident,
+} from "../../utils/billingCycle";
 
 export default function ResidentBills() {
   const { user } = useAuth();
@@ -19,9 +24,11 @@ export default function ResidentBills() {
   const { payments = [] } = usePayments();
   const { selectedYear } = useBilling();
   const { residents = [] } = useResidents();
+  const { settings } = useSettings();
 
   const [monthFilter, setMonthFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [selectedBillForPayment, setSelectedBillForPayment] = useState(null);
 
   const cleanPhone = useMemo(() => {
     const raw = user?.phone || user?.mobile || (user?.email?.includes("@") ? user.email.split("@")[0] : "");
@@ -59,10 +66,11 @@ export default function ResidentBills() {
     // 1. Raw bills for this resident
     const rawBills = bills.filter(
       (b) =>
-        b.residentId === canonicalResidentId ||
+        (b.residentId === canonicalResidentId ||
         b.residentId === user?.residentId ||
         b.residentId === user?.uid ||
-        (canonicalResident?.id && b.residentId === canonicalResident.id)
+        (canonicalResident?.id && b.residentId === canonicalResident.id)) &&
+        !isPriorToResidentBillingStart(canonicalResident, b.month, b.year)
     );
 
     // 2. Payments for this resident
@@ -129,7 +137,7 @@ export default function ResidentBills() {
     // 4. Also include any payments that lack a document in bills
     const coveredKeys = new Set(enrichedBills.map((b) => `${b.month}-${b.year}`));
     const synthBills = residentPayments
-      .filter((p) => !coveredKeys.has(`${p.month}-${p.year}`))
+      .filter((p) => !coveredKeys.has(`${p.month}-${p.year}`) && !isPriorToResidentBillingStart(canonicalResident, p.month, p.year))
       .map((p) => {
         const isExempt = p.paymentMethod === "Exempted";
         return {
@@ -149,6 +157,7 @@ export default function ResidentBills() {
       });
 
     return [...enrichedBills, ...synthBills]
+      .filter((b) => !isPriorToCollectionStart(b.month, b.year) && !isPriorToResidentBillingStart(canonicalResident, b.month, b.year))
       .filter((b) => {
         if (monthFilter !== "All" && b.month !== monthFilter) return false;
         if (statusFilter !== "All" && b.displayStatus !== statusFilter) return false;
@@ -157,7 +166,7 @@ export default function ResidentBills() {
       .sort((a, b) => {
         const yearDiff = Number(b.year) - Number(a.year);
         if (yearDiff !== 0) return yearDiff;
-        return MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month);
+        return MONTH_NAMES.indexOf(b.month) - MONTH_NAMES.indexOf(a.month);
       });
   }, [bills, payments, canonicalResidentId, user, canonicalResident, monthFilter, statusFilter]);
 
@@ -174,7 +183,7 @@ export default function ResidentBills() {
       <div className="bg-white rounded-2xl shadow-sm p-5 flex flex-wrap gap-3">
         <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} className="border rounded-xl px-4 py-2.5">
           <option value="All">All Months</option>
-          {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+          {getAvailableBillingMonthsForResident(canonicalResident, selectedYear).map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border rounded-xl px-4 py-2.5">
           <option value="All">All Status</option>
@@ -195,53 +204,95 @@ export default function ResidentBills() {
               <th className="p-4 text-right font-bold text-gray-600">Amount</th>
               <th className="p-4 text-left font-bold text-gray-600">Status</th>
               <th className="p-4 text-left font-bold text-gray-600">Due Date</th>
+              <th className="p-4 text-right font-bold text-gray-600">Action</th>
             </tr>
           </thead>
           <tbody>
             {myBills.length === 0 ? (
-              <tr><td colSpan="5" className="text-center py-16 text-gray-500">
+              <tr><td colSpan="6" className="text-center py-16 text-gray-500">
                 <FaFileInvoiceDollar className="text-5xl text-gray-300 mx-auto mb-3" />
                 No bills found
               </td></tr>
             ) : (
-              myBills.map((b) => (
-                <tr key={b.id} className="border-t hover:bg-blue-50/30 transition">
-                  <td className="p-4 font-medium">{b.month}</td>
-                  <td className="p-4">{b.year}</td>
-                  <td className="p-4 text-right font-bold text-emerald-600">₹{Number(b.amount).toLocaleString()}</td>
-                  <td className="p-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 ${
-                      b.isAdvance
-                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                        : b.displayStatus === "Paid"
-                        ? "bg-green-100 text-green-700"
-                        : b.displayStatus === "Overdue"
-                        ? "bg-red-100 text-red-700"
-                        : b.displayStatus === "Exempted"
-                        ? "bg-gray-200 text-gray-700"
-                        : "bg-yellow-100 text-yellow-700"
-                    }`}>
-                      {b.isAdvance ? "Advance Paid" : b.displayStatus}
-                    </span>
-                    {b.isAdvance && b.periodLabel && (
-                      <span className="block text-[10px] text-emerald-700 font-medium mt-0.5 max-w-[200px] truncate" title={b.periodLabel}>
-                        {b.periodLabel}
+              myBills.map((b) => {
+                const isPaidOrExempted = b.displayStatus === "Paid" || b.displayStatus === "Exempted" || b.isAdvance;
+
+                return (
+                  <tr key={b.id} className="border-t hover:bg-blue-50/30 transition">
+                    <td className="p-4 font-medium">{b.month}</td>
+                    <td className="p-4">{b.year}</td>
+                    <td className="p-4 text-right font-bold text-emerald-600">₹{Number(b.amount).toLocaleString()}</td>
+                    <td className="p-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 ${
+                        b.isAdvance
+                          ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                          : b.displayStatus === "Paid"
+                          ? "bg-green-100 text-green-700"
+                          : b.displayStatus === "Overdue"
+                          ? "bg-red-100 text-red-700"
+                          : b.displayStatus === "Exempted"
+                          ? "bg-gray-200 text-gray-700"
+                          : "bg-yellow-100 text-yellow-700"
+                      }`}>
+                        {b.isAdvance ? "Advance Paid" : b.displayStatus}
                       </span>
-                    )}
-                  </td>
-                  <td className="p-4 text-gray-500">
-                    {b.isAdvance ? (
-                      <span className="text-emerald-700 font-semibold text-xs">Covered in Advance</span>
-                    ) : (
-                      b.dueDate || "-"
-                    )}
-                  </td>
-                </tr>
-              ))
+                      {b.isAdvance && b.periodLabel && (
+                        <span className="block text-[10px] text-emerald-700 font-medium mt-0.5 max-w-[200px] truncate" title={b.periodLabel}>
+                          {b.periodLabel}
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-4 text-gray-500">
+                      {b.isAdvance ? (
+                        <span className="text-emerald-700 font-semibold text-xs">Covered in Advance</span>
+                      ) : (
+                        b.dueDate || "-"
+                      )}
+                    </td>
+                    <td className="p-4 text-right">
+                      {isPaidOrExempted ? (
+                        <Link
+                          to="/resident/receipts"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition"
+                          title="View Official Receipt"
+                        >
+                          <FaReceipt className="text-emerald-600" />
+                          <span>Receipt</span>
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBillForPayment(b)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-sm shadow-emerald-600/30 transition hover:scale-105 active:scale-95"
+                          title="Pay bill online via UPI (GPay, PhonePe, Paytm)"
+                        >
+                          <FaMoneyBillWave />
+                          <span>Pay UPI</span>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Online UPI Payment Modal */}
+      {selectedBillForPayment && (
+        <OnlinePaymentModal
+          isOpen={Boolean(selectedBillForPayment)}
+          onClose={() => setSelectedBillForPayment(null)}
+          bill={selectedBillForPayment}
+          resident={canonicalResident}
+          bills={bills}
+          settings={settings}
+          onPaymentSuccess={() => {
+            setSelectedBillForPayment(null);
+          }}
+        />
+      )}
     </div>
   );
 }

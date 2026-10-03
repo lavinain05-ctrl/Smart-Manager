@@ -1,5 +1,14 @@
 {
   "appId": "com.smartmanager.app",
   "appName": "D-Block RWA Garbage Collection",
-  "webDir": "dist"
+  "webDir": "dist",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0,
+      "launchAutoHide": true,
+      "backgroundColor": "#0f172a",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false
+    }
+  }
 }

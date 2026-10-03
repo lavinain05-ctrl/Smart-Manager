@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 
 import { db } from "../firebase/firebase";
+import { notifyAdmin, createNotification } from "./notificationService";
 
 const complaintRef = collection(db, "complaints");
 
@@ -38,7 +39,7 @@ export function subscribeComplaints(callback) {
 // =============================
 
 export async function addComplaint(complaint) {
-  return await addDoc(complaintRef, {
+  const docRef = await addDoc(complaintRef, {
     ...complaint,
     status: "Pending",
     timeline: [
@@ -52,6 +53,21 @@ export async function addComplaint(complaint) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  try {
+    const isHelpdesk = complaint.category === "Helpdesk Inquiry";
+    const loc = complaint.flat || complaint.flatNumber ? ` (Flat ${complaint.flat || complaint.flatNumber})` : "";
+    await notifyAdmin({
+      title: isHelpdesk ? "New Helpdesk Message 💬" : `New Complaint: ${complaint.category || "General"} ⚠️`,
+      message: `${complaint.residentName || "Resident"}${loc}: ${complaint.description ? complaint.description.slice(0, 90) : "New issue submitted"}`,
+      type: isHelpdesk ? "inquiry" : "complaint",
+      link: "/admin/complaints",
+    });
+  } catch (notifErr) {
+    console.warn("[Complaint] Admin notification warning:", notifErr.message);
+  }
+
+  return docRef;
 }
 
 // =============================
@@ -71,17 +87,31 @@ export async function updateComplaint(id, data) {
 
 export async function addCommentToComplaint(id, existingComments, comment) {
   const updatedComments = [
-    ...existingComments,
+    ...(existingComments || []),
     {
       ...comment,
       date: new Date().toISOString(),
     },
   ];
 
-  return await updateDoc(doc(db, "complaints", id), {
+  await updateDoc(doc(db, "complaints", id), {
     comments: updatedComments,
     updatedAt: serverTimestamp(),
   });
+
+  // If comment is from resident, notify admin
+  if (comment.byRole === "resident") {
+    try {
+      await notifyAdmin({
+        title: "New Message on Complaint 💬",
+        message: `${comment.by || "Resident"}: ${comment.text ? comment.text.slice(0, 90) : "Replied on ticket"}`,
+        type: "message",
+        link: "/admin/complaints",
+      });
+    } catch (notifErr) {
+      console.warn("[Complaint] Admin comment notification warning:", notifErr.message);
+    }
+  }
 }
 
 // =============================

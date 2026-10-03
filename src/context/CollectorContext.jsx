@@ -124,5 +124,11 @@ export function CollectorProvider({ children }) {
 }
 
 export function useCollectors() {
-  return useContext(CollectorContext);
+  const ctx = useContext(CollectorContext);
+  return ctx || {
+    collectors: [],
+    addCollector: async () => null,
+    updateCollector: async () => false,
+    deleteCollector: async () => false,
+  };
 }

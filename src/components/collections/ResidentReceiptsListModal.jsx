@@ -15,6 +15,7 @@ import toast from "react-hot-toast";
 import { printPaymentReceipt } from "../../utils/printReceiptHelper";
 import { generateReceipt } from "../../utils/receiptGenerator";
 import { generateSpecialCollectionReceipt } from "../../utils/specialCollectionReceiptGenerator";
+import PrinterQuickAction from "../common/PrinterQuickAction";
 
 export default function ResidentReceiptsListModal({
   open,
@@ -39,12 +40,12 @@ export default function ResidentReceiptsListModal({
     garbagePayments.forEach((p) => {
       const period = p.isAdvance && p.periodLabel
         ? `${p.periodLabel} (${p.advanceDuration || 1}M Advance)`
-        : `${p.month || ""} ${p.year || ""}`.trim() || "Maintenance Fee";
+        : `${p.month || ""} ${p.year || ""}`.trim() || "Garbage Collection Fee";
 
       list.push({
         id: p.id || p.receiptNumber || Math.random().toString(),
         type: "garbage",
-        title: "Garbage Maintenance",
+        title: "Garbage Collection Fee",
         subtitle: period,
         receiptNumber: p.receiptNumber || p.receiptNo || p.paymentId || "—",
         amount: Number(p.totalPaidAmount || p.paidAmount || p.amount || 0),
@@ -58,6 +59,10 @@ export default function ResidentReceiptsListModal({
           flat: flatLabel,
           block: blockLabel,
           residentName: nameLabel,
+          plotNumber: p.plotNumber || resident?.plotNumber || "",
+          floor: p.floor || resident?.floor || "",
+          unitNumber: p.unitNumber || resident?.unitNumber || "",
+          personType: p.personType || resident?.personType || "",
         },
       });
     });
@@ -82,6 +87,10 @@ export default function ResidentReceiptsListModal({
           contributorName: nameLabel,
           flat: flatLabel,
           block: blockLabel,
+          plotNumber: p.plotNumber || resident?.plotNumber || "",
+          floor: p.floor || resident?.floor || "",
+          unitNumber: p.unitNumber || resident?.unitNumber || "",
+          personType: p.personType || resident?.personType || "",
           contributorType: "Resident",
         },
       });
@@ -151,7 +160,7 @@ export default function ResidentReceiptsListModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-xl font-bold tracking-tight">
-                  Flat {flatLabel} {blockLabel ? `(${blockLabel})` : ""}
+                  Flat {flatLabel} {blockLabel ? `(${blockLabel})` : ""} {resident?.floor ? `• ${resident.floor}` : ""}
                 </h3>
                 <span className="bg-emerald-500/30 text-emerald-100 border border-emerald-400/40 text-[10px] font-bold px-2 py-0.5 rounded-full">
                   {unifiedReceipts.length} {unifiedReceipts.length === 1 ? "Receipt" : "Receipts"}
@@ -166,47 +175,52 @@ export default function ResidentReceiptsListModal({
 
         {/* Filters & Search */}
         <div className="p-4 border-b border-gray-100 bg-gray-50/60 space-y-3 shrink-0">
-          <div className="relative">
-            <FaSearch className="absolute left-3.5 top-3 text-gray-400 text-xs" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by receipt no, cycle, mode..."
-              className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <FaSearch className="absolute left-3.5 top-3 text-gray-400 text-xs" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by receipt no, cycle, mode..."
+                className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <PrinterQuickAction />
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setFilterType("all")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                filterType === "all"
-                  ? "bg-emerald-700 text-white shadow-xs"
-                  : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
-              }`}
-            >
-              All ({unifiedReceipts.length})
-            </button>
-            <button
-              onClick={() => setFilterType("garbage")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                filterType === "garbage"
-                  ? "bg-emerald-600 text-white shadow-xs"
-                  : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
-              }`}
-            >
-              <FaTrashAlt className="text-[10px]" /> Garbage ({garbagePayments.length})
-            </button>
-            <button
-              onClick={() => setFilterType("special")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                filterType === "special"
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
-              }`}
-            >
-              <FaHandHoldingHeart className="text-[10px]" /> Special ({specialPayments.length})
-            </button>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setFilterType("all")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  filterType === "all"
+                    ? "bg-emerald-700 text-white shadow-xs"
+                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
+                }`}
+              >
+                All ({unifiedReceipts.length})
+              </button>
+              <button
+                onClick={() => setFilterType("garbage")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                  filterType === "garbage"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
+                }`}
+              >
+                <FaTrashAlt className="text-[10px]" /> Garbage ({garbagePayments.length})
+              </button>
+              <button
+                onClick={() => setFilterType("special")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                  filterType === "special"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
+                }`}
+              >
+                <FaHandHoldingHeart className="text-[10px]" /> Special ({specialPayments.length})
+              </button>
+            </div>
           </div>
         </div>
 

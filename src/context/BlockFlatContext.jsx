@@ -251,5 +251,19 @@ export function BlockFlatProvider({ children }) {
 }
 
 export function useBlockFlat() {
-  return useContext(BlockFlatContext);
+  const ctx = useContext(BlockFlatContext);
+  return ctx || {
+    blocks: [],
+    flats: [],
+    resolvedFlats: [],
+    addBlock: async () => false,
+    updateBlock: async () => false,
+    deleteBlock: async () => false,
+    addFlat: async () => false,
+    updateFlat: async () => false,
+    deleteFlat: async () => false,
+    linkResidentToFlat: async () => false,
+    unlinkResidentFromFlat: async () => false,
+    generateFlats: async () => false,
+  };
 }

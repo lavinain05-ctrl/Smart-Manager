@@ -1,6 +1,7 @@
-import { Outlet } from "react-router-dom";
-import { NavLink } from "react-router-dom";
+import { Suspense } from "react";
+import { Outlet, NavLink } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import ErrorBoundary from "../common/ErrorBoundary";
 import {
   FaHome,
   FaFileInvoiceDollar,
@@ -117,7 +118,20 @@ export default function FamilyLayout() {
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-6 md:p-8">
-          <Outlet />
+          <ErrorBoundary>
+            <Suspense fallback={
+              <div className="min-h-[40vh] flex items-center justify-center p-8">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-700/50 flex items-center justify-center shadow-lg">
+                    <div className="w-4 h-4 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                  <span className="text-xs text-slate-500 font-semibold tracking-wide">Loading...</span>
+                </div>
+              </div>
+            }>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </main>
 
         {/* Mobile Bottom Nav */}

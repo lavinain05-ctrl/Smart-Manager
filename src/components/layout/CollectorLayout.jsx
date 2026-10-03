@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, Suspense } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
   FaHome,
@@ -12,6 +12,7 @@ import {
 
 import { useAuth } from "../../context/AuthContext";
 import NotificationBell from "../notifications/NotificationBell";
+import ErrorBoundary from "../common/ErrorBoundary";
 
 export default function CollectorLayout() {
   const { user, logout } = useAuth();
@@ -38,7 +39,7 @@ export default function CollectorLayout() {
         path: "/collector/collect",
       },
       {
-        name: "History",
+        name: "My History",
         icon: <FaHistory />,
         path: "/collector/history",
       },
@@ -99,7 +100,20 @@ export default function CollectorLayout() {
 
       {/* Content */}
       <main className="flex-1 overflow-y-auto p-4 pb-24">
-        <Outlet />
+        <ErrorBoundary>
+          <Suspense fallback={
+            <div className="min-h-[40vh] flex items-center justify-center p-8">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-700/50 flex items-center justify-center shadow-lg">
+                  <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+                <span className="text-xs text-slate-500 font-semibold tracking-wide">Loading...</span>
+              </div>
+            </div>
+          }>
+            <Outlet />
+          </Suspense>
+        </ErrorBoundary>
       </main>
 
       {/* Bottom Nav */}

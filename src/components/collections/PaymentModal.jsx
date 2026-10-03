@@ -1,15 +1,33 @@
 import { useEffect, useState, useMemo } from "react";
-import { FaCalendarAlt, FaMoneyBillWave, FaTimes, FaLayerGroup, FaCheckCircle } from "react-icons/fa";
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December"
-];
+import {
+  FaCalendarAlt,
+  FaMoneyBillWave,
+  FaTimes,
+  FaLayerGroup,
+  FaCheckCircle,
+  FaQrcode,
+  FaCopy,
+  FaCheck,
+  FaInfoCircle,
+} from "react-icons/fa";
+import QRCode from "qrcode";
+import toast from "react-hot-toast";
+import { useSettings } from "../../context/SettingsContext";
+import {
+  MONTH_NAMES,
+  COLLECTION_START_MONTH,
+  COLLECTION_START_YEAR,
+  isPriorToCollectionStart,
+  getAvailableBillingMonths,
+  isPriorToResidentBillingStart,
+  getResidentBillingStart,
+  getAvailableBillingMonthsForResident,
+} from "../../utils/billingCycle";
 
 export function getCoveredMonths(startMonth, startYear, count) {
   let startIndex = MONTH_NAMES.indexOf(startMonth);
-  if (startIndex === -1) startIndex = new Date().getMonth();
-  let currentYear = Number(startYear) || new Date().getFullYear();
+  if (startIndex === -1) startIndex = MONTH_NAMES.indexOf(COLLECTION_START_MONTH);
+  let currentYear = Math.max(COLLECTION_START_YEAR, Number(startYear) || COLLECTION_START_YEAR);
   const list = [];
 
   for (let i = 0; i < count; i++) {
@@ -31,11 +49,19 @@ export default function PaymentModal({
   onClose,
   onCollect,
 }) {
+  const { settings } = useSettings();
   const currentMonth = new Date().toLocaleString("default", { month: "long" });
   const currentYear = new Date().getFullYear();
 
-  const displayMonth = month || currentMonth;
-  const displayYear = Number(year) || currentYear;
+  const rawMonth = month || currentMonth;
+  const rawYear = Number(year) || currentYear;
+
+  const resStart = useMemo(() => getResidentBillingStart(resident), [resident]);
+  const candidateYear = Math.max(resStart.year, rawYear);
+  const displayYear = candidateYear;
+  const displayMonth = isPriorToResidentBillingStart(resident, rawMonth, displayYear)
+    ? resStart.month
+    : rawMonth;
 
   const [isAdvance, setIsAdvance] = useState(false);
   const [durationMonths, setDurationMonths] = useState(1);
@@ -44,8 +70,11 @@ export default function PaymentModal({
   const [monthlyRate, setMonthlyRate] = useState(resident?.charge || 80);
   const [amount, setAmount] = useState(resident?.charge || 80);
   const [method, setMethod] = useState("Cash");
+  const [referenceNumber, setReferenceNumber] = useState("");
   const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [copiedUpi, setCopiedUpi] = useState(false);
 
   useEffect(() => {
     if (open && resident) {
@@ -57,8 +86,11 @@ export default function PaymentModal({
       setStartYear(displayYear);
       setAmount(charge);
       setMethod("Cash");
+      setReferenceNumber("");
       setRemarks("");
       setSubmitting(false);
+      setQrDataUrl("");
+      setCopiedUpi(false);
     }
   }, [open, resident, displayMonth, displayYear]);
 
@@ -67,6 +99,41 @@ export default function PaymentModal({
     const count = isAdvance ? Math.max(1, Number(durationMonths) || 1) : 1;
     return getCoveredMonths(startMonth, startYear, count);
   }, [isAdvance, durationMonths, startMonth, startYear]);
+
+  // Generate dynamic UPI QR Code when method === "UPI"
+  useEffect(() => {
+    if (method === "UPI" && amount > 0) {
+      const upiId = (settings?.upiId || "").trim();
+      if (upiId) {
+        const societyName = settings?.societyName || "D BLOCK INDRAPRASTHA RWA";
+        const flatStr = resident?.flat || resident?.flatNumber || "Resident";
+        const note = `Garbage Bill ${flatStr} ${startMonth} ${startYear}`.slice(0, 50);
+        const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(societyName)}&am=${Number(amount).toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
+
+        QRCode.toDataURL(upiUrl, {
+          width: 220,
+          margin: 1,
+          color: {
+            dark: "#064e3b",
+            light: "#ffffff",
+          },
+        })
+          .then((url) => setQrDataUrl(url))
+          .catch((err) => console.warn("Failed to generate dynamic collector QR:", err));
+      } else {
+        setQrDataUrl("");
+      }
+    }
+  }, [method, amount, settings?.upiId, settings?.societyName, resident, startMonth, startYear]);
+
+  function handleCopyUpi() {
+    if (settings?.upiId) {
+      navigator.clipboard.writeText(settings.upiId);
+      setCopiedUpi(true);
+      toast.success("UPI ID copied!");
+      setTimeout(() => setCopiedUpi(false), 2000);
+    }
+  }
 
   // Recalculate amount when duration, monthlyRate, or isAdvance changes
   function handleSelectDuration(num) {
@@ -95,9 +162,6 @@ export default function PaymentModal({
 
   if (!open || !resident) return null;
 
-  const startLabel = coveredMonths[0] ? `${coveredMonths[0].month} ${coveredMonths[0].year}` : "";
-  const endLabel = coveredMonths.length > 0 ? `${coveredMonths[coveredMonths.length - 1].month} ${coveredMonths[coveredMonths.length - 1].year}` : "";
-
   async function handleSubmit(e) {
     e.preventDefault();
     if (submitting) return;
@@ -107,6 +171,7 @@ export default function PaymentModal({
       await onCollect({
         method,
         remarks,
+        referenceNumber: referenceNumber.trim(),
         amount: method === "Exempted" ? 0 : Number(amount),
         monthlyRate: Number(monthlyRate),
         isAdvance: isAdvance && durationMonths > 1,
@@ -137,7 +202,7 @@ export default function PaymentModal({
               Collect Garbage Payment
             </h2>
             <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-              {resident.flat} • {resident.owner || resident.name} {resident.block ? `(${resident.block})` : ""}
+              {resident.flat} • {resident.owner || resident.name} {resident.block ? `(${resident.block})` : ""} {resident.floor ? `• ${resident.floor}` : ""}
             </p>
           </div>
           <button
@@ -217,7 +282,7 @@ export default function PaymentModal({
                     onChange={(e) => setStartMonth(e.target.value)}
                     className="w-full bg-white border border-gray-200 rounded-xl p-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    {MONTH_NAMES.map((m) => (
+                    {getAvailableBillingMonthsForResident(resident, startYear).map((m) => (
                       <option key={m} value={m}>{m}</option>
                     ))}
                   </select>
@@ -320,14 +385,114 @@ export default function PaymentModal({
               value={method}
               onChange={(e) => setMethod(e.target.value)}
               disabled={submitting}
-              className="w-full border rounded-xl p-2.5 text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full border rounded-xl p-2.5 text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
             >
               <option value="Cash">💵 Cash</option>
-              <option value="UPI">⚡ UPI</option>
-              <option value="Bank Transfer">🏦 Bank Transfer</option>
+              <option value="UPI">⚡ Instant UPI (Show QR to Resident)</option>
+              <option value="Bank Transfer">🏦 Direct Bank Transfer / NEFT</option>
               <option value="Exempted">🛡️ Exempted (Waive Fee)</option>
             </select>
           </div>
+
+          {/* Dynamic UPI QR Code Display for Collector Screen */}
+          {method === "UPI" && (
+            <div className="bg-gradient-to-b from-emerald-50 to-teal-50/50 border-2 border-emerald-300 rounded-2xl p-4 text-center space-y-3 shadow-inner">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-extrabold text-emerald-950 flex items-center gap-1.5 uppercase tracking-wide">
+                  <FaQrcode className="text-emerald-700 text-sm" /> Resident QR Code
+                </span>
+                <span className="bg-emerald-600 text-white text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg shadow-xs">
+                  Pay ₹{Number(amount).toLocaleString()}
+                </span>
+              </div>
+
+              {settings?.upiId ? (
+                <>
+                  <div className="inline-block p-2.5 bg-white rounded-2xl shadow-md border border-emerald-200">
+                    {qrDataUrl ? (
+                      <img
+                        src={qrDataUrl}
+                        alt="Society UPI QR"
+                        className="w-44 h-44 mx-auto rounded-lg"
+                      />
+                    ) : (
+                      <div className="w-44 h-44 flex items-center justify-center text-xs text-gray-400">
+                        Generating QR...
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-emerald-900 font-semibold max-w-xs mx-auto leading-relaxed">
+                    Ask resident to scan using <strong>Google Pay, PhonePe, Paytm, or BHIM</strong>
+                  </p>
+
+                  <div className="flex items-center justify-center gap-2 bg-white/90 border border-emerald-200 py-1.5 px-3 rounded-xl max-w-xs mx-auto text-xs">
+                    <span className="text-gray-500 font-medium">UPI ID:</span>
+                    <span className="font-mono font-bold text-gray-800 text-[11px] truncate">
+                      {settings.upiId}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyUpi}
+                      className="text-emerald-700 hover:text-emerald-900 ml-1 p-1"
+                      title="Copy UPI ID"
+                    >
+                      {copiedUpi ? <FaCheck className="text-emerald-600 text-xs" /> : <FaCopy className="text-xs" />}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-800 text-xs text-left flex items-start gap-2">
+                  <FaInfoCircle className="text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block font-bold">Society UPI ID Not Configured</strong>
+                    Admin can set up the official UPI ID anytime in <em>Admin &gt; Settings &gt; Bank Details</em>.
+                  </div>
+                </div>
+              )}
+
+              {/* UTR / Reference Number Input */}
+              <div className="text-left pt-1">
+                <label className="block text-[11px] font-bold text-emerald-950 mb-1">
+                  UPI Ref / UTR No. (12 digits on resident's screen)
+                </label>
+                <input
+                  type="text"
+                  value={referenceNumber}
+                  onChange={(e) => setReferenceNumber(e.target.value)}
+                  placeholder="e.g. 427812984120"
+                  maxLength={30}
+                  className="w-full bg-white border border-emerald-200 rounded-xl p-2 text-xs font-mono font-bold text-gray-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+          )}
+
+          {method === "Bank Transfer" && (
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3.5 space-y-2 text-xs">
+              <div className="flex items-center justify-between text-blue-900 font-bold">
+                <span>Society Bank Account:</span>
+                <span>{settings?.bankName || "Configured in Settings"}</span>
+              </div>
+              {settings?.accountNumber && (
+                <div className="text-gray-700 font-mono text-[11px]">
+                  A/C: <strong>{settings.accountNumber}</strong> | IFSC: <strong>{settings.ifscCode}</strong>
+                </div>
+              )}
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                  Bank Reference / UTR Number
+                </label>
+                <input
+                  type="text"
+                  value={referenceNumber}
+                  onChange={(e) => setReferenceNumber(e.target.value)}
+                  placeholder="Enter Bank UTR / Transaction No."
+                  className="w-full bg-white border border-blue-200 rounded-xl p-2 text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Remarks */}
           <div>
@@ -339,7 +504,7 @@ export default function PaymentModal({
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               disabled={submitting}
-              placeholder={isAdvance ? `Advance payment for ${durationMonths} months` : "e.g. Received in cash"}
+              placeholder={isAdvance ? `Advance payment for ${durationMonths} months` : "e.g. Received via UPI"}
               className="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>

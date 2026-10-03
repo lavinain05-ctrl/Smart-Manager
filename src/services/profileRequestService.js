@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 
 import { db } from "../firebase/firebase";
+import { notifyAdmin } from "./notificationService";
 
 const requestsRef = collection(db, "profileUpdateRequests");
 
@@ -42,7 +43,7 @@ export async function submitProfileUpdateRequest({
   block,
   changes,
 }) {
-  return await addDoc(requestsRef, {
+  const docRef = await addDoc(requestsRef, {
     userId,
     residentId: residentId || "",
     userName,
@@ -53,6 +54,20 @@ export async function submitProfileUpdateRequest({
     status: "pending",
     createdAt: serverTimestamp(),
   });
+
+  try {
+    const fieldDetail = changes?.field || (Array.isArray(changes) ? `${changes.length} fields` : "profile details");
+    await notifyAdmin({
+      title: "New Profile Update Request 📝",
+      message: `${userName || "Resident"} (Flat ${flat || "—"}) requested an update for ${fieldDetail}.`,
+      type: "profile_request",
+      link: "/admin/profile-requests",
+    });
+  } catch (notifErr) {
+    console.warn("[ProfileRequest] Admin notification warning:", notifErr.message);
+  }
+
+  return docRef;
 }
 
 /* ===============================

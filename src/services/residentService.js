@@ -27,6 +27,15 @@ import {
   deleteAuthLookup,
 } from "./authService";
 import { deleteFirebaseAuthAccount } from "./accountDeletionService";
+import {
+  generatePropertyId,
+  normalizePlotNumber,
+  normalizeFloor,
+  normalizeUnitNumber,
+  createProperty,
+  linkOccupantToProperty,
+  formatPropertyDisplay,
+} from "./propertyService";
 
 const residentRef = collection(db, "residents");
 
@@ -61,11 +70,15 @@ export function subscribeResidents(callback) {
 // be looked up by the logged-in resident (canonical 1-to-1 ID mapping).
 export async function addResidentWithAccount({
   flat,
+  plotNumber,
+  floor,
+  unitNumber,
+  personType = "OWNER",
+  propertyId = "",
   owner,
   mobile,
   block,
   blockId,
-  floor,
   charge,
   email,
   password,
@@ -98,6 +111,19 @@ export async function addResidentWithAccount({
     if (err.message === "This mobile number is already registered.") throw err;
   }
 
+  const normPlot = normalizePlotNumber(plotNumber || flat || "");
+  const floorObj = normalizeFloor(floor);
+  const normUnit = normalizeUnitNumber(unitNumber || "");
+  const normPersonType = (personType || "OWNER").toUpperCase();
+  const displayFlat = normUnit ? `${normPlot}-${normUnit}` : normPlot || (flat || "").toUpperCase();
+
+  const canonicalPropertyId = propertyId || (blockId && normPlot ? generatePropertyId({
+    blockId,
+    plotNumber: normPlot,
+    floor: floorObj.code,
+    unitNumber: normUnit,
+  }) : "");
+
   // Canonical pseudo-email for Firebase Auth
   const authEmail = mobileToAuthEmail(cleanMobile);
 
@@ -120,6 +146,40 @@ export async function addResidentWithAccount({
 
   const uid = credential.user.uid;
 
+  // Resolve property doc if canonicalPropertyId is known
+  if (canonicalPropertyId) {
+    try {
+      const propSnap = await getDoc(doc(db, "properties", canonicalPropertyId));
+      if (!propSnap.exists()) {
+        await createProperty({
+          blockId: blockId || "",
+          blockName: block || "",
+          plotNumber: normPlot,
+          floor: floorObj.label,
+          unitNumber: normUnit,
+          occupancyStatus: normPersonType === "TENANT" ? "TENANT_OCCUPIED" : "OWNER_OCCUPIED",
+          ownerResidentId: normPersonType === "OWNER" ? uid : "",
+          ownerName: normPersonType === "OWNER" ? owner : "",
+          currentOccupantResidentId: uid,
+          currentOccupantName: owner,
+          occupantType: normPersonType,
+          createdBy: createdByName || createdBy || "Admin",
+          createdById: createdById || "",
+        });
+      } else {
+        await linkOccupantToProperty({
+          propertyId: canonicalPropertyId,
+          residentId: uid,
+          residentName: owner,
+          personType: normPersonType,
+          recordedBy: createdByName || createdBy || "Admin",
+        });
+      }
+    } catch (pErr) {
+      console.warn("[addResidentWithAccount] Property link note:", pErr.message);
+    }
+  }
+
   const isParticipating = garbageStatus === "participating" ||
     createdBy === "Collector" ||
     Boolean(collectorId) ||
@@ -130,19 +190,27 @@ export async function addResidentWithAccount({
   // Create the residents/{uid} doc (keyed by uid for canonical 1-to-1 linking)
   const residentDocRef = doc(db, "residents", uid);
   await setDoc(residentDocRef, {
-    flat: (flat || "").toUpperCase(),
-    flatNumber: (flat || "").toUpperCase(),
+    propertyId: canonicalPropertyId,
+    plotNumber: normPlot,
+    floor: floorObj.label,
+    floorCode: floorObj.code,
+    unitNumber: normUnit,
+    personType: normPersonType,
+    flat: displayFlat,
+    flatNumber: displayFlat,
     owner,
     mobile: cleanMobile,
     block: block || "",
     blockId: blockId || "",
-    floor: floor || "",
     charge: Number(charge) || 0,
     email: (email || "").trim(),
     familyMembers: familyMembers || "",
     remarks: remarks || "",
     status: "Active",
     garbageStatus: finalGarbageStatus,
+    garbageJoinedAt: finalGarbageStatus === "participating" ? serverTimestamp() : null,
+    garbageJoinedMonth: finalGarbageStatus === "participating" ? new Date().toLocaleString("default", { month: "long" }) : null,
+    garbageJoinedYear: finalGarbageStatus === "participating" ? new Date().getFullYear() : null,
     collectorId: collectorId || "",
     collectorName: collectorName || "",
     createdBy: createdBy || "",
@@ -165,8 +233,14 @@ export async function addResidentWithAccount({
     name: owner,
     phone: cleanMobile,
     email: (email || "").trim() || authEmail,
-    flat: (flat || "").toUpperCase(),
-    flatNumber: (flat || "").toUpperCase(),
+    propertyId: canonicalPropertyId,
+    plotNumber: normPlot,
+    floor: floorObj.label,
+    floorCode: floorObj.code,
+    unitNumber: normUnit,
+    personType: normPersonType,
+    flat: displayFlat,
+    flatNumber: displayFlat,
     block: block || "",
     blockId: blockId || "",
     residentId: uid,
@@ -175,7 +249,7 @@ export async function addResidentWithAccount({
   });
 
   // Write authLookup for fast, direct mobile login & password recovery
-  await writeAuthLookup(cleanMobile, authEmail, uid, (email || "").trim(), flat, owner);
+  await writeAuthLookup(cleanMobile, authEmail, uid, (email || "").trim(), displayFlat, owner);
 
   // Sign out the secondary instance (admin's session untouched)
   await signOut(secondaryAuth);
@@ -300,6 +374,10 @@ export async function updateGarbageStatus(residentId, status) {
   };
   if (isNotParticipating) {
     updatePayload.charge = 0;
+  } else if (status === "participating") {
+    updatePayload.garbageJoinedAt = serverTimestamp();
+    updatePayload.garbageJoinedMonth = new Date().toLocaleString("default", { month: "long" });
+    updatePayload.garbageJoinedYear = new Date().getFullYear();
   }
 
   let canonicalDocId = residentId;

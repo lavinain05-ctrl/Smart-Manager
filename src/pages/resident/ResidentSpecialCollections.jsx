@@ -17,6 +17,7 @@ import {
   FaRedo,
   FaPlus,
   FaHistory,
+  FaPrint,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 
@@ -28,6 +29,8 @@ import {
   submitSpecialCollectionPayment,
 } from "../../services/specialCollectionService";
 import { generateSpecialCollectionReceipt } from "../../utils/specialCollectionReceiptGenerator";
+import { printPaymentReceipt } from "../../utils/printReceiptHelper";
+import PrinterQuickAction from "../../components/common/PrinterQuickAction";
 
 export default function ResidentSpecialCollections() {
   const { user } = useAuth();
@@ -174,6 +177,11 @@ export default function ResidentSpecialCollections() {
       contributorName: payment.contributorName || canonicalResident?.owner || user?.name || "Resident",
       contributorType: "Resident",
       flatNumber: payment.flatNumber || canonicalResident?.flat || user?.flatNumber || user?.flat || "",
+      plotNumber: payment.plotNumber || canonicalResident?.plotNumber || "",
+      floor: payment.floor || canonicalResident?.floor || "",
+      floorCode: payment.floorCode || canonicalResident?.floorCode || "",
+      unitNumber: payment.unitNumber || canonicalResident?.unitNumber || "",
+      personType: payment.personType || canonicalResident?.personType || "",
       block: payment.block || canonicalResident?.block || user?.block || "",
       mobileNumber: payment.mobileNumber || canonicalResident?.mobile || user?.phone || user?.mobile || "",
       amount: payment.amount,
@@ -185,6 +193,32 @@ export default function ResidentSpecialCollections() {
       confirmedAt: payment.confirmedAt?.toDate
         ? payment.confirmedAt.toDate().toLocaleDateString("en-IN")
         : payment.paymentDate || new Date().toLocaleDateString("en-IN"),
+    });
+  }
+
+  // Helper to directly print receipt
+  function handlePrintReceipt(col, payment) {
+    if (!payment) return;
+    const isCash = payment.paymentMethod === "Cash" || payment.utr === "CASH-OFFLINE";
+    printPaymentReceipt({
+      receiptNumber: payment.receiptNumber,
+      collectionName: col?.name || payment.collectionName || "Special Collection",
+      purpose: col?.purpose || payment.purpose || "Community Contribution",
+      contributorName: payment.contributorName || canonicalResident?.owner || user?.name || "Resident",
+      contributorType: "Resident",
+      flat: payment.flatNumber || canonicalResident?.flat || user?.flatNumber || user?.flat || "",
+      flatNumber: payment.flatNumber || canonicalResident?.flat || user?.flatNumber || user?.flat || "",
+      plotNumber: payment.plotNumber || canonicalResident?.plotNumber || "",
+      floor: payment.floor || canonicalResident?.floor || "",
+      floorCode: payment.floorCode || canonicalResident?.floorCode || "",
+      unitNumber: payment.unitNumber || canonicalResident?.unitNumber || "",
+      personType: payment.personType || canonicalResident?.personType || "",
+      block: payment.block || canonicalResident?.block || user?.block || "",
+      mobileNumber: payment.mobileNumber || canonicalResident?.mobile || user?.phone || user?.mobile || "",
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod || (isCash ? "Cash" : "UPI / Bank Transfer"),
+      paymentDate: payment.paymentDate || "—",
+      collectorName: payment.collectorName || payment.confirmedByName || "Society Admin",
     });
   }
 
@@ -208,14 +242,19 @@ export default function ResidentSpecialCollections() {
     <div className="space-y-6">
 
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-3 text-gray-900">
-          <FaHandHoldingHeart className="text-emerald-600" />
-          Special Collections & Contributions
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Participate in D-Block society festivals, community functions, and special contribution campaigns.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-3 text-gray-900">
+            <FaHandHoldingHeart className="text-emerald-600" />
+            Special Collections & Contributions
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Participate in D-Block society festivals, community functions, and special contribution campaigns.
+          </p>
+        </div>
+        <div>
+          <PrinterQuickAction />
+        </div>
       </div>
 
       {/* Campaigns Grid */}
@@ -372,13 +411,22 @@ export default function ResidentSpecialCollections() {
                                   </div>
 
                                   {p.receiptNumber && (
-                                    <button
-                                      onClick={() => handleDownloadReceipt(col, p)}
-                                      className="shrink-0 px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
-                                      title="Download Official Receipt (PDF)"
-                                    >
-                                      <FaFileDownload /> PDF
-                                    </button>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <button
+                                        onClick={() => handlePrintReceipt(col, p)}
+                                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
+                                        title="Print Official Receipt"
+                                      >
+                                        <FaPrint className="text-[10px]" /> Print
+                                      </button>
+                                      <button
+                                        onClick={() => handleDownloadReceipt(col, p)}
+                                        className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
+                                        title="Download Official Receipt (PDF)"
+                                      >
+                                        <FaFileDownload className="text-[10px]" /> PDF
+                                      </button>
+                                    </div>
                                   )}
                                 </div>
                               );

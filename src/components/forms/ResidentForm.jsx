@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { useBlockFlat } from "../../context/BlockFlatContext";
 import { normalizeMobile } from "../../services/authService";
+import {
+  normalizePlotNumber,
+  normalizeFloor,
+  normalizeUnitNumber,
+  generatePropertyId,
+  AVAILABLE_FLOORS,
+} from "../../services/propertyService";
 
 export default function ResidentForm({
   resident,
@@ -16,11 +23,15 @@ export default function ResidentForm({
 
   const [form, setForm] = useState({
     flat: "",
+    plotNumber: "",
+    floor: "Ground Floor",
+    unitNumber: "",
+    personType: "OWNER",
+    propertyId: "",
     owner: "",
     mobile: "",
     block: "",
     blockId: "",
-    floor: "",
     charge: "",
     email: "",
     password: "",
@@ -38,12 +49,16 @@ export default function ResidentForm({
     if (resident) {
       const resMobile = normalizeMobile(resident.mobile || "");
       setForm({
-        flat: resident.flat || "",
+        flat: resident.flat || resident.flatNumber || "",
+        plotNumber: resident.plotNumber || resident.flat || resident.flatNumber || "",
+        floor: resident.floor || "Ground Floor",
+        unitNumber: resident.unitNumber || "",
+        personType: resident.personType || "OWNER",
+        propertyId: resident.propertyId || "",
         owner: resident.owner || "",
         mobile: resMobile,
         block: resident.block || "",
         blockId: resident.blockId || "",
-        floor: resident.floor || "",
         charge: resident.charge || "",
         email: resident.email || "",
         password: "",
@@ -58,11 +73,15 @@ export default function ResidentForm({
     } else {
       setForm({
         flat: "",
+        plotNumber: "",
+        floor: "Ground Floor",
+        unitNumber: "",
+        personType: "OWNER",
+        propertyId: "",
         owner: "",
         mobile: "",
         block: "",
         blockId: "",
-        floor: "",
         charge: defaultCharge || "",
         email: "",
         password: "",
@@ -113,9 +132,27 @@ export default function ResidentForm({
     try {
       const cleanMainMobile = normalizeMobile(form.mobile);
       const cleanPortalMobile = normalizeMobile(portalMobile || form.mobile);
+      const resolvedPlot = (form.plotNumber || form.flat || "").trim();
+      const floorObj = normalizeFloor(form.floor);
+      const normUnit = normalizeUnitNumber(form.unitNumber || "");
+      const displayFlat = normUnit ? `${resolvedPlot}-${normUnit}` : resolvedPlot;
+      const canonicalPropertyId = form.propertyId || (form.blockId && resolvedPlot ? generatePropertyId({
+        blockId: form.blockId,
+        plotNumber: resolvedPlot,
+        floor: floorObj.code,
+        unitNumber: normUnit,
+      }) : "");
 
       const payload = {
         ...form,
+        plotNumber: resolvedPlot,
+        floor: floorObj.label,
+        floorCode: floorObj.code,
+        unitNumber: normUnit,
+        personType: (form.personType || "OWNER").toUpperCase(),
+        flat: displayFlat,
+        flatNumber: displayFlat,
+        propertyId: canonicalPropertyId,
         charge: garbageEnrolled ? (Number(form.charge) || 0) : 0,
         mobile: cleanMainMobile,
         enablePortalLogin,
@@ -133,11 +170,15 @@ export default function ResidentForm({
       if (!resident) {
         setForm({
           flat: "",
+          plotNumber: "",
+          floor: "Ground Floor",
+          unitNumber: "",
+          personType: "OWNER",
+          propertyId: "",
           owner: "",
           mobile: "",
           block: "",
           blockId: "",
-          floor: "",
           charge: defaultCharge || "",
           email: "",
           password: "",
@@ -164,48 +205,16 @@ export default function ResidentForm({
       <input type="text" name="prevent_autofill" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
       <input type="password" name="prevent_autofill_pw" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
 
-      <input
-        name="flat"
-        value={form.flat}
-        onChange={handleChange}
-        placeholder="Flat Number (e.g. B-201, A101, 571)"
-        className="w-full border rounded-xl p-3"
-        required
-        disabled={submitting}
-      />
-
-      <input
-        name="owner"
-        value={form.owner}
-        onChange={handleChange}
-        placeholder="Owner Name"
-        className="w-full border rounded-xl p-3"
-        required
-        disabled={submitting}
-      />
-
+      {/* Block Selection */}
       <div>
-        <input
-          name="mobile"
-          value={form.mobile}
-          onChange={handleChange}
-          placeholder="Mobile Number (10 digits)"
-          className="w-full border rounded-xl p-3"
-          required
-          disabled={submitting}
-          maxLength={10}
-          autoComplete="off"
-        />
-        <p className="text-xs text-gray-400 mt-1">Main society contact number</p>
-      </div>
-
-      {/* Block selection or text input if no blocks configured */}
-      <div>
+        <label className="block mb-1 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+          Block <span className="text-red-500">*</span>
+        </label>
         {activeBlocks.length > 0 ? (
           <select
             value={form.blockId}
             onChange={handleBlockChange}
-            className="w-full border rounded-xl p-3"
+            className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
             disabled={submitting}
             required
           >
@@ -219,22 +228,135 @@ export default function ResidentForm({
             name="block"
             value={form.block}
             onChange={handleChange}
-            placeholder="Block (e.g. Block A, Wing B)"
-            className="w-full border rounded-xl p-3"
+            placeholder="Block (e.g. 90 METRE, Block A)"
+            className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
             disabled={submitting}
             required
           />
         )}
       </div>
 
-      <input
-        name="floor"
-        value={form.floor}
-        onChange={handleChange}
-        placeholder="Floor"
-        className="w-full border rounded-xl p-3"
-        disabled={submitting}
-      />
+      {/* Plot Number & Floor */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block mb-1 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+            Plot Number <span className="text-red-500">*</span>
+          </label>
+          <input
+            name="plotNumber"
+            value={form.plotNumber}
+            onChange={(e) => {
+              handleChange(e);
+              setForm((prev) => ({ ...prev, flat: e.target.value }));
+            }}
+            placeholder="e.g. 12, D-572"
+            className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+            required
+            disabled={submitting}
+          />
+        </div>
+
+        <div>
+          <label className="block mb-1 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+            Floor <span className="text-red-500">*</span>
+          </label>
+          <select
+            name="floor"
+            value={form.floor}
+            onChange={handleChange}
+            className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
+            disabled={submitting}
+            required
+          >
+            {AVAILABLE_FLOORS.map((fl) => (
+              <option key={fl} value={fl}>
+                {fl}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Unit Number & Occupancy Person Type */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block mb-1 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+            Flat Number <span className="text-gray-400 font-normal lowercase">(optional)</span>
+          </label>
+          <input
+            name="unitNumber"
+            value={form.unitNumber}
+            onChange={handleChange}
+            placeholder="e.g. 1, 2, A (optional)"
+            className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+            disabled={submitting}
+          />
+        </div>
+
+        <div>
+          <label className="block mb-1 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+            Person Type <span className="text-red-500">*</span>
+          </label>
+          <select
+            name="personType"
+            value={form.personType === "TENANT" ? "RENTED" : form.personType}
+            onChange={handleChange}
+            className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none font-semibold text-emerald-800 bg-emerald-50/50"
+            disabled={submitting}
+            required
+          >
+            <option value="OWNER">Property Owner</option>
+            <option value="RENTED">Rented</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Live Canonical Property Identity Badge */}
+      {form.plotNumber && (
+        <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center justify-between">
+          <span>
+            <strong>Property:</strong> {form.block ? `Block ${form.block}` : "Block"}, Plot {form.plotNumber}, {form.floor}, {form.unitNumber ? `Flat ${form.unitNumber}` : "Single Property"}
+          </span>
+          <span className="font-bold uppercase text-[10px] bg-emerald-200/80 px-2 py-0.5 rounded">
+            {form.personType === "TENANT" ? "RENTED" : form.personType}
+          </span>
+        </div>
+      )}
+
+      {/* Resident Full Name */}
+      <div>
+        <label className="block mb-1 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+          Resident Name <span className="text-red-500">*</span>
+        </label>
+        <input
+          name="owner"
+          value={form.owner}
+          onChange={handleChange}
+          placeholder="Full Name"
+          className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+          required
+          disabled={submitting}
+        />
+      </div>
+
+      {/* Mobile Number */}
+      <div>
+        <label className="block mb-1 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+          Mobile Number <span className="text-red-500">*</span>
+        </label>
+        <input
+          name="mobile"
+          value={form.mobile}
+          onChange={handleChange}
+          placeholder="10-digit Mobile Number"
+          className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+          required
+          disabled={submitting}
+          maxLength={10}
+          autoComplete="off"
+        />
+        <p className="text-xs text-gray-400 mt-1">Main society contact number</p>
+      </div>
 
       <input
         name="charge"

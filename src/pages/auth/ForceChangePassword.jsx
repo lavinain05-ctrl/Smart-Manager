@@ -120,41 +120,41 @@ export default function ForceChangePassword() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-700 via-emerald-600 to-blue-700 flex items-center justify-center p-6">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8">
+    <div className="min-h-screen bg-slate-50 sm:bg-gradient-to-br sm:from-slate-100 sm:via-blue-50/40 sm:to-slate-200 flex items-center justify-center p-3 sm:p-6">
+      <div className="bg-white rounded-3xl shadow-xl sm:shadow-2xl sm:border sm:border-slate-100 w-full max-w-md p-6 sm:p-8">
 
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 mx-auto rounded-3xl bg-amber-100 text-amber-600 flex items-center justify-center text-4xl shadow-md mb-4">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-3xl shadow-xs mb-3 border border-blue-100">
             <FaShieldAlt />
           </div>
-          <h1 className="text-2xl font-bold">Set New Password</h1>
-          <p className="text-gray-500 text-sm mt-2">
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Set New Password</h1>
+          <p className="text-slate-500 text-xs sm:text-sm mt-1">
             You logged in with a temporary password. Please create a new secure password to continue.
           </p>
         </div>
 
         {/* Security Notice */}
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-700 flex items-start gap-2 mb-6">
-          <FaLock className="mt-0.5 shrink-0" />
+        <div className="bg-blue-50 border border-blue-200/70 rounded-2xl p-3.5 text-xs text-blue-800 flex items-start gap-2.5 mb-5">
+          <FaLock className="mt-0.5 shrink-0 text-blue-600 text-sm" />
           <span>
             Your new password must be at least 6 characters long. Choose something secure that you can remember.
           </span>
         </div>
 
         {/* Password Form */}
-        <form onSubmit={handleChangePassword} className="space-y-5">
+        <form onSubmit={handleChangePassword} className="space-y-4">
 
           <div>
-            <label className="block mb-2 font-medium">New Password</label>
+            <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">New Password</label>
             <div className="relative">
-              <FaLock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <FaLock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               <input
                 type={showNewPassword ? "text" : "password"}
                 placeholder="Enter new password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full pl-10 pr-11 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full pl-10 pr-11 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
                 minLength={6}
                 required
                 autoComplete="new-password"
@@ -162,7 +162,7 @@ export default function ForceChangePassword() {
               <button
                 type="button"
                 onClick={() => setShowNewPassword((prev) => !prev)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1.5 transition rounded-lg hover:bg-gray-100"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none p-1.5 transition rounded-lg hover:bg-slate-100"
                 aria-label={showNewPassword ? "Hide password" : "Show password"}
                 title={showNewPassword ? "Hide password" : "Show password"}
               >
@@ -172,15 +172,15 @@ export default function ForceChangePassword() {
           </div>
 
           <div>
-            <label className="block mb-2 font-medium">Confirm Password</label>
+            <label className="block mb-1.5 text-xs sm:text-sm font-bold text-slate-700">Confirm Password</label>
             <div className="relative">
-              <FaCheckCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <FaCheckCircle className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               <input
                 type={showConfirmPassword ? "text" : "password"}
                 placeholder="Confirm new password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full pl-10 pr-11 border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full pl-10 pr-11 py-3.5 bg-[#edf3ff] hover:bg-[#e6eeff] focus:bg-white border border-transparent focus:border-blue-500 rounded-2xl text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-xs"
                 minLength={6}
                 required
                 autoComplete="new-password"
@@ -188,7 +188,7 @@ export default function ForceChangePassword() {
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword((prev) => !prev)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1.5 transition rounded-lg hover:bg-gray-100"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none p-1.5 transition rounded-lg hover:bg-slate-100"
                 aria-label={showConfirmPassword ? "Hide password" : "Show password"}
                 title={showConfirmPassword ? "Hide password" : "Show password"}
               >
@@ -196,14 +196,14 @@ export default function ForceChangePassword() {
               </button>
             </div>
             {confirmPassword && newPassword !== confirmPassword && (
-              <p className="text-red-500 text-xs mt-1">Passwords do not match</p>
+              <p className="text-rose-500 text-xs mt-1 font-semibold">Passwords do not match</p>
             )}
           </div>
 
           <button
             type="submit"
             disabled={loading || !newPassword || newPassword !== confirmPassword}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold transition"
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white py-3.5 rounded-2xl font-bold transition shadow-lg shadow-blue-500/25 active:scale-[0.98] cursor-pointer mt-2"
           >
             {loading ? "Changing Password..." : "Set New Password"}
           </button>

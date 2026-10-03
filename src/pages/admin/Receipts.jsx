@@ -1,18 +1,38 @@
 import { useMemo, useState } from "react";
 import { FaPrint, FaSearch, FaUndoAlt } from "react-icons/fa";
 import { usePayments } from "../../context/PaymentContext";
+import { useResidents } from "../../context/ResidentContext";
 import { useAuth } from "../../context/AuthContext";
 import { generateReceipt } from "../../utils/receiptGenerator";
 import { printPaymentReceipt } from "../../utils/printReceiptHelper";
+import { formatResidentFloor } from "../../services/propertyService";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
+import PrinterQuickAction from "../../components/common/PrinterQuickAction";
 
 export default function Receipts() {
   const { payments, reversePayment } = usePayments();
+  const { residents } = useResidents();
   const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [reverseTarget, setReverseTarget] = useState(null);
 
   const isAdmin = user?.role === "admin";
+
+  function enrichPayment(payment) {
+    const res = residents.find(
+      (r) =>
+        (payment.residentId && r.id === payment.residentId) ||
+        (payment.flat && (r.flat === payment.flat || r.flatNumber === payment.flat))
+    );
+    return {
+      ...payment,
+      plotNumber: payment.plotNumber || res?.plotNumber || "",
+      floor: payment.floor || res?.floor || "",
+      unitNumber: payment.unitNumber || res?.unitNumber || "",
+      personType: payment.personType || res?.personType || "",
+      block: payment.block || res?.block || "",
+    };
+  }
 
   const filteredPayments = useMemo(() => {
     const value = search.toLowerCase();
@@ -25,7 +45,7 @@ export default function Receipts() {
   }, [payments, search]);
 
   function printReceipt(payment) {
-    printPaymentReceipt(payment);
+    printPaymentReceipt(enrichPayment(payment));
   }
 
   async function handleReverse() {
@@ -39,17 +59,14 @@ export default function Receipts() {
       <div className="space-y-6">
 
         {/* Header */}
-
-        <div>
-
-          <h1 className="text-3xl font-bold">
-            Receipts
-          </h1>
-
-          <p className="text-gray-500">
-            Print payment receipts
-          </p>
-
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-bold">Receipts</h1>
+            <p className="text-gray-500">Print payment receipts</p>
+          </div>
+          <div>
+            <PrinterQuickAction />
+          </div>
         </div>
 
         {/* Search */}
@@ -139,7 +156,14 @@ export default function Receipts() {
                   >
 
                     <td className="p-4 font-semibold text-gray-800">
-                      {payment.flat}
+                      <div>
+                        <span>{payment.flat}</span>
+                        {enrichPayment(payment).floor && (
+                          <span className="block text-[11px] font-normal text-blue-600">
+                            {formatResidentFloor(enrichPayment(payment).floor)}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     <td className="p-4 font-medium text-gray-700">
@@ -190,7 +214,7 @@ export default function Receipts() {
                         </button>
 
                         <button
-                          onClick={() => generateReceipt(payment)}
+                          onClick={() => generateReceipt(enrichPayment(payment))}
                           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl flex items-center gap-2"
                         >
                           PDF

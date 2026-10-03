@@ -14,13 +14,17 @@ import {
   FaIdCard,
   FaReceipt,
   FaShieldAlt,
-  FaArrowRight,
   FaRecycle,
   FaKey,
+  FaTrashAlt,
+  FaHandHoldingHeart,
+  FaChartBar,
+  FaArrowRight,
 } from "react-icons/fa";
 
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "../../firebase/firebase";
+import { isRealEmail } from "../../services/authService";
 
 import { useAuth } from "../../context/AuthContext";
 import { useNotices } from "../../context/NoticeContext";
@@ -47,6 +51,41 @@ export default function CommitteeDashboard() {
   const [profile, setProfile] = useState(null);
   const [permissions, setPermissions] = useState(user?.permissions || {});
 
+  const isAdmin = user?.role === "admin";
+  const effectivePermissions = useMemo(() => {
+    if (isAdmin) {
+      return {
+        canManageResidents: true,
+        canManageCollectors: true,
+        canManageRegistrations: true,
+        canManageProfileRequests: true,
+        canManageAccountRecovery: true,
+        canCollectGarbage: true,
+        canCollectSpecial: true,
+        canViewGarbageReports: true,
+      };
+    }
+    return {
+      ...(permissions || {}),
+      ...(user?.permissions || {}),
+      canCollectGarbage: Boolean(
+        permissions?.canCollectGarbage ||
+        user?.permissions?.canCollectGarbage ||
+        user?.canCollectGarbage
+      ),
+      canCollectSpecial: Boolean(
+        permissions?.canCollectSpecial ||
+        user?.permissions?.canCollectSpecial ||
+        user?.canCollectSpecial
+      ),
+      canViewGarbageReports: Boolean(
+        permissions?.canViewGarbageReports ||
+        user?.permissions?.canViewGarbageReports ||
+        user?.canViewGarbageReports
+      ),
+    };
+  }, [isAdmin, permissions, user]);
+
   // Fetch committee profile doc & listen for real-time permissions
   useEffect(() => {
     if (!user?.uid) return;
@@ -55,6 +94,15 @@ export default function CommitteeDashboard() {
         const profileDoc = await getDoc(doc(db, "committee", user.uid));
         if (profileDoc.exists()) {
           setProfile({ id: profileDoc.id, ...profileDoc.data() });
+        } else {
+          const userPhone = String(user?.phone || user?.mobile || "").replace(/\D/g, "").slice(-10);
+          const matched = committee.find((c) => {
+            const cPhone = String(c.phone || c.mobile || "").replace(/\D/g, "").slice(-10);
+            return (userPhone && cPhone === userPhone) || (user?.email && c.email?.toLowerCase() === user.email.toLowerCase());
+          });
+          if (matched) {
+            setProfile(matched);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -70,28 +118,9 @@ export default function CommitteeDashboard() {
     });
 
     return () => unsubUser();
-  }, [user?.uid]);
+  }, [user?.uid, committee]);
 
-  const hasAnyPower = Object.values(permissions).some(Boolean);
-  const canCollect = permissions.canCollectGarbage || permissions.canCollectSpecial;
-
-  // Personal collection stats
-  const myCollections = useMemo(() => {
-    return payments.filter(
-      (p) => p.collectorId === user?.uid || p.collector === user?.name
-    );
-  }, [payments, user?.uid, user?.name]);
-
-  const todayStr = new Date().toLocaleDateString("en-IN");
-  const myTodayTotal = useMemo(() => {
-    return myCollections
-      .filter((p) => p.paymentDate === todayStr)
-      .reduce((s, p) => s + Number(p.amount || 0), 0);
-  }, [myCollections, todayStr]);
-
-  const myLifetimeTotal = useMemo(() => {
-    return myCollections.reduce((s, p) => s + Number(p.amount || 0), 0);
-  }, [myCollections]);
+  const hasAnyPower = Object.values(effectivePermissions).some(Boolean);
 
   const recentNotices = notices.slice(0, 3);
   const upcomingEvents = events
@@ -182,120 +211,163 @@ export default function CommitteeDashboard() {
   }, [garbageBills, bills, canonicalResidentId, user, currentMonthName, currentYearNum]);
 
   const isCurrentMonthPaid = Boolean(
-    currentMonthPersonalPayment || currentMonthPersonalBill?.status === "Paid"
+    currentMonthPersonalPayment ||
+    (currentMonthPersonalBill && (currentMonthPersonalBill.status === "Paid" || currentMonthPersonalBill.status === "paid"))
   );
-  const monthlyCharge = Number(canonicalResident?.charge || 80);
+
+  const monthlyCharge = canonicalResident?.charge || currentMonthPersonalBill?.amount || 100;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
 
-      {/* Profile Card */}
-      <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-2xl p-6 text-white">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-          {/* Avatar */}
-          {profile?.profilePhotoUrl ? (
-            <img
-              src={profile.profilePhotoUrl}
-              alt={user?.name || "Profile"}
-              className="w-20 h-20 rounded-full object-cover shrink-0 border-2 border-white/30"
-              onError={(e) => { e.target.style.display = "none"; e.target.nextSibling && (e.target.nextSibling.style.display = "flex"); }}
-            />
-          ) : null}
-          <div
-            className={`w-20 h-20 rounded-full bg-white/20 items-center justify-center text-4xl font-bold shrink-0 border-2 border-white/30 ${
-              profile?.profilePhotoUrl ? "hidden" : "flex"
-            }`}
-          >
-            {user?.name?.charAt(0) || "C"}
-          </div>
+      {/* ─── Premium Committee Profile Hero Banner ─── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 shadow-xl border border-slate-800/80">
+        {/* Ambient Decorative Glows */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-1/3 w-60 h-60 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold">{user?.name || "Committee Member"}</h1>
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-semibold">
-                🏛️ {user?.designation || "Member"}
+        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+            {/* Avatar with Glow Ring */}
+            <div className="relative shrink-0">
+              {profile?.profilePhotoUrl ? (
+                <img
+                  src={profile.profilePhotoUrl}
+                  alt={user?.name || "Profile"}
+                  className="w-20 h-20 sm:w-22 sm:h-22 rounded-3xl object-cover border-2 border-indigo-400/40 shadow-xl"
+                  onError={(e) => { e.target.style.display = "none"; e.target.nextSibling && (e.target.nextSibling.style.display = "flex"); }}
+                />
+              ) : null}
+              <div
+                className={`w-20 h-20 sm:w-22 sm:h-22 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 items-center justify-center text-3xl font-extrabold text-white border-2 border-indigo-400/40 shadow-xl ${
+                  profile?.profilePhotoUrl ? "hidden" : "flex"
+                }`}
+              >
+                {user?.name?.charAt(0) || "C"}
+              </div>
+              <span className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 border-2 border-slate-900 rounded-full flex items-center justify-center text-[10px] text-white shadow-sm" title="Active Official">
+                ✓
               </span>
-              {profile?.tenure && (
-                <span className="bg-white/10 px-3 py-1 rounded-full text-sm flex items-center gap-1">
-                  <FaClock className="text-xs" /> {profile.tenure}
-                </span>
-              )}
             </div>
 
-            <div className="flex flex-wrap gap-4 mt-3 text-sm text-indigo-200">
-              {user?.email && (
-                <span className="flex items-center gap-1.5">
-                  <FaEnvelope className="text-xs" /> {user.email}
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                  🏛️ Executive Committee
                 </span>
-              )}
-              {user?.phone && (
-                <span className="flex items-center gap-1.5">
-                  <FaPhone className="text-xs" /> {user.phone}
-                </span>
-              )}
-            </div>
-
-            {hasAnyPower && (
-              <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t border-white/10">
-                <span className="text-xs text-indigo-200 font-semibold flex items-center gap-1 mr-1">
-                  <FaShieldAlt className="text-amber-300" /> Delegated Powers:
-                </span>
-                {permissions.canCollectGarbage && (
-                  <span className="bg-emerald-500/30 border border-emerald-300/40 text-emerald-100 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                    🗑️ Garbage Collection
-                  </span>
-                )}
-                {permissions.canCollectSpecial && (
-                  <span className="bg-amber-500/30 border border-amber-300/40 text-amber-100 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                    ⭐ Special Funds
-                  </span>
-                )}
-                {permissions.canManageResidents && (
-                  <span className="bg-purple-500/30 border border-purple-300/40 text-purple-100 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                    👥 Residents
-                  </span>
-                )}
-                {permissions.canManageCollectors && (
-                  <span className="bg-blue-500/30 border border-blue-300/40 text-blue-100 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                    👤 Collectors
-                  </span>
-                )}
-                {permissions.canManageRegistrations && (
-                  <span className="bg-pink-500/30 border border-pink-300/40 text-pink-100 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                    📋 Registrations
-                  </span>
-                )}
-                {permissions.canManageProfileRequests && (
-                  <span className="bg-cyan-500/30 border border-cyan-300/40 text-cyan-100 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                    📝 Profiles
-                  </span>
-                )}
-                {permissions.canManageAccountRecovery && (
-                  <span className="bg-rose-500/30 border border-rose-300/40 text-rose-100 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                    🔑 Recovery
+                {profile?.tenure && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 text-slate-300 flex items-center gap-1 border border-white/10">
+                    <FaClock className="text-[9px]" /> {profile.tenure}
                   </span>
                 )}
               </div>
-            )}
+
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                {user?.name || "Committee Member"}
+              </h1>
+
+              <p className="text-xs sm:text-sm font-semibold text-indigo-300 flex items-center gap-2">
+                <span>{user?.designation || "Executive Member"}</span>
+                {canonicalResident?.flat && (
+                  <>
+                    <span className="text-slate-600">•</span>
+                    <span className="text-slate-300 font-medium">Flat {canonicalResident.flat}</span>
+                  </>
+                )}
+              </p>
+
+              <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-400">
+                {isRealEmail(user?.email || profile?.email) && (
+                  <span className="flex items-center gap-1.5 truncate max-w-xs">
+                    <FaEnvelope className="text-indigo-400 shrink-0 text-[11px]" />
+                    <span className="truncate">{user?.email || profile?.email}</span>
+                  </span>
+                )}
+                {user?.phone && (
+                  <span className="flex items-center gap-1.5">
+                    <FaPhone className="text-emerald-400 shrink-0 text-[11px]" />
+                    <span>+91 {user.phone}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Action Badges */}
+          <div className="flex flex-col sm:flex-row md:flex-col gap-2 w-full md:w-auto shrink-0 pt-2 md:pt-0">
+            <Link
+              to="/committee/garbage"
+              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10 text-xs font-bold transition flex items-center justify-center gap-2 backdrop-blur-xs active:scale-98"
+            >
+              <FaRecycle />
+              <span>Garbage Services</span>
+            </Link>
           </div>
         </div>
 
+        {/* Delegated Powers Chips */}
+        {hasAnyPower && (
+          <div className="relative z-10 mt-5 pt-4 border-t border-slate-800/80 flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-400 flex items-center gap-1 mr-1">
+              <FaShieldAlt className="text-amber-400" /> Active Delegated Powers:
+            </span>
+            {effectivePermissions.canManageResidents && (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                👥 Residents
+              </span>
+            )}
+            {effectivePermissions.canManageCollectors && (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                👤 Collectors
+              </span>
+            )}
+            {effectivePermissions.canManageRegistrations && (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                📋 Registrations
+              </span>
+            )}
+            {effectivePermissions.canManageProfileRequests && (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                📝 Profiles
+              </span>
+            )}
+            {effectivePermissions.canManageAccountRecovery && (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                🔑 Recovery
+              </span>
+            )}
+            {effectivePermissions.canCollectGarbage && (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                ♻️ GC Collector
+              </span>
+            )}
+            {effectivePermissions.canCollectSpecial && (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                🎁 Special {effectivePermissions.specialCollectionScope === "specific" ? `(${effectivePermissions.allowedSpecialCollections?.length || 0} Assigned)` : "Collector"}
+              </span>
+            )}
+            {effectivePermissions.canViewGarbageReports && (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                📊 Society Reports
+              </span>
+            )}
+          </div>
+        )}
+
         {profile?.introduction && (
-          <div className="mt-4 pt-4 border-t border-white/20">
-            <p className="text-sm text-indigo-100 leading-relaxed">{profile.introduction}</p>
+          <div className="relative z-10 mt-4 pt-3 border-t border-slate-800/80">
+            <p className="text-xs text-slate-300 leading-relaxed italic">"{profile.introduction}"</p>
           </div>
         )}
       </div>
 
-      {/* ══════════════════════════════════════════════════════ */}
-      {/* My Flat Garbage Collection Status Banner               */}
-      {/* ══════════════════════════════════════════════════════ */}
-      <div className={`rounded-3xl p-5 sm:p-6 border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+      {/* ─── My Flat Garbage Collection Status Banner ─── */}
+      <div className={`rounded-3xl p-5 sm:p-6 border shadow-xs transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
         isCurrentMonthPaid
-          ? "bg-gradient-to-r from-emerald-50 via-teal-50/60 to-emerald-50 border-emerald-200"
-          : "bg-gradient-to-r from-amber-50 via-orange-50/60 to-amber-50 border-amber-200"
+          ? "bg-gradient-to-r from-emerald-50 via-teal-50/50 to-emerald-50 dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-emerald-950/30 border-emerald-200 dark:border-emerald-800/60"
+          : "bg-gradient-to-r from-amber-50 via-orange-50/50 to-amber-50 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30 border-amber-200 dark:border-amber-800/60"
       }`}>
-        <div className="flex items-start sm:items-center gap-3.5">
+        <div className="flex items-start sm:items-center gap-4">
           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow-md ${
             isCurrentMonthPaid
               ? "bg-emerald-600 text-white shadow-emerald-600/20"
@@ -307,25 +379,25 @@ export default function CommitteeDashboard() {
             <div className="flex flex-wrap items-center gap-2">
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
                 isCurrentMonthPaid
-                  ? "bg-emerald-200 text-emerald-950 border-emerald-300"
-                  : "bg-amber-200 text-amber-950 border-amber-300"
+                  ? "bg-emerald-200 dark:bg-emerald-900/60 text-emerald-950 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700"
+                  : "bg-amber-200 dark:bg-amber-900/60 text-amber-950 dark:text-amber-200 border-amber-300 dark:border-amber-700"
               }`}>
                 {isCurrentMonthPaid ? "✅ Garbage Fee Paid" : "🔔 Garbage Fee Due"}
               </span>
-              <span className="text-xs font-bold text-slate-800">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
                 {currentMonthName} {currentYearNum}
               </span>
-              <span className="text-xs text-slate-500 font-medium">
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                 • Flat {canonicalResident?.flat || user?.flat || "—"}
               </span>
             </div>
 
-            <p className="text-xs sm:text-sm font-bold text-slate-900 mt-1">
+            <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 mt-1">
               {isCurrentMonthPaid
                 ? `Doorstep garbage collection fee for ${currentMonthName} ${currentYearNum} is paid.`
                 : `Doorstep garbage collection fee for ${currentMonthName} ${currentYearNum} is pending (₹${monthlyCharge}).`}
             </p>
-            <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {isCurrentMonthPaid
                 ? "Your flat's daily doorstep pickup is active. Official receipt is available."
                 : "Give or record your flat's monthly collection payment now to keep service active."}
@@ -338,8 +410,8 @@ export default function CommitteeDashboard() {
             to="/committee/garbage"
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs ${
               isCurrentMonthPaid
-                ? "bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200"
-                : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                ? "bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-slate-700 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
             }`}
           >
             <FaRecycle className="text-xs" />
@@ -349,66 +421,17 @@ export default function CommitteeDashboard() {
         </div>
       </div>
 
-      {/* Financial Collection Operations (if collection powers assigned) */}
-      {canCollect && (
-        <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-5 space-y-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
-            <div>
-              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                <FaMoneyBillWave className="text-emerald-600" />
-                Fee Collection Operations
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Authorized society fee collection counter for Garbage and Special Campaign funds
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link
-                to="/committee/history"
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
-              >
-                <FaReceipt /> My Receipts
-              </Link>
-              <Link
-                to="/committee/collect"
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5"
-              >
-                <FaMoneyBillWave /> Collect Fees
-              </Link>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-4">
-              <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide">Today's Collections</p>
-              <p className="text-2xl font-black text-emerald-700 mt-1 font-mono">₹{myTodayTotal.toLocaleString()}</p>
-              <p className="text-[11px] text-emerald-600 mt-0.5">Collected by you today</p>
-            </div>
 
-            <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-4">
-              <p className="text-xs font-semibold text-indigo-800 uppercase tracking-wide">Total Collected by You</p>
-              <p className="text-2xl font-black text-indigo-700 mt-1 font-mono">₹{myLifetimeTotal.toLocaleString()}</p>
-              <p className="text-[11px] text-indigo-600 mt-0.5">Cumulative lifetime collections</p>
-            </div>
-
-            <div className="bg-purple-50/70 border border-purple-200/80 rounded-xl p-4">
-              <p className="text-xs font-semibold text-purple-800 uppercase tracking-wide">Receipts Issued</p>
-              <p className="text-2xl font-black text-purple-700 mt-1 font-mono">{myCollections.length}</p>
-              <p className="text-[11px] text-purple-600 mt-0.5">Transactions recorded by you</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delegated Society Management Portals (if executive powers assigned) */}
+      {/* ─── Delegated Administrative Workspaces ─── */}
       {hasAnyPower && (
-        <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4 transition-colors">
           <div>
-            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <FaShieldAlt className="text-indigo-600" />
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <FaShieldAlt className="text-indigo-600 dark:text-indigo-400" />
               Delegated Administrative Workspaces
             </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Access society management tools granted to your committee profile by the administrator
             </p>
           </div>
@@ -417,13 +440,13 @@ export default function CommitteeDashboard() {
             {permissions.canManageResidents && (
               <Link
                 to="/committee/residents"
-                className="p-4 rounded-xl border border-purple-200 bg-purple-50/40 hover:bg-purple-50 transition group flex items-start justify-between"
+                className="p-4 rounded-2xl border border-purple-200 dark:border-purple-800/50 bg-purple-50/40 dark:bg-purple-950/20 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition group flex items-start justify-between"
               >
                 <div>
-                  <p className="font-bold text-sm text-purple-950 flex items-center gap-2">
-                    <FaUsers className="text-purple-600" /> Society Residents
+                  <p className="font-bold text-sm text-purple-950 dark:text-purple-200 flex items-center gap-2">
+                    <FaUsers className="text-purple-600 dark:text-purple-400" /> Society Residents
                   </p>
-                  <p className="text-xs text-purple-700 mt-1">Manage society residents, flats, and records</p>
+                  <p className="text-xs text-purple-700 dark:text-purple-400 mt-1">Manage society residents, flats, and records</p>
                 </div>
                 <FaArrowRight className="text-purple-400 group-hover:translate-x-1 transition text-xs mt-1" />
               </Link>
@@ -432,13 +455,13 @@ export default function CommitteeDashboard() {
             {permissions.canManageCollectors && (
               <Link
                 to="/committee/collectors"
-                className="p-4 rounded-xl border border-blue-200 bg-blue-50/40 hover:bg-blue-50 transition group flex items-start justify-between"
+                className="p-4 rounded-2xl border border-blue-200 dark:border-blue-800/50 bg-blue-50/40 dark:bg-blue-950/20 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition group flex items-start justify-between"
               >
                 <div>
-                  <p className="font-bold text-sm text-blue-950 flex items-center gap-2">
-                    <FaIdCard className="text-blue-600" /> Field Collectors
+                  <p className="font-bold text-sm text-blue-950 dark:text-blue-200 flex items-center gap-2">
+                    <FaIdCard className="text-blue-600 dark:text-blue-400" /> Field Collectors
                   </p>
-                  <p className="text-xs text-blue-700 mt-1">Manage collector accounts and status</p>
+                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">Manage collector accounts and status</p>
                 </div>
                 <FaArrowRight className="text-blue-400 group-hover:translate-x-1 transition text-xs mt-1" />
               </Link>
@@ -447,13 +470,13 @@ export default function CommitteeDashboard() {
             {permissions.canManageRegistrations && (
               <Link
                 to="/committee/registrations"
-                className="p-4 rounded-xl border border-pink-200 bg-pink-50/40 hover:bg-pink-50 transition group flex items-start justify-between"
+                className="p-4 rounded-2xl border border-pink-200 dark:border-pink-800/50 bg-pink-50/40 dark:bg-pink-950/20 hover:bg-pink-50 dark:hover:bg-pink-950/30 transition group flex items-start justify-between"
               >
                 <div>
-                  <p className="font-bold text-sm text-pink-950 flex items-center gap-2">
-                    <FaUserCheck className="text-pink-600" /> Registrations
+                  <p className="font-bold text-sm text-pink-950 dark:text-pink-200 flex items-center gap-2">
+                    <FaUserCheck className="text-pink-600 dark:text-pink-400" /> Registrations
                   </p>
-                  <p className="text-xs text-pink-700 mt-1">Review and approve new resident signups</p>
+                  <p className="text-xs text-pink-700 dark:text-pink-400 mt-1">Review and approve new resident signups</p>
                 </div>
                 <FaArrowRight className="text-pink-400 group-hover:translate-x-1 transition text-xs mt-1" />
               </Link>
@@ -462,13 +485,13 @@ export default function CommitteeDashboard() {
             {permissions.canManageProfileRequests && (
               <Link
                 to="/committee/profile-requests"
-                className="p-4 rounded-xl border border-cyan-200 bg-cyan-50/40 hover:bg-cyan-50 transition group flex items-start justify-between"
+                className="p-4 rounded-2xl border border-cyan-200 dark:border-cyan-800/50 bg-cyan-50/40 dark:bg-cyan-950/20 hover:bg-cyan-50 dark:hover:bg-cyan-950/30 transition group flex items-start justify-between"
               >
                 <div>
-                  <p className="font-bold text-sm text-cyan-950 flex items-center gap-2">
-                    <FaUser className="text-cyan-600" /> Profile Requests
+                  <p className="font-bold text-sm text-cyan-950 dark:text-cyan-200 flex items-center gap-2">
+                    <FaUser className="text-cyan-600 dark:text-cyan-400" /> Profile Requests
                   </p>
-                  <p className="text-xs text-cyan-700 mt-1">Verify resident info change requests</p>
+                  <p className="text-xs text-cyan-700 dark:text-cyan-400 mt-1">Verify resident info change requests</p>
                 </div>
                 <FaArrowRight className="text-cyan-400 group-hover:translate-x-1 transition text-xs mt-1" />
               </Link>
@@ -477,114 +500,154 @@ export default function CommitteeDashboard() {
             {permissions.canManageAccountRecovery && (
               <Link
                 to="/committee/account-recovery"
-                className="p-4 rounded-xl border border-rose-200 bg-rose-50/40 hover:bg-rose-50 transition group flex items-start justify-between"
+                className="p-4 rounded-2xl border border-rose-200 dark:border-rose-800/50 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition group flex items-start justify-between"
               >
                 <div>
-                  <p className="font-bold text-sm text-rose-950 flex items-center gap-2">
-                    <FaKey className="text-rose-600" /> Account Recovery
+                  <p className="font-bold text-sm text-rose-950 dark:text-rose-200 flex items-center gap-2">
+                    <FaKey className="text-rose-600 dark:text-rose-400" /> Account Recovery
                   </p>
-                  <p className="text-xs text-rose-700 mt-1">Assist residents with logins & resets</p>
+                  <p className="text-xs text-rose-700 dark:text-rose-400 mt-1">Assist residents with logins & resets</p>
                 </div>
                 <FaArrowRight className="text-rose-400 group-hover:translate-x-1 transition text-xs mt-1" />
               </Link>
             )}
 
-            {canCollect && (
+            {effectivePermissions.canCollectGarbage && (
               <Link
-                to="/committee/collect"
-                className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50 transition group flex items-start justify-between"
+                to="/committee/collect-garbage"
+                className="p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/40 dark:bg-emerald-950/20 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition group flex items-start justify-between"
               >
                 <div>
-                  <p className="font-bold text-sm text-emerald-950 flex items-center gap-2">
-                    <FaMoneyBillWave className="text-emerald-600" /> Fee Counter
+                  <p className="font-bold text-sm text-emerald-950 dark:text-emerald-200 flex items-center gap-2">
+                    <FaTrashAlt className="text-emerald-600 dark:text-emerald-400" /> GC Collection
                   </p>
-                  <p className="text-xs text-emerald-700 mt-1">Collect Garbage & Special Funds</p>
+                  <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
+                    Collect monthly society garbage fees and issue official receipts
+                  </p>
                 </div>
                 <FaArrowRight className="text-emerald-400 group-hover:translate-x-1 transition text-xs mt-1" />
               </Link>
             )}
+
+            {effectivePermissions.canCollectSpecial && (
+              <Link
+                to="/committee/collect-special"
+                className="p-4 rounded-2xl border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/40 dark:bg-indigo-950/20 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition group flex items-start justify-between"
+              >
+                <div>
+                  <p className="font-bold text-sm text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
+                    <FaHandHoldingHeart className="text-indigo-600 dark:text-indigo-400" /> Special Collection
+                  </p>
+                  <p className="text-xs text-indigo-700 dark:text-indigo-400 mt-1">
+                    Collect festival drives, events, and special campaign contributions
+                  </p>
+                </div>
+                <FaArrowRight className="text-indigo-400 group-hover:translate-x-1 transition text-xs mt-1" />
+              </Link>
+            )}
+
+            {effectivePermissions.canViewGarbageReports && (
+              <Link
+                to="/committee/garbage"
+                className="p-4 rounded-2xl border border-teal-200 dark:border-teal-800/50 bg-teal-50/40 dark:bg-teal-950/20 hover:bg-teal-50 dark:hover:bg-teal-950/30 transition group flex items-start justify-between"
+              >
+                <div>
+                  <p className="font-bold text-sm text-teal-950 dark:text-teal-200 flex items-center gap-2">
+                    <FaChartBar className="text-teal-600 dark:text-teal-400" /> Society Analytics
+                  </p>
+                  <p className="text-xs text-teal-700 dark:text-teal-400 mt-1">Macro collection analytics & defaulters report</p>
+                </div>
+                <FaArrowRight className="text-teal-400 group-hover:translate-x-1 transition text-xs mt-1" />
+              </Link>
+            )}
+
           </div>
         </div>
       )}
 
-      {/* Mandatory Notifications & Recent Society Updates */}
+      {/* ─── Mandatory Notifications & Recent Society Updates ─── */}
       <RecentUpdatesCard />
 
-      {/* Stats */}
+      {/* ─── Key Metrics Grid ─── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl shadow-sm p-4 border-l-4 border-indigo-500">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
-              <FaBell className="text-indigo-600" />
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm p-5 border border-slate-200/80 dark:border-slate-800 border-l-4 border-l-indigo-500 transition-colors">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 bg-indigo-50 dark:bg-indigo-950/50 rounded-2xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 text-lg">
+              <FaBell />
             </div>
             <div>
-              <p className="text-xl font-bold">{notices.length}</p>
-              <p className="text-xs text-gray-500">Notices</p>
+              <p className="text-2xl font-black text-slate-900 dark:text-white font-mono">{notices.length}</p>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Notices</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm p-4 border-l-4 border-green-500">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-              <FaCalendarAlt className="text-green-600" />
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm p-5 border border-slate-200/80 dark:border-slate-800 border-l-4 border-l-emerald-500 transition-colors">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 bg-emerald-50 dark:bg-emerald-950/50 rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-lg">
+              <FaCalendarAlt />
             </div>
             <div>
-              <p className="text-xl font-bold">{upcomingEvents.length}</p>
-              <p className="text-xs text-gray-500">Upcoming Events</p>
+              <p className="text-2xl font-black text-slate-900 dark:text-white font-mono">{upcomingEvents.length}</p>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Upcoming Events</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm p-4 border-l-4 border-yellow-500">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center">
-              <FaExclamationCircle className="text-yellow-600" />
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm p-5 border border-slate-200/80 dark:border-slate-800 border-l-4 border-l-amber-500 transition-colors">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 bg-amber-50 dark:bg-amber-950/50 rounded-2xl flex items-center justify-center text-amber-600 dark:text-amber-400 text-lg">
+              <FaExclamationCircle />
             </div>
             <div>
-              <p className="text-xl font-bold">{pendingComplaints.length}</p>
-              <p className="text-xs text-gray-500">Active Complaints</p>
+              <p className="text-2xl font-black text-slate-900 dark:text-white font-mono">{pendingComplaints.length}</p>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Active Complaints</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm p-4 border-l-4 border-purple-500">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-              <FaUsers className="text-purple-600" />
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm p-5 border border-slate-200/80 dark:border-slate-800 border-l-4 border-l-purple-500 transition-colors">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 bg-purple-50 dark:bg-purple-950/50 rounded-2xl flex items-center justify-center text-purple-600 dark:text-purple-400 text-lg">
+              <FaUsers />
             </div>
             <div>
-              <p className="text-xl font-bold">{committee.length}</p>
-              <p className="text-xs text-gray-500">Committee Members</p>
+              <p className="text-2xl font-black text-slate-900 dark:text-white font-mono">{committee.length}</p>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Committee Members</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Two Column */}
+      {/* ─── Two Column: Notices & Events ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Recent Notices */}
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <FaBell className="text-indigo-600" /> Recent Notices
-          </h2>
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 sm:p-6 transition-colors">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <FaBell className="text-indigo-600 dark:text-indigo-400" /> Recent Notices
+            </h2>
+            <Link to="/committee/notices" className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline">
+              View All
+            </Link>
+          </div>
           {recentNotices.length === 0 ? (
-            <p className="text-gray-400 text-sm">No notices yet.</p>
+            <p className="text-slate-400 text-sm py-4 text-center">No notices posted yet.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {recentNotices.map((notice) => (
-                <div key={notice.id} className="flex items-start justify-between p-3 bg-gray-50 rounded-xl">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{notice.title}</p>
-                    <p className="text-xs text-gray-400 mt-1">
+                <div key={notice.id} className="flex items-start justify-between p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{notice.title}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       {notice.category} · {formatDate(notice.createdAt)}
                     </p>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ml-2 ${
-                    notice.priority === "Urgent" ? "bg-red-100 text-red-700" :
-                    notice.priority === "High" ? "bg-orange-100 text-orange-700" :
-                    "bg-blue-100 text-blue-700"
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase shrink-0 ${
+                    notice.priority === "Urgent" ? "bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800" :
+                    notice.priority === "High" ? "bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800" :
+                    "bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800"
                   }`}>
                     {notice.priority}
                   </span>
@@ -595,25 +658,32 @@ export default function CommitteeDashboard() {
         </div>
 
         {/* Upcoming Events */}
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <FaCalendarAlt className="text-green-600" /> Upcoming Events
-          </h2>
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 sm:p-6 transition-colors">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <FaCalendarAlt className="text-emerald-600 dark:text-emerald-400" /> Upcoming Events
+            </h2>
+            <Link to="/committee/events" className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline">
+              View All
+            </Link>
+          </div>
           {upcomingEvents.length === 0 ? (
-            <p className="text-gray-400 text-sm">No upcoming events.</p>
+            <p className="text-slate-400 text-sm py-4 text-center">No upcoming events scheduled.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {upcomingEvents.map((event) => (
-                <div key={event.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                  <div>
-                    <p className="font-medium text-sm">{event.title}</p>
-                    <p className="text-xs text-gray-400 mt-1">
+                <div key={event.id} className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{event.title}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       {event.category} · {new Date(event.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
                       {event.time ? ` at ${event.time}` : ""}
                     </p>
                   </div>
                   {event.venue && (
-                    <span className="text-xs text-gray-400 shrink-0 ml-2">📍 {event.venue}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 shrink-0 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-xl">
+                      📍 {event.venue}
+                    </span>
                   )}
                 </div>
               ))}
@@ -622,45 +692,71 @@ export default function CommitteeDashboard() {
         </div>
       </div>
 
-      {/* Committee Members Quick View */}
-      <div className="bg-white rounded-2xl shadow-sm p-5">
-        <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-          <FaUsers className="text-purple-600" /> Committee Members
-        </h2>
+      {/* ─── Committee Members Directory Preview ─── */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 sm:p-6 transition-colors">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <FaUsers className="text-purple-600 dark:text-purple-400" /> Executive Committee Directory
+          </h2>
+          <Link to="/committee/directory" className="text-xs text-purple-600 dark:text-purple-400 font-bold hover:underline">
+            Full Directory
+          </Link>
+        </div>
         {committee.length === 0 ? (
-          <p className="text-gray-400 text-sm">No committee members added yet.</p>
+          <p className="text-slate-400 text-sm py-4 text-center">No committee members added yet.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {committee.map((member) => (
               <div
                 key={member.id}
-                className={`flex items-center gap-3 p-3 rounded-xl ${
-                  member.id === user?.uid ? "bg-indigo-50 border border-indigo-200" : "bg-gray-50"
+                className={`flex items-center gap-3 p-3.5 rounded-2xl transition border ${
+                  member.id === user?.uid
+                    ? "bg-indigo-50/70 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800/60 ring-1 ring-indigo-400/20"
+                    : "bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800"
                 }`}
               >
-                {member.profilePhotoUrl ? (
-                  <img
-                    src={member.profilePhotoUrl}
-                    alt={member.name}
-                    className="w-10 h-10 rounded-full object-cover shrink-0"
-                    onError={(e) => { e.target.style.display = "none"; e.target.nextSibling && (e.target.nextSibling.style.display = "flex"); }}
-                  />
-                ) : null}
-                <div
-                  className={`w-10 h-10 rounded-full bg-indigo-100 items-center justify-center text-indigo-700 font-bold shrink-0 ${
-                    member.profilePhotoUrl ? "hidden" : "flex"
-                  }`}
-                >
-                  {member.name?.charAt(0) || "?"}
-                </div>
-                <div className="min-w-0">
-                  <p className="font-medium text-sm truncate">
+              {(() => {
+                const photo = member.profilePhotoUrl || (
+                  (member.designation === "President" || member.name?.toLowerCase().includes("dharmendra"))
+                    ? "/committee/president.jpg"
+                    : (member.designation === "Vice President" || member.name?.toLowerCase().includes("ankit"))
+                    ? "/committee/ankit-chaudhary.png"
+                    : (member.designation === "Vice Treasurer" || member.name?.toLowerCase().includes("vinod"))
+                    ? "/committee/vinod-kumar.jpg"
+                    : (member.designation === "Spokesperson" || member.name?.toLowerCase().includes("narendra") || member.name?.toLowerCase().includes("dhama"))
+                    ? "/committee/narendra-dhama.png"
+                    : (member.designation === "Advisor" || member.name?.toLowerCase().includes("dinesh"))
+                    ? "/committee/dinesh-kumar.png"
+                    : null
+                );
+                return (
+                  <>
+                    {photo ? (
+                      <img
+                        src={photo}
+                        alt={member.name}
+                        className="w-11 h-11 rounded-2xl object-cover shrink-0 border border-slate-200 dark:border-slate-700"
+                        onError={(e) => { e.target.style.display = "none"; e.target.nextSibling && (e.target.nextSibling.style.display = "flex"); }}
+                      />
+                    ) : null}
+                    <div
+                      className={`w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 items-center justify-center text-white font-bold shrink-0 ${
+                        photo ? "hidden" : "flex"
+                      }`}
+                    >
+                      {member.name?.charAt(0) || "?"}
+                    </div>
+                  </>
+                );
+              })()}
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-sm text-slate-900 dark:text-white truncate">
                     {member.name}
                     {member.id === user?.uid && (
-                      <span className="text-indigo-500 text-xs ml-1">(You)</span>
+                      <span className="text-indigo-600 dark:text-indigo-400 text-xs ml-1 font-extrabold">(You)</span>
                     )}
                   </p>
-                  <p className="text-xs text-gray-500">{member.designation}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{member.designation}</p>
                 </div>
               </div>
             ))}

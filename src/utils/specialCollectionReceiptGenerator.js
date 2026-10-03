@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { formatResidentFloor } from "../services/propertyService";
 
 /**
  * Generate and download an official PDF receipt for Special Collection contribution.
@@ -19,7 +20,23 @@ import autoTable from "jspdf-autotable";
  * @param {string} [data.confirmedAt] - Verification timestamp string
  * @param {string} [data.confirmedByName] - Admin who verified
  */
-export function generateSpecialCollectionReceipt(data) {
+export function generateSpecialCollectionReceipt(rawData, residentInfo = null) {
+  if (!rawData) return;
+
+  const data = residentInfo
+    ? {
+        ...residentInfo,
+        ...rawData,
+        plotNumber: rawData.plotNumber || residentInfo.plotNumber || residentInfo.plot || "",
+        floor: rawData.floor || residentInfo.floor || "",
+        floorCode: rawData.floorCode || residentInfo.floorCode || "",
+        unitNumber: rawData.unitNumber || residentInfo.unitNumber || residentInfo.unit || "",
+        personType: rawData.personType || residentInfo.personType || residentInfo.occupantType || "",
+        block: rawData.block || residentInfo.block || "",
+        flatNumber: rawData.flatNumber || rawData.flat || residentInfo.flat || residentInfo.flatNumber || "",
+      }
+    : rawData;
+
   const doc = new jsPDF();
 
   // Header Banner
@@ -56,8 +73,23 @@ export function generateSpecialCollectionReceipt(data) {
     ["Contributor Category", data.contributorType || "Resident"],
   ];
 
-  if (data.flatNumber || data.block) {
-    tableRows.push(["Flat & Block", `${data.flatNumber || "—"} (${data.block || "—"})`]);
+  if (data.flatNumber || data.flat) {
+    tableRows.push(["Flat / Unit", data.flatNumber || data.flat]);
+  }
+  if (data.block) {
+    tableRows.push(["Block", data.block]);
+  }
+  if (data.plotNumber && data.plotNumber !== (data.flatNumber || data.flat)) {
+    tableRows.push(["Plot Number", `Plot ${data.plotNumber}`]);
+  }
+  if (data.floor) {
+    tableRows.push(["Floor", formatResidentFloor(data.floor)]);
+  }
+  if (data.unitNumber) {
+    tableRows.push(["Unit Number", `Unit ${data.unitNumber}`]);
+  }
+  if (data.personType) {
+    tableRows.push(["Resident Type", data.personType]);
   }
 
   if (data.mobileNumber) {

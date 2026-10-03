@@ -9,7 +9,9 @@ import toast from "react-hot-toast";
 
 import { useAuth } from "../../context/AuthContext";
 import { useGarbage } from "../../context/GarbageContext";
+import { useResidents } from "../../context/ResidentContext";
 import { printPaymentReceipt } from "../../utils/printReceiptHelper";
+import PrinterQuickAction from "../../components/common/PrinterQuickAction";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -19,10 +21,27 @@ const MONTHS = [
 export default function GarbageCollectorHistory() {
   const { user } = useAuth();
   const { garbageBills } = useGarbage();
+  const { residents = [] } = useResidents() || {};
 
   const [search, setSearch] = useState("");
   const [monthFilter, setMonthFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
+
+  function enrichBill(b) {
+    const res = residents.find(
+      (r) =>
+        (b.residentId && r.id === b.residentId) ||
+        (b.flat && (r.flat === b.flat || r.flatNumber === b.flat))
+    );
+    return {
+      ...b,
+      plotNumber: b.plotNumber || res?.plotNumber || "",
+      floor: b.floor || res?.floor || "",
+      unitNumber: b.unitNumber || res?.unitNumber || "",
+      personType: b.personType || res?.personType || "",
+      block: b.block || res?.block || "",
+    };
+  }
 
   // My collections
   const myCollections = useMemo(() => {
@@ -48,14 +67,19 @@ export default function GarbageCollectorHistory() {
   return (
     <div className="space-y-6">
 
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-3">
-          <FaHistory className="text-emerald-600" />
-          Garbage Collection History
-        </h1>
-        <p className="text-gray-500">
-          {myCollections.length} collections • ₹{totalAmount.toLocaleString()} total
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-3">
+            <FaHistory className="text-emerald-600" />
+            Garbage Collection History
+          </h1>
+          <p className="text-gray-500">
+            {myCollections.length} collections • ₹{totalAmount.toLocaleString()} total
+          </p>
+        </div>
+        <div>
+          <PrinterQuickAction />
+        </div>
       </div>
 
       {/* Filters */}
@@ -108,17 +132,18 @@ export default function GarbageCollectorHistory() {
               <button
                 type="button"
                 onClick={() => {
+                  const eb = enrichBill(b);
                   printPaymentReceipt({
-                    ...b,
-                    totalPaidAmount: b.paidAmount || b.amount,
-                    paymentMethod: b.paymentMethod || "Cash",
-                    paymentDate: b.paymentDate || new Date().toLocaleDateString("en-IN"),
-                    receiptNumber: b.paymentId || ("REC-" + b.id),
+                    ...eb,
+                    totalPaidAmount: eb.paidAmount || eb.amount,
+                    paymentMethod: eb.paymentMethod || "Cash",
+                    paymentDate: eb.paymentDate || new Date().toLocaleDateString("en-IN"),
+                    receiptNumber: eb.paymentId || ("REC-" + eb.id),
                     collector: user?.name || "Collector",
                   });
-                  toast.success(`Printing receipt for Flat ${b.flat}...`);
+                  toast.success(`Printing receipt for Flat ${eb.flat || eb.unitNumber}...`);
                 }}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-xs active:scale-95 cursor-pointer shrink-0"
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-xs active:scale-95 cursor-pointer shrink-0"
                 title="Print Official Payment Receipt"
               >
                 <FaPrint className="text-[11px]" />

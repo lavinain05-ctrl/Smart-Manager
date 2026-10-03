@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { FaEdit, FaTrash, FaRecycle, FaKey, FaBan } from "react-icons/fa";
+import { FaEdit, FaTrash, FaRecycle, FaKey, FaBan, FaEye } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import { updateGarbageStatus } from "../../services/residentService";
@@ -19,6 +19,7 @@ export default function ResidentsTable({
   payments = [],
   bills = [],
   gcMonthlyStats = {},
+  onViewDetails,
   onEdit,
   onDelete,
   onResetPassword,
@@ -159,9 +160,25 @@ export default function ResidentsTable({
                 key={resident.id}
                 className="border-t hover:bg-gray-50 transition"
               >
-                <td className="p-4 font-semibold">{resident.flat}</td>
+                <td className="p-4 font-semibold">
+                  <button
+                    onClick={() => onViewDetails && onViewDetails(resident)}
+                    className="font-bold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer text-left"
+                    title="Click to view complete resident details"
+                  >
+                    {resident.flat}
+                  </button>
+                </td>
 
-                <td className="p-4">{resident.owner}</td>
+                <td className="p-4">
+                  <button
+                    onClick={() => onViewDetails && onViewDetails(resident)}
+                    className="font-medium text-slate-800 hover:text-blue-700 hover:underline cursor-pointer text-left"
+                    title="Click to view complete resident details"
+                  >
+                    {resident.owner}
+                  </button>
+                </td>
 
                 <td className="p-4">{resident.mobile}</td>
 
@@ -289,7 +306,15 @@ export default function ResidentsTable({
                 </td>
 
                 <td className="p-4">
-                  <div className="flex justify-center items-center gap-3">
+                  <div className="flex justify-center items-center gap-2 sm:gap-3">
+                    <button
+                      onClick={() => onViewDetails && onViewDetails(resident)}
+                      title="View Complete Resident Details & Profile"
+                      className="text-teal-600 hover:text-teal-800 p-1.5 rounded-lg hover:bg-teal-50 transition text-sm cursor-pointer"
+                    >
+                      <FaEye />
+                    </button>
+
                     <button
                       onClick={() => onBlock && onBlock(resident)}
                       title={

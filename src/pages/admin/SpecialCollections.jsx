@@ -526,6 +526,25 @@ export default function SpecialCollections() {
     }));
   }
 
+  function enrichPayment(p) {
+    if (!p) return p;
+    const res = residents.find(
+      (r) =>
+        (p.residentId && r.id === p.residentId) ||
+        (p.flatNumber && (r.flatNumber === p.flatNumber || r.flat === p.flatNumber)) ||
+        (p.flat && (r.flat === p.flat || r.flatNumber === p.flat))
+    );
+    return {
+      ...p,
+      plotNumber: p.plotNumber || res?.plotNumber || "",
+      floor: p.floor || res?.floor || "",
+      floorCode: p.floorCode || res?.floorCode || "",
+      unitNumber: p.unitNumber || res?.unitNumber || "",
+      personType: p.personType || res?.personType || "",
+      block: p.block || res?.block || "",
+    };
+  }
+
   function handleCashResidentChange(residentId) {
     if (!residentId) {
       setCashFormData((prev) => ({
@@ -534,6 +553,12 @@ export default function SpecialCollections() {
         contributorName: "",
         flatNumber: "",
         block: "",
+        plotNumber: "",
+        floor: "",
+        floorCode: "",
+        unitNumber: "",
+        personType: "",
+        propertyId: "",
         mobileNumber: "",
       }));
       return;
@@ -547,6 +572,12 @@ export default function SpecialCollections() {
         contributorName: res.owner || res.name || "Resident",
         flatNumber: res.flat || res.flatNumber || "",
         block: res.block || "",
+        plotNumber: res.plotNumber || "",
+        floor: res.floor || "",
+        floorCode: res.floorCode || "",
+        unitNumber: res.unitNumber || "",
+        personType: res.personType || "",
+        propertyId: res.propertyId || "",
         mobileNumber: res.mobile || res.mobileNumber || res.phone || "",
       }));
     }
@@ -1923,23 +1954,29 @@ export default function SpecialCollections() {
                                 {isConfirmed && (
                                   <>
                                     <button
-                                      onClick={() =>
+                                      onClick={() => {
+                                        const ep = enrichPayment(p);
                                         printPaymentReceipt({
-                                          receiptNumber: p.receiptNumber,
+                                          ...ep,
+                                          receiptNumber: ep.receiptNumber,
                                           collectionName: selectedCampaignForPayments.name,
                                           purpose: selectedCampaignForPayments.purpose,
-                                          contributorName: p.contributorName,
-                                          contributorType: p.contributorType === "external" ? "External Contributor" : "Resident",
-                                          flatNumber: p.flatNumber,
-                                          block: p.block,
-                                          mobileNumber: p.mobileNumber,
-                                          amount: p.amount,
-                                          paymentMethod: p.paymentMethod || p.paymentMode || "Online",
-                                          paymentDate: p.paymentDate,
-                                          paymentTime: p.paymentTime,
-                                          collectorName: p.collectorName || p.confirmedByName || "Society Admin",
-                                        })
-                                      }
+                                          contributorName: ep.contributorName,
+                                          contributorType: ep.contributorType === "external" ? "External Contributor" : "Resident",
+                                          flatNumber: ep.flatNumber,
+                                          block: ep.block,
+                                          plotNumber: ep.plotNumber,
+                                          floor: ep.floor,
+                                          unitNumber: ep.unitNumber,
+                                          personType: ep.personType,
+                                          mobileNumber: ep.mobileNumber,
+                                          amount: ep.amount,
+                                          paymentMethod: ep.paymentMethod || ep.paymentMode || "Online",
+                                          paymentDate: ep.paymentDate,
+                                          paymentTime: ep.paymentTime,
+                                          collectorName: ep.collectorName || ep.confirmedByName || "Society Admin",
+                                        });
+                                      }}
                                       className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded transition cursor-pointer"
                                       title="Print Receipt"
                                     >
@@ -1947,22 +1984,28 @@ export default function SpecialCollections() {
                                     </button>
 
                                     <button
-                                      onClick={() =>
+                                      onClick={() => {
+                                        const ep = enrichPayment(p);
                                         generateSpecialCollectionReceipt({
-                                          receiptNumber: p.receiptNumber,
+                                          ...ep,
+                                          receiptNumber: ep.receiptNumber,
                                           collectionName: selectedCampaignForPayments.name,
                                           purpose: selectedCampaignForPayments.purpose,
-                                          contributorName: p.contributorName,
-                                          contributorType: p.contributorType === "external" ? "External Contributor" : "Resident",
-                                          flatNumber: p.flatNumber,
-                                          block: p.block,
-                                          mobileNumber: p.mobileNumber,
-                                          amount: p.amount,
-                                          utr: p.utr,
-                                          paymentDate: p.paymentDate,
-                                          confirmedByName: p.confirmedByName || "Society Admin",
-                                        })
-                                      }
+                                          contributorName: ep.contributorName,
+                                          contributorType: ep.contributorType === "external" ? "External Contributor" : "Resident",
+                                          flatNumber: ep.flatNumber,
+                                          block: ep.block,
+                                          plotNumber: ep.plotNumber,
+                                          floor: ep.floor,
+                                          unitNumber: ep.unitNumber,
+                                          personType: ep.personType,
+                                          mobileNumber: ep.mobileNumber,
+                                          amount: ep.amount,
+                                          utr: ep.utr,
+                                          paymentDate: ep.paymentDate,
+                                          confirmedByName: ep.confirmedByName || "Society Admin",
+                                        });
+                                      }}
                                       className="p-1.5 text-teal-600 hover:bg-teal-50 rounded transition cursor-pointer"
                                       title="Download Receipt PDF"
                                     >
@@ -2597,13 +2640,13 @@ export default function SpecialCollections() {
 
             <div className="flex flex-col sm:flex-row gap-2 pt-2">
               <button
-                onClick={() => printPaymentReceipt(cashReceiptModal)}
+                onClick={() => printPaymentReceipt(enrichPayment(cashReceiptModal))}
                 className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
               >
                 <FaPrint /> Print Receipt
               </button>
               <button
-                onClick={() => generateSpecialCollectionReceipt(cashReceiptModal)}
+                onClick={() => generateSpecialCollectionReceipt(enrichPayment(cashReceiptModal))}
                 className="flex-1 py-2.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 active:scale-95 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
               >
                 <FaFileDownload /> Download PDF

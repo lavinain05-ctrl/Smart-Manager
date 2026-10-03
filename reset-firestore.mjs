@@ -34,9 +34,14 @@ const auth = getAuth(app);
 // Collections to wipe completely
 const WIPE_COLLECTIONS = [
   "residents",
+  "familyMembers",
+  "committee",
+  "collectors",
+  "properties",
   "bills",
   "payments",
   "paymentAudit",
+  "receipts",
   "garbageAccounts",
   "garbageBills",
   "garbageCollections",
@@ -45,19 +50,26 @@ const WIPE_COLLECTIONS = [
   "garbageRequests",
   "garbageCollectionLogs",
   "garbageReports",
+  "specialCollections",
+  "specialCollectionPayments",
+  "specialCollectionAudit",
+  "utrLookup",
   "registrationRequests",
+  "profileUpdateRequests",
+  "recoveryRequests",
   "notifications",
   "notices",
   "complaints",
+  "suggestions",
   "events",
   "activities",
-  "activityLogs",
   "emergencyContacts",
+  "activeSessions",
+  "activityLogs",
+  "portalLogins",
+  "blockedAccounts",
   "deletedAccounts",
   "flats",
-  "committee",
-  "collectors",
-  "profileUpdateRequests",
 ];
 
 function ask(question) {
@@ -179,6 +191,32 @@ async function main() {
     console.log(`  users: ${deleted} deleted, ${kept} kept (your admin account) ✅`);
   } catch (err) {
     console.log(`  ❌ users: ${err.message}`);
+  }
+
+  console.log("");
+
+  // 3. Clean authLookup collection (keep admin phone)
+  console.log("── Cleaning authLookup collection ──");
+  try {
+    const ref = collection(db, "authLookup");
+    const snapshot = await getDocs(ref);
+    let deleted = 0;
+    let kept = 0;
+
+    for (const d of snapshot.docs) {
+      const data = d.data();
+      if (data.uid === adminUid || data.authEmail?.includes("admin") || data.authEmail === email) {
+        kept++;
+        continue;
+      }
+      await deleteDoc(doc(db, "authLookup", d.id));
+      deleted++;
+    }
+
+    totalDeleted += deleted;
+    console.log(`  authLookup: ${deleted} freed, ${kept} admin kept ✅`);
+  } catch (err) {
+    console.log(`  ❌ authLookup: ${err.message}`);
   }
 
   console.log("");

@@ -18,6 +18,7 @@ export default function SearchBar({
     if (filters.gc !== "all") count++;
     if (filters.payment !== "all") count++;
     if (filters.block !== "all") count++;
+    if (filters.personType && filters.personType !== "all") count++;
     if (filters.addedBy && filters.addedBy !== "all") count++;
     return count;
   }, [filters]);
@@ -27,7 +28,7 @@ export default function SearchBar({
   }
 
   function resetFilters() {
-    onFilterChange({ status: "all", gc: "all", payment: "all", block: "all", addedBy: "all" });
+    onFilterChange({ status: "all", gc: "all", payment: "all", block: "all", addedBy: "all", personType: "all" });
   }
 
   return (
@@ -67,7 +68,21 @@ export default function SearchBar({
       {/* Filter Panel */}
       {showFilters && (
         <div className="border-t pt-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+
+            {/* Resident Type (Owner vs Rented) Filter */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Resident Type</label>
+              <select
+                value={filters.personType || "all"}
+                onChange={(e) => handleChange("personType", e.target.value)}
+                className="w-full border rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-medium"
+              >
+                <option value="all">All (Owner & Rented)</option>
+                <option value="OWNER">Property Owner</option>
+                <option value="RENTED">Rented</option>
+              </select>
+            </div>
 
             {/* Status Filter */}
             <div>

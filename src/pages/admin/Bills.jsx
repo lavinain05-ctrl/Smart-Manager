@@ -19,6 +19,7 @@ import { subscribeSettings } from "../../services/settingsService";
 import { isGcParticipating } from "../../services/statisticsService";
 import { syncBlockWiseMonthlyBills } from "../../utils/reportSyncService";
 import { generateBlockWiseMonthlyBillsPDF } from "../../utils/printReportHelper";
+import { isPriorToCollectionStart } from "../../utils/billingCycle";
 
 import MonthSelector from "../../components/common/MonthSelector";
 import BillSummaryCards from "../../components/bills/BillSummaryCards";
@@ -66,6 +67,9 @@ export default function Bills() {
   }, [bills, rawBlocks]);
 
   const monthlyBills = useMemo(() => {
+    if (isPriorToCollectionStart(selectedMonth, selectedYear)) {
+      return [];
+    }
     const billMap = new Map();
 
     // 1. Existing bills from Firestore bills collection
@@ -265,7 +269,7 @@ export default function Bills() {
           <div className="flex items-center gap-3">
             <button
               onClick={generateBills}
-              disabled={loading}
+              disabled={loading || isPriorToCollectionStart(selectedMonth, selectedYear)}
               className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white px-8 py-3.5 rounded-xl font-bold shadow-lg shadow-emerald-500/30 transition active:scale-95 text-sm"
             >
               {loading ? "Generating Bills..." : "Generate Monthly Bills"}

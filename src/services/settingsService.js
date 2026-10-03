@@ -17,12 +17,15 @@ const defaultSettings = {
   officeTiming: "",
   supportEmail: "",
   supportPhone: "",
-  // Bank
+  // Bank & Payment Gateway
   bankName: "",
   bankAccount: "",
   bankIfsc: "",
   bankBranch: "",
   upiId: "",
+  accountHolderName: "",
+  razorpayKeyId: "",
+  enableOnlinePayments: true,
   // Society
   societyRules: "",
   codeOfConduct: "",

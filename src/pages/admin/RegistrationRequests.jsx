@@ -34,6 +34,13 @@ import { useBlockFlat } from "../../context/BlockFlatContext";
 import { useSettings } from "../../context/SettingsContext";
 import { useAuth } from "../../context/AuthContext";
 import Pagination from "../../components/common/Pagination";
+import {
+  normalizePlotNumber,
+  normalizeFloor,
+  normalizeUnitNumber,
+  formatPropertyDisplay,
+  AVAILABLE_FLOORS,
+} from "../../services/propertyService";
 
 import {
   addDoc,
@@ -64,11 +71,14 @@ export default function RegistrationRequests() {
   const [charge, setCharge] = useState("");
   const [rejectReason, setRejectReason] = useState("");
 
-  // Block/flat override state for approval
+  // Canonical Property override state for approval
   const [approveBlockId, setApproveBlockId] = useState("");
   const [approveBlock, setApproveBlock] = useState("");
+  const [approvePlot, setApprovePlot] = useState("");
+  const [approveFloor, setApproveFloor] = useState("Ground Floor");
+  const [approveUnit, setApproveUnit] = useState("");
+  const [approvePersonType, setApprovePersonType] = useState("OWNER");
   const [approveFlat, setApproveFlat] = useState("");
-  const [approveFloor, setApproveFloor] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
@@ -91,43 +101,61 @@ export default function RegistrationRequests() {
   const approvedCount = allRequests.filter((r) => r.status === "approved").length;
   const rejectedCount = allRequests.filter((r) => r.status === "rejected").length;
 
-  // Duplicate detection — uses block + floor + flat
+  // Canonical Property duplicate & occupancy detection
   function getDuplicateWarnings(req) {
     const warnings = [];
     const reqUid = req.uid || req.id;
+    const reqPlot = normalizePlotNumber(req.plotNumber || req.flat || "");
+    const reqFloorObj = normalizeFloor(req.floor);
+    const reqUnit = normalizeUnitNumber(req.unitNumber || "");
+    const reqPersonType = (req.personType || "OWNER").toUpperCase();
+    const reqBlock = (req.block || "").trim().toLowerCase();
 
-    // Flat duplicate check (only if flat and block are provided)
-    const reqFlat = (req.flat || "").trim().toUpperCase();
-    const reqBlock = (req.block || "").trim().toUpperCase();
-    const reqFloor = (req.floor || "").trim().toUpperCase();
-    if (reqFlat && reqBlock) {
-      const dupFlat = residents.find(
+    if (reqPlot) {
+      // Find residents in same block, plot, and floor
+      const samePropertyResidents = residents.filter(
         (r) =>
           r.id !== reqUid &&
-          (r.flat || "").trim().toUpperCase() === reqFlat &&
-          (r.block || "").trim().toUpperCase() === reqBlock &&
-          ((r.floor || "").trim().toUpperCase() === reqFloor || (!r.floor && !reqFloor)) &&
+          (r.block || "").trim().toLowerCase() === reqBlock &&
+          normalizePlotNumber(r.plotNumber || r.flat || r.flatNumber || "") === reqPlot &&
+          normalizeFloor(r.floor).code === reqFloorObj.code &&
+          normalizeUnitNumber(r.unitNumber) === reqUnit &&
           (r.status || "").toLowerCase() !== "rejected"
       );
-      if (dupFlat) {
-        warnings.push(`Flat ${req.flat} Floor ${req.floor || "—"} Block ${req.block} already assigned to ${dupFlat.owner || dupFlat.name || "another resident"}`);
+
+      if (samePropertyResidents.length > 0) {
+        const existingOwner = samePropertyResidents.find(
+          (r) => (r.personType || "OWNER").toUpperCase() === "OWNER"
+        );
+
+        if (reqPersonType === "OWNER" && existingOwner) {
+          warnings.push(
+            `Property Block ${req.block}, Plot ${reqPlot}, ${reqFloorObj.label}${reqUnit ? `, Unit ${reqUnit}` : ""} already has a registered Owner (${existingOwner.owner || existingOwner.name}). Multiple owners require review.`
+          );
+        } else if ((reqPersonType === "TENANT" || reqPersonType === "RENTED") && existingOwner) {
+          warnings.push(
+            `ℹ️ Note: Existing Owner on this property is ${existingOwner.owner || existingOwner.name}. Approving will register this applicant as Rented.`
+          );
+        } else {
+          warnings.push(
+            `Property Block ${req.block}, Plot ${reqPlot}, ${reqFloorObj.label}${reqUnit ? `, Unit ${reqUnit}` : ""} already occupied by ${samePropertyResidents[0].owner || samePropertyResidents[0].name}.`
+          );
+        }
       }
     }
 
-    // Mobile duplicate check (only if mobile is provided)
+    // Mobile duplicate check
     const reqMobile = (req.mobile || "").trim();
     if (reqMobile) {
       const dupMobile = residents.find(
-        (r) =>
-          r.id !== reqUid &&
-          (r.mobile || "").trim() === reqMobile
+        (r) => r.id !== reqUid && (r.mobile || "").trim() === reqMobile
       );
       if (dupMobile) {
         warnings.push(`Mobile ${req.mobile} already belongs to ${dupMobile.owner || dupMobile.name || "another resident"}`);
       }
     }
 
-    // Email duplicate check (ONLY if email is provided and non-empty)
+    // Email duplicate check
     const reqEmail = (req.email || "").trim().toLowerCase();
     if (reqEmail) {
       const dupEmail = residents.find(
@@ -176,12 +204,25 @@ export default function RegistrationRequests() {
     if (!approveModal) return;
     setLoadingId(approveModal.id);
     try {
-      await approveRegistration(approveModal.id, approveModal, charge, {
-        block: approveBlock || approveModal.block,
-        blockId: approveBlockId || approveModal.blockId || "",
-        flat: approveFlat || approveModal.flat,
-        floor: approveFloor || approveModal.floor || "",
-      });
+      await approveRegistration(
+        approveModal.id,
+        approveModal,
+        charge,
+        {
+          block: approveBlock || approveModal.block,
+          blockId: approveBlockId || approveModal.blockId || "",
+          plotNumber: approvePlot || approveModal.plotNumber || approveModal.flat,
+          floor: approveFloor || approveModal.floor || "Ground Floor",
+          unitNumber: approveUnit !== undefined ? approveUnit : (approveModal.unitNumber || ""),
+          personType: approvePersonType || approveModal.personType || "OWNER",
+          flat: approveFlat || approveModal.flat,
+        },
+        {
+          uid: user?.uid || "",
+          name: user?.name || "Admin",
+          role: "admin",
+        }
+      );
 
       // Notification
       await addDoc(collection(db, "notifications"), {
@@ -201,7 +242,7 @@ export default function RegistrationRequests() {
         performedByName: "Admin",
         targetId: approveModal.uid || approveModal.id,
         targetName: approveModal.name,
-        details: `Flat: ${approveModal.flat}, Block: ${approveModal.block}, Charge: ₹${charge || 0}`,
+        details: `Plot: ${approvePlot || approveModal.plotNumber || approveModal.flat}, Floor: ${approveFloor || approveModal.floor}, Block: ${approveModal.block}, Role: ${approvePersonType}, Charge: ₹${charge || 0}`,
       });
 
       toast.success("Registration approved — resident account created");
@@ -209,11 +250,14 @@ export default function RegistrationRequests() {
       setCharge("");
       setApproveBlockId("");
       setApproveBlock("");
+      setApprovePlot("");
+      setApproveFloor("Ground Floor");
+      setApproveUnit("");
+      setApprovePersonType("OWNER");
       setApproveFlat("");
-      setApproveFloor("");
     } catch (error) {
       console.error(error);
-      toast.error("Failed to approve registration");
+      toast.error(error.message || "Failed to approve registration");
     }
     setLoadingId(null);
   }
@@ -442,8 +486,11 @@ export default function RegistrationRequests() {
                               const matched = blocks.find((b) => b.id === req.blockId || b.name === req.block);
                               setApproveBlockId(matched?.id || req.blockId || "");
                               setApproveBlock(matched?.name || req.block || "");
+                              setApprovePlot(req.plotNumber || req.flat || "");
+                              setApproveFloor(req.floor || "Ground Floor");
+                              setApproveUnit(req.unitNumber || "");
+                              setApprovePersonType(req.personType || "OWNER");
                               setApproveFlat(req.flat || "");
-                              setApproveFloor(req.floor || "");
                             }}
                             disabled={loadingId === req.id}
                             className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-green-600 text-white hover:bg-green-700 font-medium transition text-sm disabled:opacity-50 shadow-sm"
@@ -507,24 +554,35 @@ export default function RegistrationRequests() {
             <div className="p-6 space-y-4">
               <div className="bg-green-50 rounded-xl p-4">
                 <p className="font-bold">{approveModal.name}</p>
-                <p className="text-sm text-gray-600">Block {approveModal.block} • Floor {approveModal.floor || "—"} • Flat {approveModal.flat}</p>
-                <p className="text-sm text-gray-600">{approveModal.email}</p>
+                <p className="text-sm text-gray-700 font-medium">
+                  Block {approveModal.block} • Plot {approveModal.plotNumber || approveModal.flat} • Floor {approveModal.floor || "Ground Floor"}
+                  {approveModal.unitNumber ? ` • Unit ${approveModal.unitNumber}` : ""}
+                </p>
+                <p className="text-xs text-gray-600 mt-1">{approveModal.email || approveModal.mobile}</p>
                 <div className="flex items-center gap-3 mt-2">
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    (approveModal.personType === "TENANT" || approveModal.personType === "RENTED") ? "bg-amber-100 text-amber-700" :
+                    approveModal.personType === "FAMILY_MEMBER" ? "bg-purple-100 text-purple-700" :
+                    "bg-blue-100 text-blue-700"
+                  }`}>
+                    {(approveModal.personType === "TENANT" || approveModal.personType === "RENTED") ? "RENTED" : (approveModal.personType || "OWNER")}
+                  </span>
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${approveModal.garbageParticipation === "participating" ? "bg-emerald-100 text-emerald-700" : "bg-orange-100 text-orange-700"}`}>
                     GC: {approveModal.garbageParticipation === "participating" ? "Participating" : "Not Participating"}
                   </span>
                 </div>
               </div>
 
-              {/* Block / Flat Override */}
+              {/* Canonical Property Details & Override */}
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
-                <p className="text-sm font-bold text-blue-700 flex items-center gap-1">
-                  <FaBuilding /> Override Block & Flat (optional)
+                <p className="text-sm font-bold text-blue-800 flex items-center gap-1.5">
+                  <FaBuilding className="text-blue-600" /> Verify Canonical Property Identity
                 </p>
-                <p className="text-xs text-blue-600">Leave empty to keep the resident's selection.</p>
-                <div className="grid grid-cols-3 gap-3">
+                <p className="text-xs text-blue-700">Ensure the Block, Plot, Floor, and Unit are accurate before approving.</p>
+
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block mb-1 text-xs font-medium text-gray-600">Block</label>
+                    <label className="block mb-1 text-xs font-semibold text-gray-700">Block</label>
                     <select
                       value={approveBlockId}
                       onChange={(e) => {
@@ -533,7 +591,7 @@ export default function RegistrationRequests() {
                         setApproveBlockId(bid);
                         setApproveBlock(blk?.name || "");
                       }}
-                      className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-green-500 outline-none"
                     >
                       <option value="">— Keep: {approveModal.block || "None"} —</option>
                       {blocks.map((b) => (
@@ -541,26 +599,59 @@ export default function RegistrationRequests() {
                       ))}
                     </select>
                   </div>
+
                   <div>
-                    <label className="block mb-1 text-xs font-medium text-gray-600">Flat Number</label>
+                    <label className="block mb-1 text-xs font-semibold text-gray-700">Plot Number *</label>
                     <input
                       type="text"
-                      placeholder={approveModal.flat || "Keep existing"}
-                      value={approveFlat}
-                      onChange={(e) => setApproveFlat(e.target.value)}
-                      className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                      placeholder="e.g. 12 or D572"
+                      value={approvePlot}
+                      onChange={(e) => setApprovePlot(e.target.value)}
+                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-green-500 outline-none"
                     />
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block mb-1 text-xs font-medium text-gray-600">Floor</label>
-                    <input
-                      type="text"
-                      placeholder={approveModal.floor || "Keep existing"}
+                    <label className="block mb-1 text-xs font-semibold text-gray-700">Floor *</label>
+                    <select
                       value={approveFloor}
                       onChange={(e) => setApproveFloor(e.target.value)}
-                      className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-green-500 outline-none"
+                    >
+                      {AVAILABLE_FLOORS.map((fl) => (
+                        <option key={fl} value={fl}>
+                          {fl}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block mb-1 text-xs font-semibold text-gray-700">
+                      Flat Number <span className="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 1 or A (leave blank if single)"
+                      value={approveUnit}
+                      onChange={(e) => setApproveUnit(e.target.value)}
+                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-green-500 outline-none"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block mb-1 text-xs font-semibold text-gray-700">Person Role / Occupancy</label>
+                  <select
+                    value={approvePersonType === "TENANT" ? "RENTED" : approvePersonType}
+                    onChange={(e) => setApprovePersonType(e.target.value)}
+                    className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-green-500 outline-none"
+                  >
+                    <option value="OWNER">Property Owner</option>
+                    <option value="RENTED">Rented</option>
+                  </select>
                 </div>
               </div>
 
@@ -579,7 +670,21 @@ export default function RegistrationRequests() {
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
-              <button onClick={() => { setApproveModal(null); setApproveBlockId(""); setApproveBlock(""); setApproveFlat(""); setApproveFloor(""); }} className="px-5 py-2.5 rounded-xl border hover:bg-gray-50 font-medium transition">Cancel</button>
+              <button
+                onClick={() => {
+                  setApproveModal(null);
+                  setApproveBlockId("");
+                  setApproveBlock("");
+                  setApprovePlot("");
+                  setApproveFloor("Ground Floor");
+                  setApproveUnit("");
+                  setApprovePersonType("OWNER");
+                  setApproveFlat("");
+                }}
+                className="px-5 py-2.5 rounded-xl border hover:bg-gray-50 font-medium transition"
+              >
+                Cancel
+              </button>
               <button
                 onClick={handleApprove}
                 disabled={loadingId === approveModal.id}

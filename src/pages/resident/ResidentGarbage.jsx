@@ -20,6 +20,7 @@ import { useResidents } from "../../context/ResidentContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useBills } from "../../context/BillContext";
 import GarbageModuleTabs from "../../components/resident/GarbageModuleTabs";
+import { isPriorToCollectionStart, isPriorToResidentBillingStart } from "../../utils/billingCycle";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -192,14 +193,14 @@ export default function ResidentGarbage() {
     const paidKeys = new Set(myPayments.map((p) => `${p.month}-${p.year}`));
     let sum = 0;
     bills
-      .filter((b) => b.residentId === canonicalResidentId || b.residentId === user?.uid)
+      .filter((b) => (b.residentId === canonicalResidentId || b.residentId === user?.uid) && !isPriorToCollectionStart(b.month, b.year) && !isPriorToResidentBillingStart(canonicalResident, b.month, b.year))
       .forEach((b) => {
         if (b.status === "Pending" && !paidKeys.has(`${b.month}-${b.year}`)) {
           sum += Number(b.amount || monthlyCharge || 0);
         }
       });
     return sum;
-  }, [bills, myPayments, canonicalResidentId, user, monthlyCharge]);
+  }, [bills, myPayments, canonicalResidentId, user, monthlyCharge, canonicalResident]);
 
   // Collector Name
   const collectorName =

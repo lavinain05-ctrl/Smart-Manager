@@ -10,25 +10,19 @@
       ],
       "headers": [
         {
-          "source": "/sw.js",
+          "source": "**",
           "headers": [
             { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
           ]
         },
         {
-          "source": "/manifest.json",
+          "source": "/assets/**",
           "headers": [
-            { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+            { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
           ]
         },
         {
-          "source": "/**.html",
-          "headers": [
-            { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
-          ]
-        },
-        {
-          "source": "/**.png",
+          "source": "/committee/**",
           "headers": [
             { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
           ]
@@ -51,25 +45,19 @@
       ],
       "headers": [
         {
-          "source": "/sw.js",
+          "source": "**",
           "headers": [
             { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
           ]
         },
         {
-          "source": "/manifest.json",
+          "source": "/assets/**",
           "headers": [
-            { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+            { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
           ]
         },
         {
-          "source": "/**.html",
-          "headers": [
-            { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
-          ]
-        },
-        {
-          "source": "/**.png",
+          "source": "/committee/**",
           "headers": [
             { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
           ]

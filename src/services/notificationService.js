@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   updateDoc,
   onSnapshot,
   serverTimestamp,
@@ -41,29 +42,57 @@ export function subscribeNotifications(userId, callback, userRole = "resident") 
     callback(sorted);
   };
 
+  const listenWithFallback = (qPrimary, qFallback, onData, label) => {
+    let activeUnsub = () => {};
+    try {
+      activeUnsub = onSnapshot(
+        qPrimary,
+        (snap) => {
+          onData(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          notify();
+        },
+        (err) => {
+          console.warn(`[Notifications] ${label} listener index warning, falling back:`, err.message);
+          if (qFallback) {
+            activeUnsub = onSnapshot(
+              qFallback,
+              (fallbackSnap) => {
+                onData(fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+                notify();
+              },
+              (fErr) => {
+                console.warn(`[Notifications] ${label} fallback error:`, fErr.message);
+              }
+            );
+          }
+        }
+      );
+    } catch (e) {
+      if (qFallback) {
+        activeUnsub = onSnapshot(qFallback, (fallbackSnap) => {
+          onData(fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          notify();
+        });
+      }
+    }
+    return () => activeUnsub();
+  };
+
   const qUser = query(
     notificationsRef,
     where("userId", "==", userId),
     orderBy("createdAt", "desc")
   );
-  const unsubUser = onSnapshot(qUser, (snap) => {
-    userNotifs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    notify();
-  }, (err) => {
-    console.warn("[Notifications] User listener warning:", err.message);
-  });
+  const qUserFallback = query(notificationsRef, where("userId", "==", userId));
+  const unsubUser = listenWithFallback(qUser, qUserFallback, (data) => { userNotifs = data; }, "User");
 
   const qAll = query(
     notificationsRef,
     where("userId", "==", "all"),
     orderBy("createdAt", "desc")
   );
-  const unsubAll = onSnapshot(qAll, (snap) => {
-    broadcastNotifs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    notify();
-  }, (err) => {
-    console.warn("[Notifications] Broadcast listener warning:", err.message);
-  });
+  const qAllFallback = query(notificationsRef, where("userId", "==", "all"));
+  const unsubAll = listenWithFallback(qAll, qAllFallback, (data) => { broadcastNotifs = data; }, "Broadcast");
 
   let unsubRole = () => {};
   if (userRole && userRole !== "all") {
@@ -72,12 +101,8 @@ export function subscribeNotifications(userId, callback, userRole = "resident") 
       where("userId", "==", userRole),
       orderBy("createdAt", "desc")
     );
-    unsubRole = onSnapshot(qRole, (snap) => {
-      roleNotifs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      notify();
-    }, (err) => {
-      console.warn("[Notifications] Role listener warning:", err.message);
-    });
+    const qRoleFallback = query(notificationsRef, where("userId", "==", userRole));
+    unsubRole = listenWithFallback(qRole, qRoleFallback, (data) => { roleNotifs = data; }, `Role (${userRole})`);
   }
 
   return () => {
@@ -92,13 +117,14 @@ export function subscribeNotifications(userId, callback, userRole = "resident") 
 ================================ */
 
 export async function createNotification({
+  id,
   userId,
   title,
   message,
   type,
   link,
 }) {
-  return await addDoc(notificationsRef, {
+  const payload = {
     userId,
     title,
     message: message || "",
@@ -106,6 +132,28 @@ export async function createNotification({
     link: link || "",
     read: false,
     createdAt: serverTimestamp(),
+  };
+
+  if (id) {
+    const docRef = doc(notificationsRef, id);
+    await setDoc(docRef, payload, { merge: true });
+    return docRef;
+  }
+
+  return await addDoc(notificationsRef, payload);
+}
+
+/* ===============================
+   Notify Admin Shortcut
+================================ */
+
+export async function notifyAdmin({ title, message, type = "info", link = "/admin/dashboard" }) {
+  return await createNotification({
+    userId: "admin",
+    title,
+    message,
+    type,
+    link,
   });
 }
 

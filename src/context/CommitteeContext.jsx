@@ -15,6 +15,7 @@ import {
   uploadCommitteePhoto as uploadPhotoService,
   deleteCommitteePhoto as deletePhotoService,
   replaceCommitteePhoto as replacePhotoService,
+  setCommitteePhotoUrl as setPhotoUrlService,
 } from "../services/committeeService";
 
 import { useAuth } from "./AuthContext";
@@ -45,7 +46,7 @@ export function CommitteeProvider({ children }) {
     } catch (error) {
       console.error(error);
       if (error.code === "auth/email-already-in-use") {
-        toast.error("This email is already in use");
+        toast.error("This mobile number is already registered in the system.");
       } else {
         toast.error(error.message || "Failed to create account");
       }
@@ -111,6 +112,18 @@ export function CommitteeProvider({ children }) {
     }
   }
 
+  async function setCommitteePhotoUrl(memberId, photoUrl) {
+    try {
+      const url = await setPhotoUrlService(memberId, photoUrl);
+      toast.success("Profile photo updated");
+      return url;
+    } catch (error) {
+      console.error(error);
+      toast.error(error.message || "Failed to set photo URL");
+      return null;
+    }
+  }
+
   return (
     <CommitteeContext.Provider
       value={{
@@ -121,6 +134,7 @@ export function CommitteeProvider({ children }) {
         uploadCommitteePhoto,
         deleteCommitteePhoto,
         replaceCommitteePhoto,
+        setCommitteePhotoUrl,
       }}
     >
       {children}
@@ -129,5 +143,11 @@ export function CommitteeProvider({ children }) {
 }
 
 export function useCommittee() {
-  return useContext(CommitteeContext);
+  const ctx = useContext(CommitteeContext);
+  return ctx || {
+    committee: [],
+    addCommitteeMember: async () => null,
+    updateCommitteeMember: async () => false,
+    removeCommitteeMember: async () => false,
+  };
 }

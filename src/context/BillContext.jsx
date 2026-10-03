@@ -21,6 +21,7 @@ import { useResidents } from "./ResidentContext";
 import { useBilling } from "./BillingContext";
 import { useAuth } from "./AuthContext";
 import { isGcParticipating } from "../services/statisticsService";
+import { isPriorToCollectionStart, isPriorToResidentBillingStart } from "../utils/billingCycle";
 
 const BillContext = createContext();
 
@@ -69,6 +70,11 @@ export function BillProvider({ children }) {
   }, [selectedYear, user, residentId]);
 
   async function generateBills() {
+    if (isPriorToCollectionStart(selectedMonth, selectedYear)) {
+      toast.error("Collection starts from October 2026. Cannot generate bills for previous periods.");
+      return;
+    }
+
     if (residents.length === 0) {
       toast.error("No residents found");
       return;
@@ -91,7 +97,8 @@ export function BillProvider({ children }) {
       const residentsToBill = residents.filter(
         (resident) =>
           !existingResidentIds.has(resident.id) &&
-          isGcParticipating(resident)
+          isGcParticipating(resident) &&
+          !isPriorToResidentBillingStart(resident, selectedMonth, selectedYear)
       );
 
       const BATCH_SIZE = 25;

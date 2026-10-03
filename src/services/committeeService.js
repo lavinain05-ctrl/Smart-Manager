@@ -9,10 +9,13 @@ import {
   serverTimestamp,
   query,
   orderBy,
+  where,
+  getDocs,
 } from "firebase/firestore";
 
 import {
   createUserWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
   signOut,
 } from "firebase/auth";
 
@@ -23,6 +26,7 @@ import {
   deleteAuthLookup,
   normalizeMobile,
   validateMobile,
+  isRealEmail,
 } from "./authService";
 import { deleteFirebaseAuthAccount } from "./accountDeletionService";
 
@@ -143,10 +147,24 @@ export async function replaceCommitteePhoto(memberId, newFile) {
 
 export function subscribeCommittee(callback) {
   return onSnapshot(committeeRef, (snapshot) => {
-    const list = snapshot.docs.map((d) => ({
+    const rawList = snapshot.docs.map((d) => ({
       id: d.id,
       ...d.data(),
     }));
+
+    // Deduplicate by clean phone number or residentId or ID to guarantee no duplicate cards
+    const seen = new Set();
+    const list = [];
+    for (const m of rawList) {
+      const cleanP = normalizeMobile(m.phone || m.mobile || "");
+      const resId = m.residentId || "";
+      const dedupKey = cleanP ? `phone_${cleanP}` : resId ? `res_${resId}` : `id_${m.id}`;
+      if (!seen.has(dedupKey)) {
+        seen.add(dedupKey);
+        list.push(m);
+      }
+    }
+
     list.sort((a, b) => (Number(a.order) || 99) - (Number(b.order) || 99));
     callback(list);
   }, (error) => {
@@ -166,6 +184,10 @@ export const DEFAULT_COMMITTEE_PERMISSIONS = {
   canManageAccountRecovery: false,
   canCollectGarbage: false,
   canCollectSpecial: false,
+  specialCollectionScope: "all", // "all" | "specific"
+  allowedSpecialCollections: [], // array of campaign IDs
+  allowedSpecialCollectionNames: [], // array of campaign titles
+  canViewGarbageReports: false,
 };
 
 // =============================
@@ -189,6 +211,7 @@ export async function addCommitteeMember({
   residentId,
   permissions = {},
   mustChangePassword = true,
+  profilePhotoUrl = "",
 }) {
   // Validate required phone number
   const cleanPhone = normalizeMobile(phone);
@@ -197,80 +220,158 @@ export async function addCommitteeMember({
     throw new Error(phoneError);
   }
 
+  const canCollectGarbage = Boolean(permissions?.canCollectGarbage);
+  const canCollectSpecial = Boolean(permissions?.canCollectSpecial);
+  const specialCollectionScope = permissions?.specialCollectionScope || "all";
+  const allowedSpecialCollections = Array.isArray(permissions?.allowedSpecialCollections)
+    ? permissions.allowedSpecialCollections
+    : [];
+  const allowedSpecialCollectionNames = Array.isArray(permissions?.allowedSpecialCollectionNames)
+    ? permissions.allowedSpecialCollectionNames
+    : [];
+  const canViewReports = Boolean(
+    permissions?.canViewGarbageReports ||
+    permissions?.canViewReports ||
+    permissions?.canViewAnalytics
+  );
   const finalPermissions = {
     ...DEFAULT_COMMITTEE_PERMISSIONS,
     ...(permissions || {}),
+    canCollectGarbage,
+    canCollectSpecial,
+    specialCollectionScope,
+    allowedSpecialCollections,
+    allowedSpecialCollectionNames,
+    canViewGarbageReports: canViewReports,
   };
 
   let uid = null;
   let isExistingAccount = false;
 
-  // Check if this mobile number already exists in authLookup
+  // Check if this mobile number already exists in committee
   try {
-    const lookupDoc = await getDoc(doc(db, "authLookup", cleanPhone));
-    if (lookupDoc.exists()) {
-      const existingUid = lookupDoc.data().uid;
-      // Check if already in committee
-      const existingCommDoc = await getDoc(doc(db, "committee", existingUid));
-      if (existingCommDoc.exists()) {
-        throw new Error("This person is already registered as an active committee official.");
-      }
-      // They already have an account (e.g. resident or family member)
-      // Elevate them to committee!
-      uid = existingUid;
-      isExistingAccount = true;
+    const commByPhoneQ = query(collection(db, "committee"), where("phone", "==", cleanPhone));
+    const commByPhoneSnap = await getDocs(commByPhoneQ);
+    if (!commByPhoneSnap.empty) {
+      throw new Error("This person is already registered as an active committee official.");
     }
-  } catch (err) {
-    if (err.message.includes("already registered as an active committee official")) {
-      throw err;
+  } catch (commErr) {
+    if (commErr.message.includes("already registered as an active committee official")) {
+      throw commErr;
     }
-    console.warn("[Committee] authLookup check:", err.message);
+    console.warn("[Committee] phone check:", commErr.message);
   }
 
   const authEmail = mobileToAuthEmail(cleanPhone);
+  let authUserExists = false;
 
-  if (!isExistingAccount) {
-    // New account: create in Firebase Auth
-    let credential;
+  try {
+    const methods = await fetchSignInMethodsForEmail(secondaryAuth, authEmail);
+    if (methods && methods.length > 0) {
+      authUserExists = true;
+    }
+  } catch (mErr) {
+    console.warn("[Committee] fetchSignInMethods check:", mErr.message);
+  }
+
+  const effectivePassword =
+    password && password.length >= 6 ? password : `RWA@${cleanPhone.slice(-6)}`;
+
+  if (!authUserExists) {
+    // Auth account does not exist in Firebase Auth yet — create it!
     try {
-      credential = await createUserWithEmailAndPassword(
+      const credential = await createUserWithEmailAndPassword(
         secondaryAuth,
         authEmail,
-        password
+        effectivePassword
       );
+      uid = credential.user.uid;
+      console.log("[Committee] Created Firebase Auth user with UID:", uid);
     } catch (authError) {
-      if (authError.code === "auth/email-already-in-use") {
-        // Fallback: If Auth email already exists, link existing account
-        const existingLookup = await getDoc(doc(db, "authLookup", cleanPhone));
-        if (existingLookup.exists()) {
-          uid = existingLookup.data().uid;
-          isExistingAccount = true;
-        } else {
-          throw new Error("This mobile number is already registered.");
-        }
+      if (
+        authError.code === "auth/email-already-in-use" ||
+        authError.code === "auth/email-already-exists" ||
+        authError.message?.includes("EMAIL_EXISTS") ||
+        authError.message?.includes("email-already-in-use")
+      ) {
+        authUserExists = true;
       } else if (authError.code === "auth/weak-password") {
         throw new Error("Password is too weak. Use at least 6 characters.");
       } else {
-        throw authError;
+        console.warn("[Committee] createUserWithEmailAndPassword error:", authError.message);
+        authUserExists = true;
       }
-    }
-
-    if (!isExistingAccount && credential) {
-      uid = credential.user.uid;
-      // Write mobile lookup
-      await writeAuthLookup(cleanPhone, authEmail, uid);
-      // Sign out secondary instance
-      await signOut(secondaryAuth);
+    } finally {
+      try {
+        await signOut(secondaryAuth);
+      } catch (soErr) {
+        // Ignore
+      }
     }
   }
 
-  // If existing account and admin provided a new password, update it
-  if (isExistingAccount && password && password.length >= 6) {
-    try {
-      await adminResetPasswordFn({ targetUid: uid, password });
-    } catch (pwErr) {
-      console.warn("[Committee] could not reset password on existing account:", pwErr.message);
+  if (authUserExists) {
+    isExistingAccount = true;
+    // Find existing UID from all possible sources
+    if (!uid) {
+      try {
+        const lookupDoc = await getDoc(doc(db, "authLookup", cleanPhone));
+        if (lookupDoc.exists() && lookupDoc.data().uid) {
+          uid = lookupDoc.data().uid;
+        } else {
+          // Check users by phone
+          const uSnap = await getDocs(
+            query(collection(db, "users"), where("phone", "==", cleanPhone))
+          );
+          if (!uSnap.empty) {
+            uid = uSnap.docs[0].id;
+          } else {
+            // Check users by mobile
+            const uSnapMobile = await getDocs(
+              query(collection(db, "users"), where("mobile", "==", cleanPhone))
+            );
+            if (!uSnapMobile.empty) {
+              uid = uSnapMobile.docs[0].id;
+            }
+          }
+        }
+      } catch (findErr) {
+        console.warn("[Committee] Error finding existing UID:", findErr.message);
+      }
     }
+
+    if (!uid && residentId) {
+      uid = residentId;
+    }
+
+    if (!uid) {
+      try {
+        const resSnap = await getDocs(
+          query(collection(db, "residents"), where("mobile", "==", cleanPhone))
+        );
+        if (!resSnap.empty) {
+          uid = resSnap.docs[0].data().uid || resSnap.docs[0].id;
+        }
+      } catch (rErr) {
+        console.warn("[Committee] Error finding resident UID:", rErr.message);
+      }
+    }
+
+    // If admin provided a password, update it
+    if (password && password.length >= 6 && uid) {
+      try {
+        await adminResetPasswordFn({ targetUid: uid, password });
+      } catch (pwErr) {
+        console.warn(
+          "[Committee] could not reset password on existing account:",
+          pwErr.message
+        );
+      }
+    }
+  }
+
+  if (!uid) {
+    uid = residentId || doc(collection(db, "committee")).id;
   }
 
   // Check if they are also a resident
@@ -294,12 +395,18 @@ export async function addCommitteeMember({
     }
   }
 
+  const realEmail = isRealEmail(email)
+    ? email.trim()
+    : isRealEmail(oldUserData.email)
+    ? oldUserData.email.trim()
+    : "";
+
   // Create users/{uid} role doc or merge with existing
   const userPayload = {
     role: "committee",
     designation,
     name,
-    email: (email || "").trim() || oldUserData.email || authEmail,
+    email: realEmail,
     phone: cleanPhone,
     flat: flat || oldUserData.flat || "",
     block: block || oldUserData.block || "",
@@ -307,6 +414,10 @@ export async function addCommitteeMember({
     residentId: residentId || oldUserData.residentId || (wasResident ? uid : ""),
     isResident: wasResident,
     permissions: finalPermissions,
+    canCollectGarbage,
+    canCollectSpecial,
+    canViewGarbageReports: canViewReports,
+    profilePhotoUrl: profilePhotoUrl || oldUserData.profilePhotoUrl || "",
     status: "active",
     ...(isExistingAccount
       ? {
@@ -326,9 +437,9 @@ export async function addCommitteeMember({
     name,
     designation,
     phone: cleanPhone,
-    email: (email || "").trim(),
+    email: realEmail,
     uid,
-    profilePhotoUrl: oldUserData.profilePhotoUrl || "",
+    profilePhotoUrl: profilePhotoUrl || oldUserData.profilePhotoUrl || "",
     tenure: tenure || "",
     introduction: introduction || "",
     order: order || 99,
@@ -338,13 +449,50 @@ export async function addCommitteeMember({
     residentId: residentId || oldUserData.residentId || (wasResident ? uid : ""),
     isResident: wasResident,
     permissions: finalPermissions,
+    canCollectGarbage,
+    canCollectSpecial,
+    canViewGarbageReports: canViewReports,
     status: "active",
     mustChangePassword: isExistingAccount ? false : mustChangePassword === true,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 
+  // Always write / update authLookup so the phone number resolves instantly
+  try {
+    await writeAuthLookup(
+      cleanPhone,
+      authEmail,
+      uid,
+      (email || "").trim(),
+      flat || oldUserData.flat || "",
+      name.trim()
+    );
+  } catch (lookupErr) {
+    console.warn("[Committee] writeAuthLookup error:", lookupErr.message);
+  }
+
   return uid;
+}
+
+/**
+ * Set committee member photo URL directly (supports public paths or external URLs).
+ */
+export async function setCommitteePhotoUrl(memberId, photoUrl) {
+  const cleanUrl = (photoUrl || "").trim();
+  await updateDoc(doc(db, "committee", memberId), {
+    profilePhotoUrl: cleanUrl,
+    updatedAt: serverTimestamp(),
+  });
+  try {
+    await updateDoc(doc(db, "users", memberId), {
+      profilePhotoUrl: cleanUrl,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    // Non-critical if user doc doesn't exist
+  }
+  return cleanUrl;
 }
 
 // =============================
@@ -352,7 +500,60 @@ export async function addCommitteeMember({
 // =============================
 
 export async function updateCommitteeMember(uid, data) {
+  const { ...cleanData } = data;
   const cleanPhone = data.phone !== undefined ? normalizeMobile(data.phone) : undefined;
+  
+  let canCollectGarbage = undefined;
+  if (cleanData.permissions && cleanData.permissions.canCollectGarbage !== undefined) {
+    canCollectGarbage = Boolean(cleanData.permissions.canCollectGarbage);
+  } else if (cleanData.canCollectGarbage !== undefined) {
+    canCollectGarbage = Boolean(cleanData.canCollectGarbage);
+  }
+
+  let canCollectSpecial = undefined;
+  if (cleanData.permissions && cleanData.permissions.canCollectSpecial !== undefined) {
+    canCollectSpecial = Boolean(cleanData.permissions.canCollectSpecial);
+  } else if (cleanData.canCollectSpecial !== undefined) {
+    canCollectSpecial = Boolean(cleanData.canCollectSpecial);
+  }
+
+  if (canCollectGarbage !== undefined) {
+    cleanData.canCollectGarbage = canCollectGarbage;
+    cleanData.permissions = {
+      ...(cleanData.permissions || {}),
+      canCollectGarbage,
+    };
+  }
+
+  const specialCollectionScope = cleanData.permissions?.specialCollectionScope ?? cleanData.specialCollectionScope;
+  const allowedSpecialCollections = cleanData.permissions?.allowedSpecialCollections ?? cleanData.allowedSpecialCollections;
+  const allowedSpecialCollectionNames = cleanData.permissions?.allowedSpecialCollectionNames ?? cleanData.allowedSpecialCollectionNames;
+
+  if (canCollectSpecial !== undefined) {
+    cleanData.canCollectSpecial = canCollectSpecial;
+    cleanData.permissions = {
+      ...(cleanData.permissions || {}),
+      canCollectSpecial,
+      ...(specialCollectionScope !== undefined ? { specialCollectionScope } : {}),
+      ...(allowedSpecialCollections !== undefined ? { allowedSpecialCollections } : {}),
+      ...(allowedSpecialCollectionNames !== undefined ? { allowedSpecialCollectionNames } : {}),
+    };
+  }
+
+  let canViewReports = undefined;
+  if (cleanData.permissions && cleanData.permissions.canViewGarbageReports !== undefined) {
+    canViewReports = Boolean(cleanData.permissions.canViewGarbageReports);
+  } else if (cleanData.canViewGarbageReports !== undefined) {
+    canViewReports = Boolean(cleanData.canViewGarbageReports);
+  }
+
+  if (canViewReports !== undefined) {
+    cleanData.canViewGarbageReports = canViewReports;
+    cleanData.permissions = {
+      ...(cleanData.permissions || {}),
+      canViewGarbageReports: canViewReports,
+    };
+  }
 
   // If phone changed, update authLookup
   if (cleanPhone) {
@@ -373,25 +574,118 @@ export async function updateCommitteeMember(uid, data) {
 
   // Update committee/{uid}
   await updateDoc(doc(db, "committee", uid), {
-    ...data,
+    ...cleanData,
     ...(cleanPhone ? { phone: cleanPhone } : {}),
     updatedAt: serverTimestamp(),
   });
 
   // Also update users/{uid} if name/designation/phone/flat/block/permissions changed
   const userUpdates = {};
-  if (data.name !== undefined) userUpdates.name = data.name;
-  if (data.designation !== undefined) userUpdates.designation = data.designation;
+  if (cleanData.name !== undefined) userUpdates.name = cleanData.name;
+  if (cleanData.designation !== undefined) userUpdates.designation = cleanData.designation;
   if (cleanPhone !== undefined) userUpdates.phone = cleanPhone;
-  if (data.flat !== undefined) userUpdates.flat = data.flat;
-  if (data.block !== undefined) userUpdates.block = data.block;
-  if (data.blockId !== undefined) userUpdates.blockId = data.blockId;
-  if (data.residentId !== undefined) userUpdates.residentId = data.residentId;
-  if (data.email !== undefined) userUpdates.email = (data.email || "").trim();
-  if (data.permissions !== undefined) userUpdates.permissions = data.permissions;
+  if (cleanData.flat !== undefined) userUpdates.flat = cleanData.flat;
+  if (cleanData.block !== undefined) userUpdates.block = cleanData.block;
+  if (cleanData.blockId !== undefined) userUpdates.blockId = cleanData.blockId;
+  if (cleanData.residentId !== undefined) userUpdates.residentId = cleanData.residentId;
+  if (cleanData.email !== undefined) {
+    const validEmail = isRealEmail(cleanData.email) ? cleanData.email.trim() : "";
+    cleanData.email = validEmail;
+    userUpdates.email = validEmail;
+  }
+  if (cleanData.permissions !== undefined) userUpdates.permissions = cleanData.permissions;
+  if (canCollectGarbage !== undefined) {
+    userUpdates.canCollectGarbage = canCollectGarbage;
+  }
+  if (canCollectSpecial !== undefined) {
+    userUpdates.canCollectSpecial = canCollectSpecial;
+    if (specialCollectionScope !== undefined) userUpdates.specialCollectionScope = specialCollectionScope;
+    if (allowedSpecialCollections !== undefined) userUpdates.allowedSpecialCollections = allowedSpecialCollections;
+    if (allowedSpecialCollectionNames !== undefined) userUpdates.allowedSpecialCollectionNames = allowedSpecialCollectionNames;
+  }
+  if (canViewReports !== undefined) {
+    userUpdates.canViewGarbageReports = canViewReports;
+  }
 
   if (Object.keys(userUpdates).length > 0) {
-    await updateDoc(doc(db, "users", uid), userUpdates);
+    await setDoc(doc(db, "users", uid), {
+      ...userUpdates,
+      role: "committee",
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+  }
+}
+
+/**
+ * Quick toggle for committee Garbage Collection power by Admin
+ */
+export async function toggleCommitteeGarbagePower(uid, enabled) {
+  const isAllowed = Boolean(enabled);
+  const update = {
+    canCollectGarbage: isAllowed,
+    "permissions.canCollectGarbage": isAllowed,
+    updatedAt: serverTimestamp(),
+  };
+  await updateDoc(doc(db, "committee", uid), update);
+  try {
+    await updateDoc(doc(db, "users", uid), {
+      canCollectGarbage: isAllowed,
+      "permissions.canCollectGarbage": isAllowed,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn("[toggleCommitteeGarbagePower] users doc sync:", err.message);
+  }
+}
+
+/**
+ * Quick toggle for committee Special Collections power by Admin
+ */
+export async function toggleCommitteeSpecialPower(uid, enabled) {
+  const isAllowed = Boolean(enabled);
+  const update = {
+    canCollectSpecial: isAllowed,
+    "permissions.canCollectSpecial": isAllowed,
+    updatedAt: serverTimestamp(),
+  };
+  await updateDoc(doc(db, "committee", uid), update);
+  try {
+    await updateDoc(doc(db, "users", uid), {
+      canCollectSpecial: isAllowed,
+      "permissions.canCollectSpecial": isAllowed,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn("[toggleCommitteeSpecialPower] users doc sync:", err.message);
+  }
+}
+
+/**
+ * Quick toggle for committee fee collection power by Admin (alias to garbage power)
+ */
+export async function toggleCommitteeCollectionPower(uid, enabled) {
+  return toggleCommitteeGarbagePower(uid, enabled);
+}
+
+/**
+ * Quick toggle for committee member Society Analytics / Reports viewing power by Admin
+ */
+export async function toggleCommitteeReportAccess(uid, enabled) {
+  const isAllowed = Boolean(enabled);
+  const update = {
+    canViewGarbageReports: isAllowed,
+    "permissions.canViewGarbageReports": isAllowed,
+    updatedAt: serverTimestamp(),
+  };
+  await updateDoc(doc(db, "committee", uid), update);
+  try {
+    await updateDoc(doc(db, "users", uid), {
+      canViewGarbageReports: isAllowed,
+      "permissions.canViewGarbageReports": isAllowed,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn("[toggleCommitteeReportAccess] users doc sync:", err.message);
   }
 }
 

@@ -310,57 +310,9 @@ export default function PublicSpecialCollection() {
           </h1>
 
           {(campaign.description || campaign.purpose) && (
-            <p className="text-slate-300 text-sm sm:text-base leading-relaxed max-w-3xl mb-6">
+            <p className="text-slate-300 text-sm sm:text-base leading-relaxed max-w-3xl mb-0">
               {campaign.description || campaign.purpose}
             </p>
-          )}
-
-          {/* Progress / Key Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-slate-700/60">
-            <div>
-              <span className="text-xs text-slate-400 font-medium block">Total Collected</span>
-              <span className="text-xl sm:text-2xl font-bold text-white">
-                ₹{collected.toLocaleString("en-IN")}
-              </span>
-            </div>
-
-            {target > 0 && (
-              <div>
-                <span className="text-xs text-slate-400 font-medium block">Target Goal</span>
-                <span className="text-xl sm:text-2xl font-bold text-slate-300">
-                  ₹{target.toLocaleString("en-IN")}
-                </span>
-              </div>
-            )}
-
-            <div>
-              <span className="text-xs text-slate-400 font-medium block">Total Contributors</span>
-              <span className="text-xl sm:text-2xl font-bold text-indigo-400">
-                {campaign.totalContributorsCount || 0}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-xs text-slate-400 font-medium block">End Date</span>
-              <span className="text-sm sm:text-base font-semibold text-slate-300 mt-1 block">
-                {campaign.endDate || "Ongoing"}
-              </span>
-            </div>
-          </div>
-
-          {target > 0 && (
-            <div className="mt-4">
-              <div className="flex justify-between text-xs text-slate-400 mb-1">
-                <span>Progress towards society target</span>
-                <span className="font-semibold text-indigo-300">{percent}%</span>
-              </div>
-              <div className="w-full h-2.5 rounded-full bg-slate-700/60 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 rounded-full transition-all duration-500"
-                  style={{ width: `${percent}%` }}
-                />
-              </div>
-            </div>
           )}
         </div>
 

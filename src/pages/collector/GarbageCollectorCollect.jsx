@@ -4,172 +4,378 @@ import {
   FaSearch,
   FaRecycle,
   FaPrint,
+  FaCheckCircle,
+  FaFilter,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import { useAuth } from "../../context/AuthContext";
 import { useGarbage } from "../../context/GarbageContext";
-import { printPaymentReceipt } from "../../utils/printReceiptHelper";
+import { useResidents } from "../../context/ResidentContext";
+import { useBills } from "../../context/BillContext";
+import { usePayments } from "../../context/PaymentContext";
+
+import PaymentModal from "../../components/collections/PaymentModal";
 import PaymentReceiptSuccessModal from "../../components/collections/PaymentReceiptSuccessModal";
+import CollectorMonthBar from "../../components/collections/CollectorMonthBar";
+import { useBilling } from "../../context/BillingContext";
+import { collectResidentPayment } from "../../utils/collectPayment";
+import { isPriorToResidentBillingStart } from "../../utils/billingCycle";
+import { printPaymentReceipt } from "../../utils/printReceiptHelper";
+import PrinterQuickAction from "../../components/common/PrinterQuickAction";
 
 export default function GarbageCollectorCollect() {
   const { user } = useAuth();
-  const {
-    garbageAccounts,
-    garbageBills,
-    recordPayment,
-  } = useGarbage();
+  const { garbageAccounts, garbageBills } = useGarbage();
+  const { residents = [] } = useResidents();
+  const { bills = [] } = useBills();
+  const { payments = [], addPayment } = usePayments();
+  const { selectedMonth, setSelectedMonth, selectedYear, setSelectedYear } = useBilling();
 
   const [search, setSearch] = useState("");
-  const [payModal, setPayModal] = useState(null);
-  const [payForm, setPayForm] = useState({ amount: "", paymentMethod: "Cash" });
+  const [filter, setFilter] = useState("all"); // all, pending, paid, not_participating
+  const [selectedResident, setSelectedResident] = useState(null);
+  const [openCollectModal, setOpenCollectModal] = useState(false);
   const [successReceipt, setSuccessReceipt] = useState(null);
 
-  const currentMonth = new Date().toLocaleString("default", { month: "long" });
-  const currentYear = new Date().getFullYear();
+  // Check if an account is paid for current month (including advance covered months)
+  function isGarbagePaid(acc) {
+    const resId = acc.residentId;
+    const flat = acc.flat;
 
-  // Assigned accounts
-  const myAccounts = useMemo(
-    () => garbageAccounts
-      .filter((a) => (a.collectorId === user?.uid || !a.collectorId) && a.status === "active")
-      .filter((a) =>
-        `${a.residentName} ${a.flat} ${a.block}`
-          .toLowerCase()
-          .includes(search.toLowerCase())
-      ),
-    [garbageAccounts, user, search]
-  );
+    // 1. Check in payments collection
+    const paidInPayments = payments.some(
+      (p) =>
+        ((resId && p.residentId === resId) ||
+         (flat && p.flat && String(p.flat).toLowerCase() === String(flat).toLowerCase())) &&
+        ((p.month === selectedMonth && Number(p.year) === Number(selectedYear)) ||
+         (p.isAdvance && Array.isArray(p.coveredMonths) &&
+          p.coveredMonths.some((cm) => cm.month === selectedMonth && Number(cm.year) === Number(selectedYear))))
+    );
+    if (paidInPayments) return true;
 
-  // Check if paid for current month
-  function getBill(accountId) {
+    // 2. Check in garbageBills
+    const bill = garbageBills.find(
+      (b) =>
+        (b.accountId === acc.id || (resId && b.residentId === resId)) &&
+        b.month === selectedMonth &&
+        Number(b.year) === Number(selectedYear)
+    );
+    return bill?.status === "Paid";
+  }
+
+  // Find relevant garbage bill
+  function getBill(accountId, residentId) {
     return garbageBills.find(
       (b) =>
-        b.accountId === accountId &&
-        b.month === currentMonth &&
-        Number(b.year) === Number(currentYear)
+        (b.accountId === accountId || (residentId && b.residentId === residentId)) &&
+        b.month === selectedMonth &&
+        Number(b.year) === Number(selectedYear)
     );
   }
 
-  async function handleCollect() {
-    if (!payModal) return;
-    const bill = getBill(payModal.id);
-    if (!bill) return;
+  function isAccountEligible(a) {
+    const r = residents.find((res) => res.id === a.residentId) || a;
+    return !isPriorToResidentBillingStart(r, selectedMonth, selectedYear);
+  }
 
-    const paidAmt = Number(payForm.amount || bill.amount);
-    const success = await recordPayment(bill.id, {
-      amount: paidAmt,
-      paymentMethod: payForm.paymentMethod,
-      collectedById: user?.uid,
-      collectedBy: user?.name || "Collector",
+  // Assigned and filtered accounts
+  const filteredAccounts = useMemo(() => {
+    return garbageAccounts
+      .filter((a) => a.collectorId === user?.uid || !a.collectorId)
+      .filter((a) => {
+        const query = search.toLowerCase();
+        const matchesSearch =
+          (a.residentName || "").toLowerCase().includes(query) ||
+          (a.flat || "").toLowerCase().includes(query) ||
+          (a.block || "").toLowerCase().includes(query) ||
+          (a.floor || "").toLowerCase().includes(query);
+        if (!matchesSearch) return false;
+
+        const isNotPart = a.status === "inactive" || !isAccountEligible(a);
+        const paid = isGarbagePaid(a);
+
+        if (filter === "not_participating") return isNotPart;
+        if (filter === "paid") return !isNotPart && paid;
+        if (filter === "pending") return !isNotPart && !paid;
+        return true;
+      });
+  }, [garbageAccounts, residents, user, search, filter, payments, garbageBills, selectedMonth, selectedYear]);
+
+  // Counts for filter badges
+  const filterCounts = useMemo(() => {
+    const list = garbageAccounts.filter((a) => a.collectorId === user?.uid || !a.collectorId);
+    let pending = 0;
+    let paid = 0;
+    let notPart = 0;
+
+    list.forEach((a) => {
+      if (a.status === "inactive" || !isAccountEligible(a)) {
+        notPart++;
+      } else if (isGarbagePaid(a)) {
+        paid++;
+      } else {
+        pending++;
+      }
+    });
+
+    return {
+      all: list.length,
+      pending,
+      paid,
+      notPart,
+    };
+  }, [garbageAccounts, residents, user, payments, garbageBills, selectedMonth, selectedYear]);
+
+  // Open Full-Featured Payment Modal
+  function handleOpenCollect(acc) {
+    const matchedResident = residents.find(
+      (r) =>
+        r.id === acc.residentId ||
+        (r.flat && acc.flat && r.flat.trim().toLowerCase() === acc.flat.trim().toLowerCase())
+    );
+
+    const residentObj = {
+      id: matchedResident?.id || acc.residentId || acc.id,
+      owner: matchedResident?.owner || acc.residentName || "Resident",
+      name: matchedResident?.name || acc.residentName || "Resident",
+      flat: acc.flat || matchedResident?.flat || "",
+      flatNumber: acc.flat || matchedResident?.flatNumber || "",
+      block: acc.block || matchedResident?.block || "",
+      floor: acc.floor || matchedResident?.floor || "",
+      plotNumber: acc.plotNumber || matchedResident?.plotNumber || acc.flat || "",
+      unitNumber: acc.unitNumber || matchedResident?.unitNumber || "",
+      personType: acc.personType || matchedResident?.personType || "OWNER",
+      charge: Number(acc.monthlyCharge) > 0
+        ? Number(acc.monthlyCharge)
+        : (Number(matchedResident?.charge) > 0 ? Number(matchedResident?.charge) : 80),
+      ...(matchedResident || {}),
+    };
+
+    setSelectedResident(residentObj);
+    setOpenCollectModal(true);
+  }
+
+  // Handle Complete Payment Submission (Single Month or Advance)
+  async function handleCollect(paymentData) {
+    if (!selectedResident) return;
+
+    const success = await collectResidentPayment({
+      resident: selectedResident,
+      month: selectedMonth,
+      year: selectedYear,
+      paymentData,
+      bills,
+      addPayment,
+      collector: user?.name || "Collector",
+      collectorId: user?.uid,
     });
 
     if (success) {
-      const receiptData = {
-        ...bill,
-        residentName: payModal.residentName,
-        flat: payModal.flat,
-        block: payModal.block,
-        amount: paidAmt,
-        totalPaidAmount: paidAmt,
-        paymentMethod: payForm.paymentMethod,
-        paymentDate: new Date().toLocaleDateString("en-IN"),
-        receiptNumber: success?.receiptNumber || ("REC-" + Date.now()),
-        collector: user?.name || "Collector",
-        month: currentMonth,
-        year: currentYear,
-      };
-      setPayModal(null);
-      setPayForm({ amount: "", paymentMethod: "Cash" });
-      setSuccessReceipt(receiptData);
-      toast.success(`Payment recorded for Flat ${payModal.flat}!`);
+      setOpenCollectModal(false);
+      setSelectedResident(null);
+      setSuccessReceipt(success);
+      toast.success(`Payment collected successfully for Flat ${selectedResident.flat}!`);
     }
+  }
+
+  // Print Official Receipt
+  function handlePrintReceipt(acc) {
+    const resPayments = payments.filter(
+      (p) =>
+        (acc.residentId && p.residentId === acc.residentId) ||
+        (acc.flat && p.flat && String(p.flat).toLowerCase() === String(acc.flat).toLowerCase())
+    );
+    const latestPayment = resPayments.find(
+      (p) =>
+        (p.month === selectedMonth && Number(p.year) === Number(selectedYear)) ||
+        (p.isAdvance && Array.isArray(p.coveredMonths) &&
+         p.coveredMonths.some((cm) => cm.month === selectedMonth && Number(cm.year) === Number(selectedYear)))
+    ) || resPayments[0];
+
+    const bill = getBill(acc.id, acc.residentId);
+
+    printPaymentReceipt({
+      residentName: acc.residentName,
+      flat: acc.flat,
+      block: acc.block,
+      plotNumber: acc.plotNumber || latestPayment?.plotNumber || acc.flat || "",
+      floor: acc.floor || latestPayment?.floor || "",
+      unitNumber: acc.unitNumber || latestPayment?.unitNumber || "",
+      personType: acc.personType || latestPayment?.personType || "",
+      amount: latestPayment?.amount || bill?.amount || acc.monthlyCharge || 80,
+      totalPaidAmount: latestPayment?.totalPaidAmount || latestPayment?.amount || bill?.paidAmount || bill?.amount || acc.monthlyCharge || 80,
+      paymentMethod: latestPayment?.paymentMethod || bill?.paymentMethod || "Cash",
+      paymentDate: latestPayment?.paymentDate || bill?.paymentDate || new Date().toLocaleDateString("en-IN"),
+      receiptNumber: latestPayment?.receiptNumber || bill?.paymentId || ("REC-" + (bill?.id || Date.now())),
+      collector: latestPayment?.collector || user?.name || "Collector",
+      isAdvance: Boolean(latestPayment?.isAdvance),
+      periodLabel: latestPayment?.periodLabel || `${selectedMonth} ${selectedYear}`,
+      coveredMonths: latestPayment?.coveredMonths || [{ month: selectedMonth, year: Number(selectedYear) }],
+      month: selectedMonth,
+      year: selectedYear,
+    });
+    toast.success(`Printing official receipt for Flat ${acc.flat}...`);
   }
 
   return (
     <>
       <div className="space-y-5">
-
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-3">
-            <FaRecycle className="text-emerald-600" />
-            Garbage Collection
-          </h1>
-          <p className="text-gray-500">{currentMonth} {currentYear}</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm p-4">
-          <div className="relative">
-            <FaSearch className="absolute left-4 top-4 text-gray-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search flat or resident name..."
-              className="w-full border rounded-xl pl-12 py-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-            />
+        {/* Page Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-3 text-gray-900">
+              <FaRecycle className="text-emerald-600" />
+              Garbage Collection
+            </h1>
+            <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
+              Monthly Billing: {selectedMonth} {selectedYear}
+            </p>
+          </div>
+          <div>
+            <PrinterQuickAction />
           </div>
         </div>
 
+        {/* Synchronized Month & Year Selection Bar */}
+        <CollectorMonthBar
+          title={`Billing Period: ${selectedMonth} ${selectedYear}`}
+          subtitle="Filter records, check pending/paid status & collect"
+        />
+
+        {/* Search & Filter Bar */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+          <div className="relative">
+            <FaSearch className="absolute left-4 top-3.5 text-gray-400 text-sm" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by flat, resident, or floor..."
+              className="w-full border rounded-xl pl-11 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition"
+            />
+          </div>
+
+          {/* Quick Filter Badges */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            <button
+              onClick={() => setFilter("all")}
+              className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 ${
+                filter === "all"
+                  ? "bg-emerald-700 text-white shadow-xs"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              All ({filterCounts.all})
+            </button>
+            <button
+              onClick={() => setFilter("pending")}
+              className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 ${
+                filter === "pending"
+                  ? "bg-emerald-700 text-white shadow-xs"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Pending ({filterCounts.pending})
+            </button>
+            <button
+              onClick={() => setFilter("paid")}
+              className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 ${
+                filter === "paid"
+                  ? "bg-emerald-700 text-white shadow-xs"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Paid ({filterCounts.paid})
+            </button>
+            <button
+              onClick={() => setFilter("not_participating")}
+              className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 ${
+                filter === "not_participating"
+                  ? "bg-emerald-700 text-white shadow-xs"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Not Participating ({filterCounts.notPart})
+            </button>
+          </div>
+        </div>
+
+        {/* Residents / Accounts List */}
         <div className="space-y-3">
-          {myAccounts.map((acc) => {
-            const bill = getBill(acc.id);
-            const paid = bill?.status === "Paid";
+          {filteredAccounts.map((acc) => {
+            const isNotPart = acc.status === "inactive";
+            const paid = !isNotPart && isGarbagePaid(acc);
 
             return (
               <div
                 key={acc.id}
-                className="bg-white rounded-2xl shadow-sm p-4 flex items-center justify-between gap-3"
+                className="bg-white rounded-2xl shadow-sm p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-gray-100 hover:border-emerald-200 transition"
               >
                 <div>
-                  <h3 className="font-bold">{acc.flat}</h3>
-                  <p className="text-gray-500 text-sm">{acc.residentName}</p>
-                  <p className="text-gray-400 text-xs">{acc.block} • ₹{acc.monthlyCharge}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold text-base text-gray-900">{acc.flat}</h3>
+                    {acc.block && (
+                      <span className="text-[11px] font-semibold bg-gray-100 px-2 py-0.5 rounded text-gray-600">
+                        {acc.block}
+                      </span>
+                    )}
+                    {acc.floor && (
+                      <span className="text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/70 px-2 py-0.5 rounded">
+                        {acc.floor}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-gray-600 text-sm mt-0.5 font-medium">{acc.residentName}</p>
+                  <p className="text-gray-400 text-xs">
+                    {acc.block ? `${acc.block} • ` : ""}{acc.floor ? `${acc.floor} • ` : ""}Monthly Rate: ₹{acc.monthlyCharge || 80}
+                  </p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    !bill
-                      ? "bg-gray-100 text-gray-500"
-                      : paid
-                      ? "bg-green-100 text-green-700"
-                      : "bg-red-100 text-red-700"
-                  }`}>
-                    {!bill ? "No Bill" : paid ? "Paid" : "Pending"}
-                  </span>
-
-                  {bill && !paid && (
-                    <button
-                      onClick={() => {
-                        setPayModal(acc);
-                        setPayForm({ amount: bill.amount, paymentMethod: "Cash" });
-                      }}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2 text-sm transition"
+                <div className="flex items-center gap-2 flex-wrap self-end sm:self-auto">
+                  {isNotPart ? (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-200 text-gray-700 border border-gray-300">
+                      Not Participating
+                    </span>
+                  ) : (
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                        paid
+                          ? "bg-green-100 text-green-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
                     >
-                      <FaMoneyBillWave /> Collect
-                    </button>
+                      {paid ? "Paid" : "Pending"}
+                    </span>
                   )}
 
-                  {paid && (
+                  {isNotPart ? (
                     <button
                       type="button"
-                      onClick={() => {
-                        printPaymentReceipt({
-                          ...bill,
-                          residentName: acc.residentName,
-                          flat: acc.flat,
-                          block: acc.block,
-                          totalPaidAmount: bill.paidAmount || bill.amount,
-                          paymentMethod: bill.paymentMethod || "Cash",
-                          paymentDate: bill.paymentDate || new Date().toLocaleDateString("en-IN"),
-                          receiptNumber: bill.paymentId || ("REC-" + bill.id),
-                          collector: user?.name || "Collector",
-                        });
-                        toast.success(`Printing receipt for Flat ${acc.flat}...`);
-                      }}
-                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+                      disabled
+                      className="px-4 py-2 rounded-xl text-gray-400 bg-gray-100 flex items-center gap-1.5 text-xs font-bold cursor-not-allowed border border-gray-200 select-none opacity-80"
+                      title="Resident is not participating in garbage collection"
+                    >
+                      <FaMoneyBillWave className="text-gray-400" />
+                      Collect
+                    </button>
+                  ) : paid ? (
+                    <button
+                      type="button"
+                      onClick={() => handlePrintReceipt(acc)}
+                      className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
                       title="Print Official Payment Receipt"
                     >
                       <FaPrint className="text-xs" />
                       Print Receipt
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCollect(acc)}
+                      className="px-4 py-2 rounded-xl text-white flex items-center gap-1.5 text-xs font-bold shadow-xs transition bg-emerald-600 hover:bg-emerald-700 cursor-pointer active:scale-95"
+                    >
+                      <FaMoneyBillWave />
+                      Collect
                     </button>
                   )}
                 </div>
@@ -177,67 +383,28 @@ export default function GarbageCollectorCollect() {
             );
           })}
 
-          {myAccounts.length === 0 && (
-            <div className="bg-white rounded-2xl shadow-sm p-10 text-center text-gray-500">
-              No assigned residents found.
+          {filteredAccounts.length === 0 && (
+            <div className="bg-white rounded-2xl shadow-sm p-10 text-center text-gray-500 text-sm">
+              No matching garbage collection accounts found.
             </div>
           )}
         </div>
       </div>
 
-      {/* Payment Modal */}
-      {payModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <h3 className="font-bold text-lg mb-1">Collect Garbage Payment</h3>
-            <p className="text-gray-500 text-sm mb-4">
-              {payModal.residentName} — {payModal.flat}
-            </p>
+      {/* ─── Working Full-Featured Payment Modal (Matches Collect Option with Single/Advance) ─── */}
+      <PaymentModal
+        open={openCollectModal}
+        resident={selectedResident}
+        month={selectedMonth}
+        year={selectedYear}
+        onClose={() => {
+          setOpenCollectModal(false);
+          setSelectedResident(null);
+        }}
+        onCollect={handleCollect}
+      />
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
-                <input
-                  type="number"
-                  value={payForm.amount}
-                  onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })}
-                  className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Method</label>
-                <select
-                  value={payForm.paymentMethod}
-                  onChange={(e) => setPayForm({ ...payForm, paymentMethod: e.target.value })}
-                  className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                >
-                  <option value="Cash">Cash</option>
-                  <option value="UPI">UPI</option>
-                  <option value="Bank Transfer">Bank Transfer</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setPayModal(null)}
-                className="px-5 py-2.5 rounded-xl border hover:bg-gray-50 transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCollect}
-                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition"
-              >
-                Record Payment
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Official Receipt Success Modal (with immediate Print Receipt) */}
+      {/* ─── Official Receipt Success Modal (with immediate Print Receipt & PDF) ─── */}
       <PaymentReceiptSuccessModal
         open={Boolean(successReceipt)}
         receipt={successReceipt}
@@ -248,3 +415,4 @@ export default function GarbageCollectorCollect() {
     </>
   );
 }
+

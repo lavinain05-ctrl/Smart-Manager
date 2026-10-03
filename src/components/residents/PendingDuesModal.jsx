@@ -23,6 +23,7 @@ import toast from "react-hot-toast";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../../firebase/firebase";
 import { isGcParticipating } from "../../services/statisticsService";
+import { isPriorToResidentBillingStart } from "../../utils/billingCycle";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -160,6 +161,10 @@ export default function PendingDuesModal({
       };
 
       activeResidents.forEach((r) => {
+        if (isPriorToResidentBillingStart(r, activeMonth, activeYear)) {
+          return;
+        }
+
         if (!isMonthPaid(r.id)) {
           const matchingBill =
             (bills || []).find(
@@ -229,6 +234,10 @@ export default function PendingDuesModal({
         const entry = residentMap.get(r.id);
 
         billedMonths.forEach((m) => {
+          if (isPriorToResidentBillingStart(r, m, activeYear)) {
+            return;
+          }
+
           const paid =
             yearPayments.some((p) => p.residentId === r.id && p.month === m) ||
             yearGcBills.some(
@@ -292,14 +301,22 @@ export default function PendingDuesModal({
       uniquePendingBills.forEach((b) => {
         const resId = b.residentId;
         let entry = residentMap.get(resId);
+        let residentObj = entry?.resident;
         if (!entry) {
           const found = activeResidents.find(
             (r) => (r.flat && r.flat === b.flat) || (r.owner && r.owner === b.residentName)
           );
-          if (found) entry = residentMap.get(found.id);
+          if (found) {
+            entry = residentMap.get(found.id);
+            residentObj = found;
+          }
         }
 
         if (entry) {
+          if (residentObj && isPriorToResidentBillingStart(residentObj, b.month, b.year)) {
+            return;
+          }
+
           const amt = Number(b.amount || 0) - Number(b.paidAmount || 0);
           if (amt > 0) {
             entry.totalPendingAmount += amt;
@@ -317,6 +334,10 @@ export default function PendingDuesModal({
       activeResidents.forEach((r) => {
         const entry = residentMap.get(r.id);
         if (entry.totalPendingAmount === 0) {
+          if (isPriorToResidentBillingStart(r, currentMonth, currentYear)) {
+            return;
+          }
+
           const hasPaid =
             (payments || []).some(
               (p) =>

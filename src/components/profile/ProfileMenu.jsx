@@ -123,6 +123,15 @@ export default function ProfileMenu() {
                   <FaLaptop className="text-blue-500 text-base" />
                   <span>Active Devices & Logins</span>
                 </Link>
+
+                <Link
+                  to="/committee/dashboard"
+                  onClick={() => setOpen(false)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-indigo-700 bg-indigo-50/50 hover:bg-indigo-50 font-semibold transition"
+                >
+                  <FaSlidersH className="text-indigo-600 text-base" />
+                  <span>Committee Portal</span>
+                </Link>
               </>
             )}
 
@@ -138,14 +147,26 @@ export default function ProfileMenu() {
             )}
 
             {user?.role === "committee" && (
-              <Link
-                to="/committee/dashboard"
-                onClick={() => setOpen(false)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition"
-              >
-                <FaSlidersH className="text-purple-500 text-base" />
-                <span>Committee Portal</span>
-              </Link>
+              <>
+                <Link
+                  to="/committee/dashboard"
+                  onClick={() => setOpen(false)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-purple-700 bg-purple-50/50 hover:bg-purple-50 font-semibold transition"
+                >
+                  <FaSlidersH className="text-purple-600 text-base" />
+                  <span>Committee Portal</span>
+                </Link>
+                {Boolean(user?.isResident || user?.flat) && (
+                  <Link
+                    to="/resident/dashboard"
+                    onClick={() => setOpen(false)}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-emerald-700 bg-emerald-50/50 hover:bg-emerald-50 font-semibold transition"
+                  >
+                    <FaHome className="text-emerald-600 text-base" />
+                    <span>Resident Portal ({user?.flat || "My Flat"})</span>
+                  </Link>
+                )}
+              </>
             )}
 
             {user?.role === "collector" && (

@@ -39,55 +39,155 @@ import {
 import { db, secondaryAuth } from "../firebase/firebase";
 import { deleteUserAccount } from "../services/accountDeletionService";
 import { useAuth } from "./AuthContext";
+import {
+  normalizePlotNumber,
+  normalizeFloor,
+  normalizeUnitNumber,
+  generatePropertyId,
+  formatPropertyDisplay,
+} from "../services/propertyService";
 
 const ResidentContext = createContext();
 
 export function ResidentProvider({ children }) {
-  const [residents, setResidents] = useState([]);
+  const [residents, setResidents] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem("rwa_cached_residents");
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem("rwa_cached_residents");
+      return !cached || JSON.parse(cached).length === 0;
+    } catch {
+      return true;
+    }
+  });
   const { user } = useAuth();
 
   useEffect(() => {
     // Only subscribe when user has an approved role (not pending)
     if (!user || user.role === "pending_registration" || user.status === "pending" || user.status === "rejected") {
       setResidents([]);
+      setLoading(false);
+      try {
+        sessionStorage.removeItem("rwa_cached_residents");
+      } catch {}
       return;
     }
 
     const unsubscribe = subscribeResidents((data) => {
-      setResidents(data);
-
-      // Self-heal and synchronize authLookup for loaded residents so password recovery works instantly
-      if (Array.isArray(data) && data.length > 0) {
-        data.forEach((r) => {
-          const clean = normalizeMobile(r.mobile);
-          if (clean && clean.length === 10) {
-            const em = (r.email || r.personalEmail || "").trim();
-            const fl = r.flatNumber || r.flat || "";
-            const ow = r.owner || r.name || "";
-            writeAuthLookup(
-              clean,
-              mobileToAuthEmail(clean),
-              r.id || r.uid,
-              em,
-              fl,
-              ow
-            ).catch(() => {});
-          }
-        });
-      }
+      setResidents(data || []);
+      setLoading(false);
+      try {
+        sessionStorage.setItem("rwa_cached_residents", JSON.stringify(data || []));
+      } catch {}
     });
 
     return () => unsubscribe();
   }, [user?.uid, user?.role, user?.status]);
 
-  // Check for duplicate block + flat
+  // Canonical Property Duplicate Validation:
+  // Evaluates block, plot, floor, unit according to Phase 3 & Phase 12 requirements.
+  // Respects that Owners and Tenants can share the same flat/property without error.
+  function checkResidentPropertyDuplicate({
+    blockId,
+    block,
+    plotNumber,
+    flat,
+    floor,
+    unitNumber,
+    personType = "OWNER",
+    excludeId = null,
+  }) {
+    const normPlot = normalizePlotNumber(plotNumber || flat || "");
+    const floorObj = normalizeFloor(floor);
+    const normUnit = normalizeUnitNumber(unitNumber || "");
+    const targetPersonType = (personType || "OWNER").toUpperCase();
+
+    if (!normPlot) return { isDuplicate: false };
+
+    // Find other residents on the exact same block + plot + floor
+    const sameFloorResidents = residents.filter((r) => {
+      if (r.id === excludeId) return false;
+      const rBlockId = r.blockId || "";
+      const rBlockName = (r.block || "").toLowerCase();
+      const blockMatches = (blockId && rBlockId === blockId) ||
+        (block && rBlockName === (block || "").toLowerCase());
+      if (!blockMatches) return false;
+
+      const rPlot = normalizePlotNumber(r.plotNumber || r.flat || r.flatNumber || "");
+      if (rPlot !== normPlot) return false;
+
+      const rFloor = normalizeFloor(r.floor).code;
+      return rFloor === floorObj.code;
+    });
+
+    if (sameFloorResidents.length === 0) {
+      return { isDuplicate: false };
+    }
+
+    // If target has NO unit number:
+    if (!normUnit) {
+      const existingSingleUnitRes = sameFloorResidents.find((r) => {
+        const rUnit = normalizeUnitNumber(r.unitNumber);
+        return !rUnit;
+      });
+
+      if (existingSingleUnitRes) {
+        const existingPersonType = (existingSingleUnitRes.personType || "OWNER").toUpperCase();
+        const isRentalOrFamily = (t) => t === "TENANT" || t === "RENTED" || t === "FAMILY_MEMBER";
+        // Allow Owner and Rented/Tenant or Family sharing the same property
+        if (targetPersonType !== existingPersonType && (isRentalOrFamily(targetPersonType) || isRentalOrFamily(existingPersonType))) {
+          return { isDuplicate: false, sharedProperty: true };
+        }
+        return {
+          isDuplicate: true,
+          message: "This plot and floor already have a registered property without a flat number. Please select the existing property or enter the correct flat number.",
+        };
+      }
+
+      // If existing residents have unit numbers, blank unit on multi-unit floor is rejected
+      return {
+        isDuplicate: true,
+        message: "This floor has multiple registered flats. Please enter a specific flat number (e.g. Flat 1, Flat 2).",
+      };
+    }
+
+    // Target HAS a unit number:
+    const matchingUnitRes = sameFloorResidents.find((r) => {
+      return normalizeUnitNumber(r.unitNumber) === normUnit;
+    });
+
+    if (matchingUnitRes) {
+      const existingPersonType = (matchingUnitRes.personType || "OWNER").toUpperCase();
+      const isRentalOrFamily = (t) => t === "TENANT" || t === "RENTED" || t === "FAMILY_MEMBER";
+      // Allow Owner and Rented/Tenant or Family sharing the same unit
+      if (targetPersonType !== existingPersonType && (isRentalOrFamily(targetPersonType) || isRentalOrFamily(existingPersonType))) {
+        return { isDuplicate: false, sharedProperty: true };
+      }
+
+      const displayBlock = block || matchingUnitRes.block || "this block";
+      return {
+        isDuplicate: true,
+        message: `This property is already registered: Block ${displayBlock}, Plot ${normPlot}, ${floorObj.label}, Unit ${normUnit}. Please select the existing property or contact the RWA admin.`,
+      };
+    }
+
+    return { isDuplicate: false };
+  }
+
+  // Backward compatibility wrapper
   function isDuplicateFlat(block, flat, excludeId) {
-    return residents.some(
-      (r) =>
-        r.id !== excludeId &&
-        r.block?.toLowerCase() === (block || "").toLowerCase() &&
-        (r.flatNumber || r.flat)?.toLowerCase() === (flat || "").toLowerCase()
-    );
+    const check = checkResidentPropertyDuplicate({
+      block,
+      flat,
+      excludeId,
+    });
+    return check.isDuplicate;
   }
 
   // Check for duplicate mobile
@@ -111,9 +211,18 @@ export function ResidentProvider({ children }) {
         return false;
       }
 
-      // Validate duplicates
-      if (isDuplicateFlat(data.block, data.flat)) {
-        toast.error(`Flat ${data.flat} in Block ${data.block} already exists.`);
+      // Validate property duplicates with canonical identity
+      const propCheck = checkResidentPropertyDuplicate({
+        blockId: data.blockId,
+        block: data.block,
+        plotNumber: data.plotNumber || data.flat,
+        flat: data.flat,
+        floor: data.floor,
+        unitNumber: data.unitNumber,
+        personType: data.personType || "OWNER",
+      });
+      if (propCheck.isDuplicate) {
+        toast.error(propCheck.message);
         return false;
       }
       if (isDuplicateMobile(cleanMobile)) {
@@ -172,14 +281,32 @@ export function ResidentProvider({ children }) {
         toast.success("Resident Added with Portal Login");
       } else {
         // Standard Firestore record without portal login credentials
+        const normPlot = normalizePlotNumber(data.plotNumber || data.flat);
+        const floorObj = normalizeFloor(data.floor);
+        const normUnit = normalizeUnitNumber(data.unitNumber || "");
+        const displayFlat = normUnit ? `${normPlot}-${normUnit}` : normPlot;
+        const normPersonType = (data.personType || "OWNER").toUpperCase();
+        const canonicalPropertyId = data.propertyId || (data.blockId && normPlot ? generatePropertyId({
+          blockId: data.blockId,
+          plotNumber: normPlot,
+          floor: floorObj.code,
+          unitNumber: normUnit,
+        }) : "");
+
         const docData = {
-          flat: (data.flat || "").toUpperCase(),
-          flatNumber: (data.flat || "").toUpperCase(),
-          owner: data.owner,
+          flat: (displayFlat || data.flat || "").toUpperCase(),
+          flatNumber: (displayFlat || data.flat || "").toUpperCase(),
+          plotNumber: normPlot || (data.flat || "").toUpperCase(),
+          floor: floorObj.label || data.floor || "Ground Floor",
+          floorCode: floorObj.code,
+          unitNumber: normUnit,
+          personType: normPersonType,
+          propertyId: canonicalPropertyId,
+          owner: data.owner || data.name || "",
+          name: data.owner || data.name || "",
           mobile: cleanMobile,
-          block: data.block,
+          block: data.block || "",
           blockId: data.blockId || "",
-          floor: data.floor || "",
           charge: Number(data.charge) || 0,
           email: (data.email || "").trim(),
           familyMembers: data.familyMembers || "",
@@ -247,8 +374,18 @@ export function ResidentProvider({ children }) {
       }
 
       // Validate duplicates (exclude current)
-      if (isDuplicateFlat(data.block, data.flat, id)) {
-        toast.error(`Flat ${data.flat} in Block ${data.block} already exists.`);
+      const propCheck = checkResidentPropertyDuplicate({
+        blockId: data.blockId,
+        block: data.block,
+        plotNumber: data.plotNumber || data.flat,
+        flat: data.flat,
+        floor: data.floor,
+        unitNumber: data.unitNumber,
+        personType: data.personType || currentResident?.personType || "OWNER",
+        excludeId: id,
+      });
+      if (propCheck.isDuplicate) {
+        toast.error(propCheck.message);
         return false;
       }
       if (isDuplicateMobile(cleanMobile, id)) {
@@ -256,15 +393,33 @@ export function ResidentProvider({ children }) {
         return false;
       }
 
+      const normPlot = normalizePlotNumber(data.plotNumber || data.flat || "");
+      const floorObj = normalizeFloor(data.floor);
+      const normUnit = normalizeUnitNumber(data.unitNumber || "");
+      const normPersonType = (data.personType || currentResident?.personType || "OWNER").toUpperCase();
+      const displayFlat = normUnit ? `${normPlot}-${normUnit}` : normPlot || (data.flat || "").toUpperCase();
+
+      const canonicalPropertyId = data.propertyId || currentResident?.propertyId || (data.blockId && normPlot ? generatePropertyId({
+        blockId: data.blockId,
+        plotNumber: normPlot,
+        floor: floorObj.code,
+        unitNumber: normUnit,
+      }) : "");
+
       // Update resident document in Firestore
       await updateResidentInFirestore(id, {
-        flat: (data.flat || "").toUpperCase(),
-        flatNumber: (data.flat || "").toUpperCase(),
+        propertyId: canonicalPropertyId,
+        plotNumber: normPlot,
+        floor: floorObj.label,
+        floorCode: floorObj.code,
+        unitNumber: normUnit,
+        personType: normPersonType,
+        flat: displayFlat,
+        flatNumber: displayFlat,
         owner: data.owner,
         mobile: cleanMobile,
         block: data.block,
         blockId: data.blockId || "",
-        floor: data.floor || "",
         charge: Number(data.charge) || 0,
         email: (data.email || "").trim(),
         familyMembers: data.familyMembers || "",
@@ -374,6 +529,7 @@ export function ResidentProvider({ children }) {
     <ResidentContext.Provider
       value={{
         residents,
+        loading,
         addResident,
         updateResident,
         deleteResident,
@@ -385,5 +541,12 @@ export function ResidentProvider({ children }) {
 }
 
 export function useResidents() {
-  return useContext(ResidentContext);
+  const ctx = useContext(ResidentContext);
+  return ctx || {
+    residents: [],
+    loading: false,
+    addResident: async () => {},
+    updateResident: async () => {},
+    deleteResident: async () => {},
+  };
 }

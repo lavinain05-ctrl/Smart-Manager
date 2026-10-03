@@ -3,6 +3,8 @@ import toast from "react-hot-toast";
 import { printPaymentReceipt } from "../../utils/printReceiptHelper";
 import { generateReceipt } from "../../utils/receiptGenerator";
 import { generateSpecialCollectionReceipt } from "../../utils/specialCollectionReceiptGenerator";
+import { formatResidentFloor } from "../../services/propertyService";
+import PrinterQuickAction from "../common/PrinterQuickAction";
 
 export default function PaymentReceiptSuccessModal({
   open,
@@ -23,6 +25,10 @@ export default function PaymentReceiptSuccessModal({
   const residentName = receipt.residentName || receipt.contributorName || "Resident";
   const flat = receipt.flat || receipt.flatNumber || "—";
   const block = receipt.block || "";
+  const plot = receipt.plotNumber || receipt.plot || "";
+  const floor = formatResidentFloor(receipt.floor);
+  const unit = receipt.unitNumber || receipt.unit || "";
+  const personType = receipt.personType || receipt.occupantType || "";
   const amount = Number(receipt.totalPaidAmount || receipt.amount || 0).toLocaleString("en-IN");
   const mode = receipt.paymentMethod || receipt.paymentMode || receipt.method || "Cash";
   const date = receipt.paymentDate || receipt.date || "";
@@ -33,7 +39,7 @@ export default function PaymentReceiptSuccessModal({
     ? receipt.collectionName || receipt.specialCampaignName || "Special Campaign"
     : receipt.isAdvance && receipt.periodLabel
     ? `${receipt.periodLabel} (${receipt.advanceDuration || 1} Mos Advance)`
-    : `${receipt.month || ""} ${receipt.year || ""}`.trim() || "Garbage Maintenance";
+    : `${receipt.month || ""} ${receipt.year || ""}`.trim() || "Garbage Collection Fee";
 
   function handlePrint() {
     printPaymentReceipt(receipt);
@@ -114,6 +120,36 @@ export default function PaymentReceiptSuccessModal({
               </span>
             </div>
 
+            {plot && plot !== flat && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 font-medium">Plot Number</span>
+                <span className="font-semibold text-gray-800">Plot {plot}</span>
+              </div>
+            )}
+
+            {floor && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 font-medium">Floor</span>
+                <span className="font-semibold text-gray-800">{floor}</span>
+              </div>
+            )}
+
+            {unit && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 font-medium">Unit Number</span>
+                <span className="font-semibold text-gray-800">Unit {unit}</span>
+              </div>
+            )}
+
+            {personType && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 font-medium">Resident Type</span>
+                <span className="font-bold uppercase tracking-wider text-[11px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
+                  {personType}
+                </span>
+              </div>
+            )}
+
             <div className="flex justify-between items-center">
               <span className="text-gray-500 font-medium">
                 {isSpecial ? "Campaign" : "Period"}
@@ -161,6 +197,12 @@ export default function PaymentReceiptSuccessModal({
             <div className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               ₹{amount}
             </div>
+          </div>
+
+          {/* Printer Status & Engine Indicator */}
+          <div className="flex items-center justify-between px-1 py-0.5">
+            <span className="text-[11px] text-gray-500 font-medium">Thermal Printer:</span>
+            <PrinterQuickAction />
           </div>
 
           {/* Action Buttons: PRINT and DOWNLOAD PDF */}

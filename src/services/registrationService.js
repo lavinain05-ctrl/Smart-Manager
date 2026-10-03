@@ -31,6 +31,16 @@ import {
 } from "./garbageService";
 import { linkResidentToFlat } from "./blockFlatService";
 import { logActivity } from "./activityLogService";
+import {
+  generatePropertyId,
+  normalizeFloor,
+  normalizePlotNumber,
+  normalizeUnitNumber,
+  createProperty,
+  linkOccupantToProperty,
+  formatPropertyDisplay,
+} from "./propertyService";
+import { notifyAdmin } from "./notificationService";
 
 const requestsRef = collection(db, "registrationRequests");
 
@@ -157,10 +167,14 @@ export function getAvailabilityErrorMessage(reason) {
 export async function submitRegistration({
   name,
   fatherHusbandName,
+  plotNumber,
+  floor,
+  unitNumber,
   flat,
   block,
   blockId,
-  floor,
+  personType = "OWNER",
+  propertyId = "",
   mobile,
   alternateMobile,
   email,
@@ -180,40 +194,54 @@ export async function submitRegistration({
   // --- Step 2: Normalize mobile ---
   const normalizedMobile = normalizeMobile(mobile);
 
-  // --- Step 3: Validate flat format ---
-  const flatError = validateFlatNumber(flat);
-  if (flatError) {
-    throw new Error(flatError);
-  }
-
-  // --- Step 4: Normalize flat ---
-  const normalizedFlat = normalizeFlatNumber(flat);
-
-  // --- Step 5: Validate block selection ---
+  // --- Step 3: Validate block selection ---
   if (!blockId) {
     throw new Error("Please select a block.");
   }
 
-  // --- Step 5b: Validate floor ---
-  const normalizedFloor = (floor || "").trim();
-  if (!normalizedFloor) {
-    throw new Error("Please enter the floor number.");
+  // --- Step 4: Validate plot number ---
+  const resolvedPlot = (plotNumber || flat || "").trim();
+  if (!resolvedPlot) {
+    throw new Error("Please enter your plot number.");
+  }
+  const normalizedPlot = normalizePlotNumber(resolvedPlot);
+
+  // --- Step 5: Validate floor ---
+  const normalizedFloorObj = normalizeFloor(floor);
+  if (!floor) {
+    throw new Error("Please select or enter the floor number.");
   }
 
-  // --- Step 6: Check availability via Cloud Function ---
-  const availability = await checkAvailability(normalizedMobile, blockId, normalizedFlat, normalizedFloor);
+  // --- Step 6: Normalize unit number ---
+  const normalizedUnit = normalizeUnitNumber(unitNumber || "");
+
+  // Legacy flat string for backward compatibility
+  const normalizedFlatDisplay = normalizedUnit
+    ? `${normalizedPlot}-${normalizedUnit}`
+    : normalizedPlot;
+
+  // Canonical property identity
+  const canonicalPropertyId = propertyId || generatePropertyId({
+    blockId,
+    plotNumber: normalizedPlot,
+    floor: normalizedFloorObj.code,
+    unitNumber: normalizedUnit,
+  });
+
+  // --- Step 7: Check availability via Cloud Function (with graceful Spark fallback) ---
+  const availability = await checkAvailability(normalizedMobile, blockId, normalizedFlatDisplay, normalizedFloorObj.label);
 
   if (!availability.available) {
     throw new Error(getAvailabilityErrorMessage(availability.reason));
   }
 
-  // --- Step 6b: Validate optional email ---
+  // --- Step 8: Validate optional email ---
   const normalizedEmail = (email || "").trim().toLowerCase();
   if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
     throw new Error("Please enter a valid email address.");
   }
 
-  // --- Step 7: Create Firebase Auth account using pseudo-email from Mobile ---
+  // --- Step 9: Create Firebase Auth account using pseudo-email from Mobile ---
   const authEmail = mobileToAuthEmail(normalizedMobile);
   let credential;
   try {
@@ -230,7 +258,7 @@ export async function submitRegistration({
 
   const uid = credential.user.uid;
 
-  // --- Step 8: Write registration request ---
+  // --- Step 10: Write registration request doc ---
   try {
     await setDoc(doc(db, "registrationRequests", uid), {
       uid,
@@ -239,23 +267,41 @@ export async function submitRegistration({
       email: normalizedEmail,
       mobile: normalizedMobile,
       alternateMobile: alternateMobile || "",
-      flat: normalizedFlat,
+      // Canonical Property Identity fields
+      propertyId: canonicalPropertyId,
+      plotNumber: normalizedPlot,
+      floor: normalizedFloorObj.label,
+      floorCode: normalizedFloorObj.code,
+      unitNumber: normalizedUnit,
+      personType: (personType || "OWNER").toUpperCase(),
+      // Legacy fields for backward compatibility
+      flat: normalizedFlatDisplay,
+      flatNumber: normalizedFlatDisplay,
       block: block || "",
       blockId: blockId || "",
-      floor: (floor || "").trim(),
       dob: dob || "",
       gender: gender || "",
       occupation: (occupation || "").trim(),
       emergencyContact: emergencyContact || "",
       garbageParticipation: garbageParticipation || "not_participating",
-      // Also store as flatNumber for consistency with residents collection
-      flatNumber: normalizedFlat,
       status: "pending",
       registeredAt: serverTimestamp(),
     });
 
-    // --- Step 9: Write mobile→auth email lookup for login ---
+    // --- Step 11: Write mobile→auth email lookup for login ---
     await writeAuthLookup(normalizedMobile, authEmail, uid, normalizedEmail);
+
+    // --- Step 12: Active Notification for Admin ---
+    try {
+      await notifyAdmin({
+        title: "New Resident Registration 👤",
+        message: `${name?.trim() || "New resident"} has submitted a registration for Flat ${normalizedFlatDisplay || flat || "—"} (${block || "—"}).`,
+        type: "registration",
+        link: "/admin/registrations",
+      });
+    } catch (notifErr) {
+      console.warn("[Registration] Admin notification warning:", notifErr.message);
+    }
 
     return uid;
   } catch (firestoreError) {
@@ -268,6 +314,87 @@ export async function submitRegistration({
     }
     throw firestoreError;
   }
+}
+
+/**
+ * Collector-created registration request (Phase 5C):
+ * Collectors visiting the field submit a registration request for admin review.
+ * Does NOT auto-approve.
+ */
+export async function submitCollectorRegistrationRequest({
+  name,
+  fatherHusbandName = "",
+  plotNumber,
+  floor,
+  unitNumber = "",
+  block,
+  blockId,
+  personType = "OWNER",
+  propertyId = "",
+  mobile,
+  alternateMobile = "",
+  email = "",
+  remarks = "",
+  garbageParticipation = "participating",
+  collectorId = "",
+  collectorName = "",
+}) {
+  const cleanMobile = normalizeMobile(mobile);
+  const mobileError = validateMobile(cleanMobile);
+  if (mobileError) throw new Error(mobileError);
+
+  if (!blockId) throw new Error("Please select a block.");
+  const normPlot = normalizePlotNumber(plotNumber);
+  if (!normPlot) throw new Error("Please enter the plot number.");
+
+  const floorObj = normalizeFloor(floor);
+  const normUnit = normalizeUnitNumber(unitNumber);
+  const displayFlat = normUnit ? `${normPlot}-${normUnit}` : normPlot;
+
+  const canonicalPropertyId = propertyId || generatePropertyId({
+    blockId,
+    plotNumber: normPlot,
+    floor: floorObj.code,
+    unitNumber: normUnit,
+  });
+
+  const requestRef = await addDoc(requestsRef, {
+    name: (name || "").trim(),
+    fatherHusbandName: (fatherHusbandName || "").trim(),
+    mobile: cleanMobile,
+    alternateMobile: alternateMobile || "",
+    email: (email || "").trim().toLowerCase(),
+    propertyId: canonicalPropertyId,
+    plotNumber: normPlot,
+    floor: floorObj.label,
+    floorCode: floorObj.code,
+    unitNumber: normUnit,
+    personType: (personType || "OWNER").toUpperCase(),
+    flat: displayFlat,
+    flatNumber: displayFlat,
+    block: block || "",
+    blockId: blockId || "",
+    garbageParticipation: garbageParticipation || "participating",
+    remarks: remarks || "",
+    submittedByRole: "collector",
+    collectorId: collectorId || "",
+    collectorName: collectorName || "",
+    status: "pending",
+    registeredAt: serverTimestamp(),
+  });
+
+  try {
+    await notifyAdmin({
+      title: "New Registration (by Collector) 👤",
+      message: `${collectorName || "Collector"} submitted registration for ${name?.trim() || "Resident"} (Flat ${displayFlat}).`,
+      type: "registration",
+      link: "/admin/registrations",
+    });
+  } catch (notifErr) {
+    console.warn("[Registration] Admin notification warning:", notifErr.message);
+  }
+
+  return requestRef.id;
 }
 
 // =============================
@@ -322,11 +449,60 @@ export async function approveRegistration(requestId, request, charge, overrides 
   const cleanMobile = normalizeMobile(request.mobile);
   const authEmail = mobileToAuthEmail(cleanMobile);
 
-  // Use overrides if admin changed block/flat during approval
+  // Use overrides if admin changed details during approval
   const finalBlock = overrides.block || request.block || "";
   const finalBlockId = overrides.blockId || request.blockId || "";
-  const finalFlat = (overrides.flat || request.flat || "").toUpperCase();
-  const finalFloor = overrides.floor || request.floor || "";
+  const finalPlot = normalizePlotNumber(overrides.plotNumber || request.plotNumber || request.flat || "");
+  const finalFloorObj = normalizeFloor(overrides.floor || request.floor || "");
+  const finalUnit = normalizeUnitNumber(overrides.unitNumber !== undefined ? overrides.unitNumber : (request.unitNumber || ""));
+  const finalPersonType = (overrides.personType || request.personType || "OWNER").toUpperCase();
+
+  const finalDisplayFlat = finalUnit
+    ? `${finalPlot}-${finalUnit}`
+    : finalPlot || (request.flat || "").toUpperCase();
+
+  const finalFlat = overrides.flat || finalDisplayFlat;
+
+  // Canonical property identity
+  const canonicalPropertyId = overrides.propertyId || generatePropertyId({
+    blockId: finalBlockId,
+    plotNumber: finalPlot,
+    floor: finalFloorObj.code,
+    unitNumber: finalUnit,
+  });
+
+  // Ensure property exists or create atomically
+  try {
+    const propRef = doc(db, "properties", canonicalPropertyId);
+    const propSnap = await getDoc(propRef);
+    if (!propSnap.exists()) {
+      await createProperty({
+        blockId: finalBlockId,
+        blockName: finalBlock,
+        plotNumber: finalPlot,
+        floor: finalFloorObj.label,
+        unitNumber: finalUnit,
+        occupancyStatus: finalPersonType === "TENANT" ? "TENANT_OCCUPIED" : "OWNER_OCCUPIED",
+        ownerResidentId: finalPersonType === "OWNER" ? uid : "",
+        ownerName: finalPersonType === "OWNER" ? (request.name || "") : "",
+        currentOccupantResidentId: uid,
+        currentOccupantName: request.name || "",
+        occupantType: finalPersonType,
+        createdBy: approverInfo?.name || "Admin",
+        createdById: approverInfo?.uid || "",
+      });
+    } else {
+      await linkOccupantToProperty({
+        propertyId: canonicalPropertyId,
+        residentId: uid,
+        residentName: request.name || "",
+        personType: finalPersonType,
+        recordedBy: approverInfo?.name || "Admin",
+      });
+    }
+  } catch (propErr) {
+    console.warn("[approveRegistration] Property resolution note:", propErr.message);
+  }
 
   // Garbage status from registration choice
   const gcStatus = request.garbageParticipation === "participating"
@@ -357,8 +533,14 @@ export async function approveRegistration(requestId, request, charge, overrides 
     email: (request.email || "").trim() || authEmail,
     phone: cleanMobile,
     mobile: cleanMobile,
-    flat: finalFlat,
-    flatNumber: finalFlat,
+    propertyId: canonicalPropertyId,
+    plotNumber: finalPlot,
+    floor: finalFloorObj.label,
+    floorCode: finalFloorObj.code,
+    unitNumber: finalUnit,
+    personType: finalPersonType,
+    flat: finalDisplayFlat,
+    flatNumber: finalDisplayFlat,
     block: finalBlock,
     blockId: finalBlockId,
     residentId: uid,
@@ -369,13 +551,18 @@ export async function approveRegistration(requestId, request, charge, overrides 
 
   // Create official residents/{uid} doc
   batch.set(doc(db, "residents", uid), {
-    flat: finalFlat,
-    flatNumber: finalFlat,
+    propertyId: canonicalPropertyId,
+    plotNumber: finalPlot,
+    floor: finalFloorObj.label,
+    floorCode: finalFloorObj.code,
+    unitNumber: finalUnit,
+    personType: finalPersonType,
+    flat: finalDisplayFlat,
+    flatNumber: finalDisplayFlat,
     owner: request.name || "",
     mobile: cleanMobile,
     block: finalBlock,
     blockId: finalBlockId,
-    floor: finalFloor,
     charge: charge ? Number(charge) : 0,
     email: (request.email || "").trim(),
     fatherHusbandName: request.fatherHusbandName || "",
@@ -388,14 +575,28 @@ export async function approveRegistration(requestId, request, charge, overrides 
     status: "Active",
     garbageStatus: gcStatus,
     garbageParticipation: request.garbageParticipation || "not_participating",
+    garbageJoinedAt: gcStatus === "participating" ? serverTimestamp() : null,
+    garbageJoinedMonth: gcStatus === "participating" ? new Date().toLocaleString("default", { month: "long" }) : null,
+    garbageJoinedYear: gcStatus === "participating" ? new Date().getFullYear() : null,
+    createdAt: request.createdAt || serverTimestamp(),
     remarks: "",
     accessProvenance: provenance,
     approvedAt: serverTimestamp(),
   });
 
-  // Mark request as approved
+  // Mark request as approved and synchronize overridden details
   batch.update(doc(db, "registrationRequests", requestId), {
     status: "approved",
+    propertyId: canonicalPropertyId,
+    plotNumber: finalPlot,
+    floor: finalFloorObj.label,
+    floorCode: finalFloorObj.code,
+    unitNumber: finalUnit,
+    flat: finalDisplayFlat,
+    flatNumber: finalDisplayFlat,
+    block: finalBlock,
+    blockId: finalBlockId,
+    personType: finalPersonType,
     approvedBy: provenance,
     approvedAt: serverTimestamp(),
   });
@@ -410,7 +611,6 @@ export async function approveRegistration(requestId, request, charge, overrides 
     try {
       const existingAccount = await getGarbageAccountByResidentId(uid);
       if (!existingAccount) {
-        // Fetch garbage settings defaultCharge (best-effort — fallback to charge)
         let defaultCharge = charge ? Number(charge) : 0;
         try {
           const settingsSnap = await getDocs(
@@ -428,6 +628,7 @@ export async function approveRegistration(requestId, request, charge, overrides 
 
         await addGarbageAccount({
           residentId: uid,
+          propertyId: canonicalPropertyId,
           monthlyCharge: defaultCharge,
           collectorId: "",
           status: "active",

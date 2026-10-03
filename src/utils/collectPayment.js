@@ -3,6 +3,7 @@ import { doc, getDocs, query, where, collection, addDoc, updateDoc, serverTimest
 import { db } from "../firebase/firebase";
 
 import { addBill, updateBill } from "../services/billService";
+import { isPriorToCollectionStart, isPriorToResidentBillingStart, getResidentBillingStart } from "./billingCycle";
 
 // =============================
 // collectResidentPayment
@@ -31,6 +32,17 @@ export async function collectResidentPayment({
   collectorId,
 }) {
   try {
+    if (isPriorToCollectionStart(month, year)) {
+      toast.error("Collection starts from October 2026. Cannot collect for previous periods.");
+      return false;
+    }
+
+    if (resident && isPriorToResidentBillingStart(resident, month, year)) {
+      const start = getResidentBillingStart(resident);
+      toast.error(`Collection for ${resident.owner || "resident"} starts from ${start.month} ${start.year} (joined/participated). Cannot collect for earlier months.`);
+      return false;
+    }
+
     const isAdvance = Boolean(
       paymentData.isAdvance &&
       Array.isArray(paymentData.coveredMonths) &&
@@ -146,6 +158,12 @@ export async function collectResidentPayment({
         residentName: resident.owner || resident.name || "Resident",
         flat: resident.flat || resident.flatNumber || "",
         block: resident.block || "",
+        plotNumber: resident.plotNumber || resident.plot || "",
+        floor: resident.floor || "",
+        floorCode: resident.floorCode || "",
+        unitNumber: resident.unitNumber || "",
+        personType: resident.personType || "",
+        propertyId: resident.propertyId || "",
         amount: finalMonthlyAmount,
         totalPaidAmount: finalTotalAmount,
         monthlyRate,
@@ -294,6 +312,12 @@ export async function collectResidentPayment({
       residentName: resident.owner || resident.name || "Resident",
       flat: resident.flat || resident.flatNumber || "",
       block: resident.block || "",
+      plotNumber: resident.plotNumber || resident.plot || "",
+      floor: resident.floor || "",
+      floorCode: resident.floorCode || "",
+      unitNumber: resident.unitNumber || "",
+      personType: resident.personType || "",
+      propertyId: resident.propertyId || "",
       amount: finalTotalAmount,
       totalPaidAmount: finalTotalAmount,
       monthlyRate,

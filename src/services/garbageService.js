@@ -17,6 +17,7 @@ import {
 } from "firebase/firestore";
 
 import { db } from "../firebase/firebase";
+import { isPriorToCollectionStart, isPriorToResidentBillingStart } from "../utils/billingCycle";
 
 // =============================================
 // Collection References
@@ -64,22 +65,49 @@ export async function addGarbageAccount(data) {
     throw new Error("Cannot create garbage account without a valid Resident ID reference.");
   }
 
-  // Prevent duplicate account for the same residentId
-  const existing = await getGarbageAccountByResidentId(data.residentId);
+  // Prevent duplicate account for the same residentId or propertyId
+  let existing = await getGarbageAccountByResidentId(data.residentId);
+  if (!existing && data.propertyId) {
+    existing = await getGarbageAccountByPropertyId(data.propertyId);
+  }
+
   if (existing) {
-    throw new Error("A garbage account already exists for this resident.");
+    // If account already exists for property, update responsible resident rather than duplicating
+    if (data.propertyId && existing.propertyId === data.propertyId) {
+      await updateGarbageAccount(existing.id, {
+        residentId: data.residentId.trim(),
+        responsibleResidentId: data.residentId.trim(),
+        monthlyCharge: Number(data.monthlyCharge || existing.monthlyCharge || 0),
+        status: data.status || existing.status || "active",
+        participationStatus: data.status || existing.status || "active",
+        updatedAt: serverTimestamp(),
+      });
+      return { id: existing.id, ...existing };
+    }
+    throw new Error("A garbage account already exists for this resident or property.");
   }
 
   return await addDoc(accountsRef, {
     residentId: data.residentId.trim(),
+    responsibleResidentId: data.residentId.trim(),
+    propertyId: data.propertyId || "",
     monthlyCharge: Number(data.monthlyCharge || 0),
     collectorId: data.collectorId || "",
     status: data.status || "active",
+    participationStatus: data.status || "active",
     joinedDate: data.joinedDate || new Date().toISOString().split("T")[0],
     remarks: data.remarks || "",
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function getGarbageAccountByPropertyId(propertyId) {
+  if (!propertyId) return null;
+  const q = query(accountsRef, where("propertyId", "==", propertyId), limit(1));
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return null;
+  return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
 }
 
 export async function relinkGarbageAccount(accountId, newResidentId) {
@@ -88,6 +116,7 @@ export async function relinkGarbageAccount(accountId, newResidentId) {
   }
   return await updateDoc(doc(db, "garbageAccounts", accountId), {
     residentId: newResidentId.trim(),
+    responsibleResidentId: newResidentId.trim(),
     updatedAt: serverTimestamp(),
   });
 }
@@ -207,6 +236,10 @@ export async function garbageBillExists(accountId, month, year) {
 // =============================================
 
 export async function generateMonthlyGarbageBills(accounts, month, year, existingBills, residents = []) {
+  if (isPriorToCollectionStart(month, year)) {
+    return { generated: 0, skipped: accounts.length };
+  }
+
   const existingAccountIds = new Set(
     existingBills
       .filter((b) => b.month === month && Number(b.year) === Number(year))
@@ -226,6 +259,8 @@ export async function generateMonthlyGarbageBills(accounts, month, year, existin
     if (acc.status !== "active") return false;
     if (existingAccountIds.has(acc.id)) return false;
     if (participatingResidentIds && !participatingResidentIds.has(acc.residentId)) return false;
+    const r = residents.find((res) => res.id === acc.residentId);
+    if (r && isPriorToResidentBillingStart(r, month, year)) return false;
     return true;
   });
 

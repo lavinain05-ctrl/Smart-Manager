@@ -8,6 +8,7 @@ import {
 } from "react-icons/fa";
 
 import { generateSingleBillPDF } from "../../utils/printReportHelper";
+import { formatResidentFloor } from "../../services/propertyService";
 import Pagination from "../common/Pagination";
 
 export default function BillTable({
@@ -208,6 +209,7 @@ export default function BillTable({
             <div>
               <div class="item-row"><span class="item-lbl">Resident Name:</span> <span class="item-val">${bill.residentName || "-"}</span></div>
               <div class="item-row"><span class="item-lbl">Flat Number:</span> <span class="item-val">${bill.flat}</span></div>
+              <div class="item-row"><span class="item-lbl">Floor Level:</span> <span class="item-val">${formatResidentFloor(bill.floor) || "Ground Floor"}</span></div>
               <div class="item-row"><span class="item-lbl">Block:</span> <span class="item-val">${bill.block || "General"}</span></div>
             </div>
             <div>
@@ -276,7 +278,7 @@ export default function BillTable({
       <table className="w-full">
         <thead className="bg-gray-50 border-b border-gray-100">
           <tr>
-            <th className="p-4 text-left font-bold text-gray-600">Flat</th>
+            <th className="p-4 text-left font-bold text-gray-600">Flat / Floor</th>
             <th className="p-4 text-left font-bold text-gray-600">Resident</th>
             <th className="p-4 text-left font-bold text-gray-600">Amount</th>
             <th className="p-4 text-left font-bold text-gray-600">Status</th>
@@ -301,7 +303,14 @@ export default function BillTable({
               
               return (
                 <tr key={bill.id} className="border-t border-gray-50 hover:bg-emerald-50/30 transition">
-                  <td className="p-4 font-bold text-gray-800">{bill.flat}</td>
+                  <td className="p-4 font-bold text-gray-800">
+                    <div>
+                      <span>{bill.flat}</span>
+                      <span className="block text-[11px] font-normal text-blue-600">
+                        {formatResidentFloor(bill.floor) || "Ground Floor"}
+                      </span>
+                    </div>
+                  </td>
                   <td className="p-4 font-medium text-gray-600">{bill.residentName}</td>
                   <td className="p-4 font-bold text-emerald-600">₹{bill.amount}</td>
                   <td className="p-4">

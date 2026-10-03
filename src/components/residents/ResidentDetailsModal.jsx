@@ -33,6 +33,7 @@ import toast from "react-hot-toast";
 import { isRealEmail } from "../../services/authService";
 import { subscribeFamilyMembers } from "../../services/residentService";
 import { isGcParticipating } from "../../services/statisticsService";
+import { formatResidentFloor } from "../../services/propertyService";
 
 export default function ResidentDetailsModal({
   resident,
@@ -160,7 +161,7 @@ export default function ResidentDetailsModal({
                 <p className="text-slate-300 text-xs sm:text-sm mt-1 flex items-center gap-2 flex-wrap">
                   <span>Block: <strong className="text-white">{resident.block || "—"}</strong></span>
                   <span>•</span>
-                  <span>Floor: <strong className="text-white">{resident.floor || "Ground Floor"}</strong></span>
+                  <span>Floor: <strong className="text-white">{formatResidentFloor(resident.floor) || "Ground Floor"}</strong></span>
                   {resident.mobile && (
                     <>
                       <span>•</span>
@@ -350,6 +351,16 @@ export default function ResidentDetailsModal({
                   </p>
                 </div>
 
+                {/* Floor Level */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
+                  <div className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <FaBuilding className="text-blue-500" /> Floor Level
+                  </div>
+                  <p className="font-bold text-base text-slate-800">
+                    {formatResidentFloor(resident.floor) || "Ground Floor"}
+                  </p>
+                </div>
+
                 {/* Email Address */}
                 <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
                   <div className="flex items-center justify-between text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1">
@@ -470,7 +481,7 @@ export default function ResidentDetailsModal({
                   <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block mb-1">
                     Floor Level
                   </span>
-                  <p className="text-base font-bold text-slate-800">{resident.floor || "Ground Floor"}</p>
+                  <p className="text-base font-bold text-slate-800">{formatResidentFloor(resident.floor) || "Ground Floor"}</p>
                   {resident.floorCode && (
                     <span className="text-[10px] text-slate-400 font-mono">Code: {resident.floorCode}</span>
                   )}

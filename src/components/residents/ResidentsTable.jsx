@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
-import { FaEdit, FaTrash, FaRecycle, FaKey, FaBan, FaEye } from "react-icons/fa";
+import { FaEdit, FaTrash, FaRecycle, FaKey, FaBan, FaEye, FaBuilding } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 import { updateGarbageStatus } from "../../services/residentService";
 import { logActivity } from "../../services/activityLogService";
 import { isGcParticipating } from "../../services/statisticsService";
+import { formatResidentFloor } from "../../services/propertyService";
 import Pagination from "../common/Pagination";
 
 const GC_STATUSES = [
@@ -107,6 +108,7 @@ export default function ResidentsTable({
         <thead className="bg-gray-100">
           <tr>
             <th className="p-4 text-left">Flat</th>
+            <th className="p-4 text-left">Floor</th>
             <th className="p-4 text-left">Owner</th>
             <th className="p-4 text-left">Mobile</th>
             <th className="p-4 text-left">Block</th>
@@ -163,11 +165,23 @@ export default function ResidentsTable({
                 <td className="p-4 font-semibold">
                   <button
                     onClick={() => onViewDetails && onViewDetails(resident)}
-                    className="font-bold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer text-left"
+                    className="font-bold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer text-left block"
                     title="Click to view complete resident details"
                   >
-                    {resident.flat}
+                    {resident.flat || resident.plotNumber || "—"}
                   </button>
+                  {resident.unitNumber && resident.flat?.includes("-") && (
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Unit {resident.unitNumber}
+                    </span>
+                  )}
+                </td>
+
+                <td className="p-4">
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/70 inline-flex items-center gap-1.5 whitespace-nowrap shadow-2xs">
+                    <FaBuilding className="text-[10px] text-blue-500" />
+                    {formatResidentFloor(resident.floor) || "Ground Floor"}
+                  </span>
                 </td>
 
                 <td className="p-4">

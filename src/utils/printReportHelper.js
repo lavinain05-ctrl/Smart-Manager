@@ -6,6 +6,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import toast from "react-hot-toast";
+import { formatResidentFloor } from "../services/propertyService";
 
 /**
  * Executes direct printing via a hidden isolated iframe.
@@ -419,6 +420,7 @@ export function printBlockWiseResidentsRegister({
                 <tr>
                   <th style="width: 30px; text-align: center;">S.N</th>
                   <th style="width: 60px;">Flat</th>
+                  <th style="width: 75px;">Floor</th>
                   <th>Resident / Owner Name</th>
                   <th style="width: 80px;">Mobile</th>
                   <th style="width: 55px; text-align: center;">Resident</th>
@@ -436,6 +438,7 @@ export function printBlockWiseResidentsRegister({
                   <tr>
                     <td style="text-align: center; color: #64748b;">${idx + 1}</td>
                     <td class="flat-num">${r.flat}</td>
+                    <td style="font-size: 8.5px; color: #0284c7; font-weight: 600;">${formatResidentFloor(r.floor) || "Ground Floor"}</td>
                     <td><strong>${r.owner}</strong></td>
                     <td style="font-family: monospace; font-size: 9px;">${r.mobile}</td>
                     <td style="text-align: center; font-size: 8.5px;">${r.status}</td>

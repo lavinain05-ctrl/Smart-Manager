@@ -7,6 +7,7 @@ import {
   normalizeUnitNumber,
   generatePropertyId,
   AVAILABLE_FLOORS,
+  formatResidentFloor,
 } from "../../services/propertyService";
 
 export default function ResidentForm({
@@ -48,11 +49,14 @@ export default function ResidentForm({
   useEffect(() => {
     if (resident) {
       const resMobile = normalizeMobile(resident.mobile || "");
+      const rawFlat = resident.flat || resident.flatNumber || "";
+      const rawUnit = resident.unitNumber || "";
+      const resolvedPlot = resident.plotNumber || (rawUnit && rawFlat.endsWith(`-${rawUnit}`) ? rawFlat.slice(0, -(rawUnit.length + 1)) : rawFlat) || "";
       setForm({
-        flat: resident.flat || resident.flatNumber || "",
-        plotNumber: resident.plotNumber || resident.flat || resident.flatNumber || "",
-        floor: resident.floor || "Ground Floor",
-        unitNumber: resident.unitNumber || "",
+        flat: rawFlat,
+        plotNumber: resolvedPlot,
+        floor: formatResidentFloor(resident.floor) || "Ground Floor",
+        unitNumber: rawUnit,
         personType: resident.personType || "OWNER",
         propertyId: resident.propertyId || "",
         owner: resident.owner || "",

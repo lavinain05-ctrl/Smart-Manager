@@ -1,5 +1,5 @@
 // Service Worker for D Block RWA Indraprastha PWA & High-Speed Launch Caching
-const CACHE_NAME = 'rwa-app-v41';
+const CACHE_NAME = 'rwa-app-v42';
 
 const STATIC_PRECACHE = [
   '/',

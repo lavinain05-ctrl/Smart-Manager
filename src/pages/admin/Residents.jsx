@@ -446,7 +446,8 @@ export default function Residents() {
           resident.flat?.toLowerCase().includes(value) ||
           resident.owner?.toLowerCase().includes(value) ||
           resident.mobile?.includes(value) ||
-          resident.block?.toLowerCase().includes(value);
+          resident.block?.toLowerCase().includes(value) ||
+          resident.floor?.toLowerCase().includes(value);
         if (!matchesSearch) return false;
       }
 

@@ -296,6 +296,26 @@ export async function executeMigration({ dryRun = true, adminUserId = "admin" } 
       { merge: true }
     );
     batchCount++;
+
+    // Synchronize to users collection so resident profile & portal session have identical floor & property info
+    const userRef = doc(db, "users", resUpdate.residentId);
+    currentBatch.set(
+      userRef,
+      {
+        propertyId: resUpdate.propertyId,
+        plotNumber: resUpdate.plotNumber,
+        floor: resUpdate.floor,
+        floorCode: resUpdate.floorCode,
+        unitNumber: resUpdate.unitNumber,
+        personType: resUpdate.personType,
+        flat: resUpdate.flat,
+        flatNumber: resUpdate.flatNumber,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+    batchCount++;
+
     if (batchCount >= CHUNK_SIZE) {
       residentBatches.push(currentBatch.commit());
       currentBatch = writeBatch(db);

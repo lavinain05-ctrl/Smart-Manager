@@ -12,6 +12,7 @@ import { useGarbage } from "../../context/GarbageContext";
 
 import { collectResidentPayment } from "../../utils/collectPayment";
 import { isGcParticipating } from "../../services/statisticsService";
+import { formatResidentFloor } from "../../services/propertyService";
 
 import MonthSelector from "../../components/common/MonthSelector";
 
@@ -189,6 +190,9 @@ export default function Collections() {
                 <div>
                   <div className="flex items-center gap-3">
                     <h2 className="font-bold text-xl">{resident.flat}</h2>
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/70">
+                      {formatResidentFloor(resident.floor) || "Ground Floor"}
+                    </span>
                     {!isParticipating && (
                       <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-gray-100 text-gray-500">
                         Not Enrolled

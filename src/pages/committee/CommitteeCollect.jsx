@@ -26,6 +26,7 @@ import { useSettings } from "../../context/SettingsContext";
 
 import { collectResidentPayment } from "../../utils/collectPayment";
 import { isGcParticipating } from "../../services/statisticsService";
+import { formatResidentFloor } from "../../services/propertyService";
 import { isPriorToResidentBillingStart } from "../../utils/billingCycle";
 import {
   subscribeSpecialCollections,
@@ -632,6 +633,9 @@ export default function CommitteeCollect({ defaultModule }) {
                         <span className="font-bold text-slate-900 dark:text-white text-base">
                           Flat {resident.flat || resident.flatNumber || "—"}
                         </span>
+                        <span className="text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded text-blue-700 dark:text-blue-300">
+                          {formatResidentFloor(resident.floor) || "Ground Floor"}
+                        </span>
                         {resident.block && (
                           <span className="text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300">
                             {resident.block}
@@ -850,6 +854,9 @@ export default function CommitteeCollect({ defaultModule }) {
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-slate-900 dark:text-white text-base">
                               Flat {resident.flatNumber || resident.flat || "—"}
+                            </span>
+                            <span className="text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded text-blue-700 dark:text-blue-300">
+                              {formatResidentFloor(resident.floor) || "Ground Floor"}
                             </span>
                             {resident.block && (
                               <span className="text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300">

@@ -1344,6 +1344,8 @@ export default function ResidentDashboard() {
                             photo = "/committee/ankit-chaudhary.png";
                           } else if (member.designation?.toLowerCase() === "secretary" || member.name?.toLowerCase().includes("janardan") || member.name?.toLowerCase().includes("janardhan")) {
                             photo = "/committee/secretary.jpg";
+                          } else if (member.designation?.toLowerCase() === "treasurer" || member.name?.toLowerCase().includes("sandeep") || member.name?.toLowerCase().includes("gaur")) {
+                            photo = "/committee/treasurer.jpg";
                           } else if (member.designation?.toLowerCase() === "vice treasurer" || member.name?.toLowerCase().includes("vinod")) {
                             photo = "/committee/vinod-kumar.jpg";
                           } else if (member.designation?.toLowerCase() === "advisor" || member.name?.toLowerCase().includes("dinesh")) {

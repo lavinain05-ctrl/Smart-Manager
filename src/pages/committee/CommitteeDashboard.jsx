@@ -723,6 +723,8 @@ export default function CommitteeDashboard() {
                     ? "/committee/ankit-chaudhary.png"
                     : (member.designation === "Secretary" || member.designation?.toLowerCase() === "secretary" || member.name?.toLowerCase().includes("janardan") || member.name?.toLowerCase().includes("janardhan"))
                     ? "/committee/secretary.jpg"
+                    : (member.designation === "Treasurer" || member.designation?.toLowerCase() === "treasurer" || member.name?.toLowerCase().includes("sandeep") || member.name?.toLowerCase().includes("gaur"))
+                    ? "/committee/treasurer.jpg"
                     : (member.designation === "Vice Treasurer" || member.name?.toLowerCase().includes("vinod"))
                     ? "/committee/vinod-kumar.jpg"
                     : (member.designation === "Spokesperson" || member.name?.toLowerCase().includes("narendra") || member.name?.toLowerCase().includes("dhama"))

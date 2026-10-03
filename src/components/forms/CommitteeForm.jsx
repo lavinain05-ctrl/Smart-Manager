@@ -204,6 +204,8 @@ export default function CommitteeForm({
           ? "/committee/president.jpg"
           : member.designation?.toLowerCase() === "vice president" || member.name?.toLowerCase().includes("ankit")
           ? "/committee/ankit-chaudhary.png"
+          : member.designation?.toLowerCase() === "treasurer" || member.name?.toLowerCase().includes("sandeep") || member.name?.toLowerCase().includes("gaur")
+          ? "/committee/treasurer.jpg"
           : member.designation?.toLowerCase() === "vice treasurer" || member.name?.toLowerCase().includes("vinod")
           ? "/committee/vinod-kumar.jpg"
           : member.designation?.toLowerCase() === "spokesperson" || member.name?.toLowerCase().includes("narendra") || member.name?.toLowerCase().includes("dhama")
@@ -281,6 +283,11 @@ export default function CommitteeForm({
       setPhotoPreview("/committee/secretary.jpg");
       setPhotoMode("url");
       setDesignation("Secretary");
+    } else if (resName.includes("sandeep") || resName.includes("gaur")) {
+      setPhotoUrl("/committee/treasurer.jpg");
+      setPhotoPreview("/committee/treasurer.jpg");
+      setPhotoMode("url");
+      setDesignation("Treasurer");
     } else if (resName.includes("manoj") || resName.includes("tomar")) {
       setPhotoUrl("/committee/manoj-tomar.jpg");
       setPhotoPreview("/committee/manoj-tomar.jpg");
@@ -756,7 +763,45 @@ export default function CommitteeForm({
             </label>
             <select
               value={designation}
-              onChange={(e) => setDesignation(e.target.value)}
+              onChange={(e) => {
+                const newDes = e.target.value;
+                setDesignation(newDes);
+                if (!photoPreview || photoPreview.startsWith("/committee/")) {
+                  if (newDes === "President") {
+                    setPhotoUrl("/committee/president.jpg");
+                    setPhotoPreview("/committee/president.jpg");
+                    setPhotoMode("url");
+                  } else if (newDes === "Vice President") {
+                    setPhotoUrl("/committee/ankit-chaudhary.png");
+                    setPhotoPreview("/committee/ankit-chaudhary.png");
+                    setPhotoMode("url");
+                  } else if (newDes === "Secretary") {
+                    setPhotoUrl("/committee/secretary.jpg");
+                    setPhotoPreview("/committee/secretary.jpg");
+                    setPhotoMode("url");
+                  } else if (newDes === "Treasurer") {
+                    setPhotoUrl("/committee/treasurer.jpg");
+                    setPhotoPreview("/committee/treasurer.jpg");
+                    setPhotoMode("url");
+                  } else if (newDes === "Vice Treasurer") {
+                    setPhotoUrl("/committee/vinod-kumar.jpg");
+                    setPhotoPreview("/committee/vinod-kumar.jpg");
+                    setPhotoMode("url");
+                  } else if (newDes === "Spokesperson") {
+                    setPhotoUrl("/committee/narendra-dhama.png");
+                    setPhotoPreview("/committee/narendra-dhama.png");
+                    setPhotoMode("url");
+                  } else if (newDes === "Advisor") {
+                    setPhotoUrl("/committee/dinesh-kumar.png");
+                    setPhotoPreview("/committee/dinesh-kumar.png");
+                    setPhotoMode("url");
+                  } else if (newDes === "Vice Secretary") {
+                    setPhotoUrl("/committee/manoj-tomar.jpg");
+                    setPhotoPreview("/committee/manoj-tomar.jpg");
+                    setPhotoMode("url");
+                  }
+                }
+              }}
               className="w-full border border-gray-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white font-medium text-gray-800"
             >
               {DESIGNATIONS.map((d) => (

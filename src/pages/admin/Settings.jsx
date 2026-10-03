@@ -18,9 +18,6 @@ import {
   FaEnvelope,
   FaCreditCard,
   FaPrint,
-  FaKey,
-  FaBolt,
-  FaShieldAlt,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -161,8 +158,6 @@ export default function Settings() {
     bankBranch: "",
     upiId: "",
     accountHolderName: "",
-    razorpayKeyId: "",
-    enableOnlinePayments: true,
     societyRules: "",
     codeOfConduct: "",
     googleMapUrl: "",
@@ -198,8 +193,6 @@ export default function Settings() {
         bankBranch: settings.bankBranch || "",
         upiId: settings.upiId || "",
         accountHolderName: settings.accountHolderName || "",
-        razorpayKeyId: settings.razorpayKeyId || "",
-        enableOnlinePayments: settings.enableOnlinePayments !== false,
         societyRules: settings.societyRules || "",
         codeOfConduct: settings.codeOfConduct || "",
         googleMapUrl: settings.googleMapUrl || "",
@@ -448,84 +441,9 @@ export default function Settings() {
             </div>
           )}
 
-          {/* Bank Details & Payment Gateway Tab */}
+          {/* Bank Details Tab */}
           {activeTab === "bank" && (
             <div className="space-y-6">
-              {/* Automated Payment Gateway Section */}
-              <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-emerald-50/40 border border-emerald-100 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-100/80 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-base shadow-sm">
-                      <FaBolt />
-                    </span>
-                    <div>
-                      <h2 className="text-base font-bold text-gray-900">
-                        Automated Online UPI Gateway (Razorpay)
-                      </h2>
-                      <p className="text-xs text-gray-500">
-                        Zero-touch, automatic bank verification for all resident bill payments.
-                      </p>
-                    </div>
-                  </div>
-
-                  <label className="inline-flex items-center gap-2 cursor-pointer self-start sm:self-auto">
-                    <input
-                      type="checkbox"
-                      name="enableOnlinePayments"
-                      checked={Boolean(form.enableOnlinePayments)}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          enableOnlinePayments: e.target.checked,
-                        }))
-                      }
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                    <span className="text-xs font-bold text-gray-700">
-                      {form.enableOnlinePayments ? "Enabled" : "Disabled"}
-                    </span>
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <InputField
-                      label="Razorpay Key ID"
-                      name="razorpayKeyId"
-                      value={form.razorpayKeyId}
-                      onChange={handleChange}
-                      placeholder="e.g. rzp_live_xxxxxxxxxxxxxx or rzp_test_xxxxxxxxxxxxxx"
-                      icon={FaKey}
-                      hint="Generate this from your free Razorpay Dashboard > Settings > API Keys. Standard bank UPI has 0% processing fee."
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    {form.razorpayKeyId ? (
-                      <div className="p-3 rounded-xl bg-emerald-100/70 border border-emerald-200 text-emerald-900 text-xs flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <FaCheckCircle className="text-emerald-600 text-sm" />
-                          <span className="font-semibold">
-                            Gateway Active: Payments will be automatically confirmed and receipts generated instantly.
-                          </span>
-                        </div>
-                        <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-emerald-200/80 font-bold">
-                          {form.razorpayKeyId.startsWith("rzp_live") ? "LIVE MODE" : "TEST MODE"}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
-                        <FaShieldAlt className="text-amber-500 text-sm" />
-                        <span>
-                          Enter your Razorpay Key ID above to activate online payments in the resident portal.
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
               {/* Receiving Society Bank Account & UPI Details */}
               <div className="space-y-4">
                 <div className="border-b border-gray-100 pb-3">

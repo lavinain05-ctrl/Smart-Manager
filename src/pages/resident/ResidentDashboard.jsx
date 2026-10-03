@@ -52,7 +52,6 @@ import { isGcParticipating } from "../../services/statisticsService";
 import { subscribeSpecialCollections } from "../../services/specialCollectionService";
 import { DEFAULT_JOIN_GC_MESSAGE } from "./ResidentGarbage";
 import RecentUpdatesCard from "../../components/notifications/RecentUpdatesCard";
-import OnlinePaymentModal from "../../components/payments/OnlinePaymentModal";
 import { useSettings } from "../../context/SettingsContext";
 
 const GC_CONFIG = {
@@ -95,7 +94,6 @@ export default function ResidentDashboard() {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinReason, setJoinReason] = useState(DEFAULT_JOIN_GC_MESSAGE);
   const [submittingJoin, setSubmittingJoin] = useState(false);
-  const [payModalBill, setPayModalBill] = useState(null);
 
   // Live special collection drives
   const [specialDrives, setSpecialDrives] = useState([]);
@@ -691,34 +689,11 @@ export default function ResidentDashboard() {
               </div>
 
               <div className="flex sm:flex-col items-center sm:items-end justify-end gap-2.5 shrink-0 pt-2 md:pt-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const matchedBill = myBills.find(
-                      (b) =>
-                        (b.month === currentMonthName && Number(b.year) === currentYearNum) ||
-                        (b.month === selectedMonth && Number(b.year) === Number(selectedYear))
-                    );
-                    setPayModalBill(
-                      matchedBill || {
-                        id: `bill_${resident.id}_${currentMonthName}_${currentYearNum}`,
-                        month: currentMonthName,
-                        year: currentYearNum,
-                        amount: currentMonthFee,
-                        residentId: resident.id,
-                        status: "Pending",
-                      }
-                    );
-                  }}
-                  className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                >
-                  <FaWallet /> Pay ₹{currentMonthFee} Online <FaArrowRight className="text-xs" />
-                </button>
                 <Link
                   to="/resident/bills"
-                  className="w-full sm:w-auto px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold transition text-center"
+                  className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                 >
-                  View Bill Details
+                  View Bill Details <FaArrowRight className="text-xs" />
                 </Link>
               </div>
             </div>
@@ -1523,21 +1498,6 @@ export default function ResidentDashboard() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* Online UPI Payment Modal */}
-      {payModalBill && (
-        <OnlinePaymentModal
-          isOpen={Boolean(payModalBill)}
-          onClose={() => setPayModalBill(null)}
-          bill={payModalBill}
-          resident={resident}
-          bills={bills}
-          settings={settings}
-          onPaymentSuccess={() => {
-            // Keep open so resident sees the confirmed receipt screen with print button
-          }}
-        />
       )}
     </div>
   );

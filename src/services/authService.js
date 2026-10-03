@@ -144,11 +144,13 @@ export async function writeAuthLookup(mobile, email, uid, personalEmail = "", fl
 
     // Also write flat lookup for fast recovery by flat number
     if (flat) {
-      const cleanFlat = String(flat).replace(/[\s-]/g, "").toUpperCase();
-      await setDoc(doc(db, "authLookup", `flat_${cleanFlat}`), {
-        ...updateData,
-        flatKey: cleanFlat,
-      }, { merge: true });
+      const cleanFlat = String(flat).replace(/[\s-]/g, "").replace(/[\/\\]/g, "_").toUpperCase();
+      if (cleanFlat) {
+        await setDoc(doc(db, "authLookup", `flat_${cleanFlat}`), {
+          ...updateData,
+          flatKey: cleanFlat,
+        }, { merge: true });
+      }
     }
   } catch (err) {
     console.warn("[Auth] Failed to write authLookup:", err.message);
@@ -165,8 +167,10 @@ export async function deleteAuthLookup(mobile, flat = "") {
   try {
     await deleteDoc(doc(db, "authLookup", clean));
     if (flat) {
-      const cleanFlat = String(flat).replace(/[\s-]/g, "").toUpperCase();
-      await deleteDoc(doc(db, "authLookup", `flat_${cleanFlat}`));
+      const cleanFlat = String(flat).replace(/[\s-]/g, "").replace(/[\/\\]/g, "_").toUpperCase();
+      if (cleanFlat) {
+        await deleteDoc(doc(db, "authLookup", `flat_${cleanFlat}`));
+      }
     }
     console.log("[Auth] authLookup deleted for mobile:", clean);
   } catch (err) {
@@ -379,12 +383,14 @@ export async function findPersonalEmailForIdentifier(identifier) {
     };
   }
 
-  // 3. Flat Number Lookup (e.g. "D571", "571", "D-571", "d571")
-  const cleanFlat = raw.replace(/[\s-]/g, "").toUpperCase();
+  // 3. Flat Number Lookup (e.g. "D571", "571", "D-571", "d571", "PH1/101")
+  const cleanFlat = raw.replace(/[\s-]/g, "").replace(/[\/\\]/g, "_").toUpperCase();
   const flatCandidates = [
     `flat_${cleanFlat}`,
-    cleanFlat,
   ];
+  if (!raw.includes("/") && !raw.includes("\\")) {
+    flatCandidates.push(cleanFlat);
+  }
   if (!/^[A-Z]/.test(cleanFlat)) {
     flatCandidates.push(`flat_D${cleanFlat}`);
   }

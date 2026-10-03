@@ -41,7 +41,7 @@ import { useBlockFlat } from "../../context/BlockFlatContext";
 import { deleteUserAccount } from "../../services/accountDeletionService";
 import { normalizeMobile, mobileToAuthEmail, writeAuthLookup, isRealEmail } from "../../services/authService";
 import { adminResetPasswordFn, db, secondaryAuth } from "../../firebase/firebase";
-import { doc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { blockAccount, unblockAccount } from "../../services/blockService";
 import {
@@ -384,16 +384,21 @@ export default function ManageCommittee() {
         if (!pwUpdated) {
           const cleanPhone = normalizeMobile(formData.phone || editingMember.phone || "");
           if (cleanPhone.length === 10) {
-            const authEmail = mobileToAuthEmail(cleanPhone);
             try {
-              const cred = await createUserWithEmailAndPassword(secondaryAuth, authEmail, formData.password);
-              const newUid = cred.user.uid;
-              await signOut(secondaryAuth);
-              await writeAuthLookup(cleanPhone, authEmail, newUid, formData.email || "", formData.flat || "", formData.name || "");
-              await setDoc(doc(db, "users", newUid), { ...updates, role: "committee" }, { merge: true });
-              await setDoc(doc(db, "committee", newUid), { ...updates, uid: newUid }, { merge: true });
+              const lookupDoc = await getDoc(doc(db, "authLookup", cleanPhone));
+              if (!lookupDoc?.exists()) {
+                const authEmail = mobileToAuthEmail(cleanPhone);
+                const cred = await createUserWithEmailAndPassword(secondaryAuth, authEmail, formData.password);
+                const newUid = cred.user.uid;
+                await signOut(secondaryAuth);
+                await writeAuthLookup(cleanPhone, authEmail, newUid, formData.email || "", formData.flat || "", formData.name || "");
+                await setDoc(doc(db, "users", newUid), { ...updates, role: "committee" }, { merge: true });
+                await setDoc(doc(db, "committee", newUid), { ...updates, uid: newUid }, { merge: true });
+              } else {
+                await updateDoc(doc(db, "users", memberId), { mustChangePassword: true }).catch(() => {});
+              }
             } catch (createErr) {
-              console.warn("secondaryAuth creation on save:", createErr.message);
+              console.warn("secondaryAuth check/creation on save:", createErr.message);
             }
           }
         }
@@ -516,18 +521,21 @@ export default function ManageCommittee() {
         console.warn("Cloud function reset:", fnErr.message);
       }
 
-      // If user had no Auth user, create it via secondaryAuth
+      // If user had no Auth user, create it via secondaryAuth only if not already existing
       const targetPhone = normalizeMobile(resetTarget.phone || resetTarget.mobile || "");
       if (targetPhone.length === 10) {
-        const authEmail = mobileToAuthEmail(targetPhone);
         try {
-          const cred = await createUserWithEmailAndPassword(secondaryAuth, authEmail, chosenPassword);
-          const newUid = cred.user.uid;
-          await signOut(secondaryAuth);
-          console.log("[Committee] Reset created missing Auth user:", newUid);
-          await writeAuthLookup(targetPhone, authEmail, newUid, resetTarget.email || "", resetTarget.flat || "", resetTarget.name || "");
-          await setDoc(doc(db, "users", newUid), { ...resetTarget, role: "committee", mustChangePassword: true }, { merge: true });
-          await setDoc(doc(db, "committee", newUid), { ...resetTarget, uid: newUid, mustChangePassword: true }, { merge: true });
+          const lookupDoc = await getDoc(doc(db, "authLookup", targetPhone));
+          if (!lookupDoc?.exists()) {
+            const authEmail = mobileToAuthEmail(targetPhone);
+            const cred = await createUserWithEmailAndPassword(secondaryAuth, authEmail, chosenPassword);
+            const newUid = cred.user.uid;
+            await signOut(secondaryAuth);
+            console.log("[Committee] Reset created missing Auth user:", newUid);
+            await writeAuthLookup(targetPhone, authEmail, newUid, resetTarget.email || "", resetTarget.flat || "", resetTarget.name || "");
+            await setDoc(doc(db, "users", newUid), { ...resetTarget, role: "committee", mustChangePassword: true }, { merge: true });
+            await setDoc(doc(db, "committee", newUid), { ...resetTarget, uid: newUid, mustChangePassword: true }, { merge: true });
+          }
         } catch (createErr) {
           console.warn("[Committee] secondaryAuth creation on reset:", createErr.message);
         }

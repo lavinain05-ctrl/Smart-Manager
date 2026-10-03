@@ -15,7 +15,6 @@ import {
 
 import {
   createUserWithEmailAndPassword,
-  fetchSignInMethodsForEmail,
   signOut,
 } from "firebase/auth";
 
@@ -244,9 +243,8 @@ export async function addCommitteeMember({
     allowedSpecialCollectionNames,
     canViewGarbageReports: canViewReports,
   };
-
-  let uid = null;
-  let isExistingAccount = false;
+  let uid = residentId || null;
+  let isExistingAccount = Boolean(residentId);
 
   // Check if this mobile number already exists in committee
   try {
@@ -263,22 +261,57 @@ export async function addCommitteeMember({
   }
 
   const authEmail = mobileToAuthEmail(cleanPhone);
-  let authUserExists = false;
 
-  try {
-    const methods = await fetchSignInMethodsForEmail(secondaryAuth, authEmail);
-    if (methods && methods.length > 0) {
-      authUserExists = true;
+  // 1. Check if user already exists in authLookup (fastest and most accurate)
+  if (!uid) {
+    try {
+      const lookupDoc = await getDoc(doc(db, "authLookup", cleanPhone));
+      if (lookupDoc.exists() && lookupDoc.data()?.uid) {
+        uid = lookupDoc.data().uid;
+        isExistingAccount = true;
+      }
+    } catch (findErr) {
+      console.warn("[Committee] Error checking authLookup:", findErr.message);
     }
-  } catch (mErr) {
-    console.warn("[Committee] fetchSignInMethods check:", mErr.message);
+  }
+
+  // 2. Check if user already exists in users collection
+  if (!uid) {
+    try {
+      const uSnap = await getDocs(query(collection(db, "users"), where("phone", "==", cleanPhone)));
+      if (!uSnap.empty) {
+        uid = uSnap.docs[0].id;
+        isExistingAccount = true;
+      } else {
+        const uSnapMobile = await getDocs(query(collection(db, "users"), where("mobile", "==", cleanPhone)));
+        if (!uSnapMobile.empty) {
+          uid = uSnapMobile.docs[0].id;
+          isExistingAccount = true;
+        }
+      }
+    } catch (uErr) {
+      console.warn("[Committee] Error checking users doc:", uErr.message);
+    }
+  }
+
+  // 3. Check if user exists in residents collection
+  if (!uid) {
+    try {
+      const resSnap = await getDocs(query(collection(db, "residents"), where("mobile", "==", cleanPhone)));
+      if (!resSnap.empty) {
+        uid = resSnap.docs[0].data()?.uid || resSnap.docs[0].id;
+        isExistingAccount = true;
+      }
+    } catch (rErr) {
+      console.warn("[Committee] Error checking residents doc:", rErr.message);
+    }
   }
 
   const effectivePassword =
     password && password.length >= 6 ? password : `RWA@${cleanPhone.slice(-6)}`;
 
-  if (!authUserExists) {
-    // Auth account does not exist in Firebase Auth yet — create it!
+  // 4. If account does NOT exist anywhere, create in Firebase Auth
+  if (!isExistingAccount && !uid) {
     try {
       const credential = await createUserWithEmailAndPassword(
         secondaryAuth,
@@ -294,12 +327,19 @@ export async function addCommitteeMember({
         authError.message?.includes("EMAIL_EXISTS") ||
         authError.message?.includes("email-already-in-use")
       ) {
-        authUserExists = true;
+        isExistingAccount = true;
+        // Resolve UID from authLookup if available
+        try {
+          const lookupDoc = await getDoc(doc(db, "authLookup", cleanPhone));
+          if (lookupDoc.exists() && lookupDoc.data()?.uid) {
+            uid = lookupDoc.data().uid;
+          }
+        } catch {}
       } else if (authError.code === "auth/weak-password") {
         throw new Error("Password is too weak. Use at least 6 characters.");
       } else {
-        console.warn("[Committee] createUserWithEmailAndPassword error:", authError.message);
-        authUserExists = true;
+        console.warn("[Committee] createUserWithEmailAndPassword note:", authError.message);
+        isExistingAccount = true;
       }
     } finally {
       try {
@@ -310,63 +350,15 @@ export async function addCommitteeMember({
     }
   }
 
-  if (authUserExists) {
-    isExistingAccount = true;
-    // Find existing UID from all possible sources
-    if (!uid) {
-      try {
-        const lookupDoc = await getDoc(doc(db, "authLookup", cleanPhone));
-        if (lookupDoc.exists() && lookupDoc.data().uid) {
-          uid = lookupDoc.data().uid;
-        } else {
-          // Check users by phone
-          const uSnap = await getDocs(
-            query(collection(db, "users"), where("phone", "==", cleanPhone))
-          );
-          if (!uSnap.empty) {
-            uid = uSnap.docs[0].id;
-          } else {
-            // Check users by mobile
-            const uSnapMobile = await getDocs(
-              query(collection(db, "users"), where("mobile", "==", cleanPhone))
-            );
-            if (!uSnapMobile.empty) {
-              uid = uSnapMobile.docs[0].id;
-            }
-          }
-        }
-      } catch (findErr) {
-        console.warn("[Committee] Error finding existing UID:", findErr.message);
-      }
-    }
-
-    if (!uid && residentId) {
-      uid = residentId;
-    }
-
-    if (!uid) {
-      try {
-        const resSnap = await getDocs(
-          query(collection(db, "residents"), where("mobile", "==", cleanPhone))
-        );
-        if (!resSnap.empty) {
-          uid = resSnap.docs[0].data().uid || resSnap.docs[0].id;
-        }
-      } catch (rErr) {
-        console.warn("[Committee] Error finding resident UID:", rErr.message);
-      }
-    }
-
-    // If admin provided a password, update it
-    if (password && password.length >= 6 && uid) {
-      try {
-        await adminResetPasswordFn({ targetUid: uid, password });
-      } catch (pwErr) {
-        console.warn(
-          "[Committee] could not reset password on existing account:",
-          pwErr.message
-        );
-      }
+  // If admin provided a password and account exists, attempt update
+  if (isExistingAccount && password && password.length >= 6 && uid) {
+    try {
+      await adminResetPasswordFn({ targetUid: uid, password });
+    } catch (pwErr) {
+      console.warn(
+        "[Committee] could not reset password on existing account:",
+        pwErr.message
+      );
     }
   }
 

@@ -224,7 +224,7 @@ export default function ResidentCommittee() {
           </h1>
 
           <p className="text-slate-200 text-xs sm:text-base max-w-3xl mt-2 leading-relaxed">
-            Meet the elected office bearers and representatives dedicated to the security, welfare, maintenance, and development of D Block Indraprastha. Connect directly with your officials for community matters.
+            Meet the office bearers and representatives dedicated to the security, welfare, maintenance, and development of D Block Indraprastha. Connect directly with your officials for community matters.
           </p>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-6 mt-4 sm:mt-6 pt-3.5 sm:pt-5 border-t border-white/10 text-[11px] sm:text-xs text-slate-300">
@@ -346,7 +346,7 @@ export default function ResidentCommittee() {
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {filterDesignation !== "all"
                     ? `Showing ${filterDesignation} officials`
-                    : "Elected office bearers and committee leadership"}
+                    : "Office bearers and committee leadership"}
                 </p>
               </div>
             </div>

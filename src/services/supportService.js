@@ -200,7 +200,7 @@ export const DEFAULT_SUPPORT_FAQS = [
     category: "society",
     question: "Who are the current RWA Committee members and how do I contact them?",
     answer:
-      "You can view the full list of elected Executive Committee members (President, Vice President, General Secretary, Joint Secretary, Treasurer, and Executive Members) with their official contact numbers under 'RWA Committee' in the sidebar.",
+      "You can view the full list of Executive Committee members (President, Vice President, General Secretary, Joint Secretary, Treasurer, and Executive Members) with their official contact numbers under 'RWA Committee' in the sidebar.",
     badge: "Executive Body",
     actionLink: "/resident/committee",
     actionText: "View RWA Committee",

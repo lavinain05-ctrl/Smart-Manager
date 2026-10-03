@@ -192,8 +192,8 @@ export default function CommitteeLayout() {
       ],
     });
 
-    // 6. Resident Portal (if official is also a resident)
-    if (user?.isResident || Boolean(user?.flat)) {
+    // 6. Resident Portal (Available for all committee members)
+    if (user?.role === "committee" || user?.isResident || Boolean(user?.flat)) {
       sections.push({
         title: "Resident Portal",
         items: [
@@ -398,14 +398,14 @@ export default function CommitteeLayout() {
               </Link>
             )}
 
-            {Boolean(user?.isResident || user?.flat) && (
+            {(user?.role === "committee" || Boolean(user?.isResident || user?.flat)) && (
               <Link
                 to="/resident/dashboard"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold transition shadow-xs"
-                title="View My Resident Flat Portal"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs shrink-0 active:scale-95"
+                title="Switch to Resident Portal"
               >
-                <FaHome className="text-xs text-emerald-600 dark:text-emerald-400" />
-                <span className="hidden sm:inline">Resident Portal</span>
+                <FaHome className="text-xs text-white" />
+                <span>Resident Portal</span>
               </Link>
             )}
 

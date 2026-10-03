@@ -29,6 +29,7 @@ import {
   FaChevronRight,
   FaBell,
   FaFileAlt,
+  FaSlidersH,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -485,6 +486,39 @@ export default function ResidentDashboard() {
               <FaBell className="text-emerald-600 text-xs" /> Enable Alerts
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ═══════════ Committee Executive Switch Banner (For Committee Members) ═══════════ */}
+      {user?.role === "committee" && (
+        <div className="rounded-2xl bg-gradient-to-r from-purple-900/90 via-indigo-900/90 to-purple-950/90 p-4 sm:p-5 text-white border border-purple-500/40 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-purple-300 text-xl shrink-0 shadow-inner">
+              <FaSlidersH />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/40">
+                  Executive Body
+                </span>
+                <span className="text-xs text-purple-200 font-bold">{user?.designation || "Committee Member"}</span>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-white mt-1">
+                RWA Committee Member Console
+              </h3>
+              <p className="text-xs text-purple-200/80 mt-0.5">
+                Switch to committee portal to manage residents, collections, announcements, and complaints.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/committee/dashboard"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white text-xs sm:text-sm font-bold shadow-lg shadow-purple-500/30 transition hover:scale-[1.02] active:scale-[0.98] shrink-0"
+          >
+            <FaSlidersH />
+            <span>Switch to Committee Portal</span>
+            <FaChevronRight className="text-xs" />
+          </Link>
         </div>
       )}
 
@@ -1027,6 +1061,9 @@ export default function ResidentDashboard() {
           <QuickActionTile to={`${basePath}/suggestions`} icon={<FaLightbulb />} label="Suggestions" desc="Ideas & feedback" color="amber" />
           <QuickActionTile to={`${basePath}/events`} icon={<FaCalendarAlt />} label="Events" desc="Society calendar" color="indigo" />
           <QuickActionTile to={`${basePath}/activities`} icon={<FaLeaf />} label="Activities" desc="Green drives & work" color="green" />
+          {user?.role === "committee" && (
+            <QuickActionTile to="/committee/dashboard" icon={<FaSlidersH />} label="Committee Portal" desc="Executive console" color="purple" />
+          )}
           <QuickActionTile to={`${basePath}/committee`} icon={<FaUserTie />} label="Committee" desc="Office bearers" color="amber" />
           <QuickActionTile to={`${basePath}/support`} icon={<FaQuestionCircle />} label="Help & FAQs" desc="Support guides" color="teal" />
           <QuickActionTile to={`${basePath}/profile`} icon={<FaUser />} label="My Profile" desc="Account settings" color="sky" />

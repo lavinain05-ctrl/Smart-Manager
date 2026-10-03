@@ -102,7 +102,7 @@ export default function ForceChangePassword() {
       } else if (user?.role === "family") {
         navigate("/family/dashboard", { replace: true });
       } else if (user?.role === "committee") {
-        navigate("/committee/dashboard", { replace: true });
+        navigate("/resident/dashboard", { replace: true });
       } else {
         navigate("/", { replace: true });
       }

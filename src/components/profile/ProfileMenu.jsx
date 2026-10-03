@@ -156,16 +156,14 @@ export default function ProfileMenu() {
                   <FaSlidersH className="text-purple-600 text-base" />
                   <span>Committee Portal</span>
                 </Link>
-                {Boolean(user?.isResident || user?.flat) && (
-                  <Link
-                    to="/resident/dashboard"
-                    onClick={() => setOpen(false)}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-emerald-700 bg-emerald-50/50 hover:bg-emerald-50 font-semibold transition"
-                  >
-                    <FaHome className="text-emerald-600 text-base" />
-                    <span>Resident Portal ({user?.flat || "My Flat"})</span>
-                  </Link>
-                )}
+                <Link
+                  to="/resident/dashboard"
+                  onClick={() => setOpen(false)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-emerald-700 bg-emerald-50/50 hover:bg-emerald-50 font-semibold transition"
+                >
+                  <FaHome className="text-emerald-600 text-base" />
+                  <span>Resident Portal ({user?.flat || "My Flat"})</span>
+                </Link>
               </>
             )}
 

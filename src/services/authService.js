@@ -1118,7 +1118,7 @@ export function getHomeRouteForRole(role) {
     case "collector":
       return "/collector/dashboard";
     case "committee":
-      return "/committee/dashboard";
+      return "/resident/dashboard";
     case "resident":
       return "/resident/dashboard";
     case "family":

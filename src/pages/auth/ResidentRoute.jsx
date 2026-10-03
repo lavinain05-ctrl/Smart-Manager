@@ -26,7 +26,7 @@ export default function ResidentRoute({ children }) {
 
   const canAccessResident =
     role === "resident" ||
-    (role === "committee" && (user?.isResident || Boolean(user?.flat)));
+    role === "committee";
 
   if (!canAccessResident) {
     return <Navigate to={getHomeRouteForRole(role)} replace />;

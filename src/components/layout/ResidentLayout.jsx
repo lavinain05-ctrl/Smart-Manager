@@ -193,6 +193,31 @@ export default function ResidentLayout() {
             </NavLink>
           </div>
 
+          {/* Committee Member Portal Switch Banner */}
+          {user?.role === "committee" && (
+            <div>
+              <NavLink
+                to="/committee/dashboard"
+                onClick={() => setMobileDrawerOpen(false)}
+                title={isCollapsed ? "Switch to Committee Portal" : undefined}
+                className={`group relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-bold transition-all duration-200 bg-gradient-to-r from-purple-600/90 to-indigo-600/90 hover:from-purple-600 hover:to-indigo-600 text-white shadow-md shadow-purple-900/30 border border-purple-400/30 ${
+                  isCollapsed ? "justify-center px-0 py-3" : ""
+                }`}
+              >
+                <span className="text-base flex items-center justify-center shrink-0 text-purple-200 group-hover:text-white">
+                  <FaSlidersH />
+                </span>
+                {!isCollapsed && <span className="truncate">Committee Portal</span>}
+
+                {isCollapsed && (
+                  <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-950 text-white text-xs font-semibold rounded-lg shadow-xl whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 border border-purple-500/40">
+                    Committee Portal
+                  </div>
+                )}
+              </NavLink>
+            </div>
+          )}
+
           {/* 2. Garbage Collection Module */}
           <div className="space-y-1">
             {!isCollapsed && (
@@ -416,11 +441,11 @@ export default function ResidentLayout() {
             {user?.role === "committee" && (
               <Link
                 to="/committee/dashboard"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-sm transition"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition hover:scale-[1.02] active:scale-[0.98]"
                 title="Open Committee Executive Console"
               >
                 <FaSlidersH className="text-xs" />
-                <span className="hidden sm:inline">Committee Portal</span>
+                <span>Committee Portal</span>
               </Link>
             )}
 
@@ -461,11 +486,11 @@ export default function ResidentLayout() {
             {user?.role === "committee" && (
               <Link
                 to="/committee/dashboard"
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-600 text-white text-[11px] sm:text-xs font-bold"
-                title="Committee Portal"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-sm shrink-0 active:scale-95 transition"
+                title="Switch to Committee Portal"
               >
-                <FaSlidersH className="text-[10px]" />
-                <span className="hidden sm:inline">Committee</span>
+                <FaSlidersH className="text-[11px]" />
+                <span>Committee</span>
               </Link>
             )}
             <button

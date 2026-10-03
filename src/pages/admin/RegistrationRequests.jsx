@@ -33,6 +33,7 @@ import { useResidents } from "../../context/ResidentContext";
 import { useBlockFlat } from "../../context/BlockFlatContext";
 import { useSettings } from "../../context/SettingsContext";
 import { useAuth } from "../../context/AuthContext";
+import { useNotifications } from "../../context/NotificationContext";
 import Pagination from "../../components/common/Pagination";
 import {
   normalizePlotNumber,
@@ -86,6 +87,11 @@ export default function RegistrationRequests() {
   const { blocks } = useBlockFlat();
   const { settings } = useSettings();
   const { user } = useAuth();
+  const { markPathRead, notifications, markRead } = useNotifications();
+
+  useEffect(() => {
+    markPathRead("/admin/registrations");
+  }, [markPathRead]);
 
   useEffect(() => {
     if (!user || user.role !== "admin") {
@@ -246,6 +252,7 @@ export default function RegistrationRequests() {
       });
 
       toast.success("Registration approved — resident account created");
+      markPathRead("/admin/registrations");
       setApproveModal(null);
       setCharge("");
       setApproveBlockId("");
@@ -278,6 +285,7 @@ export default function RegistrationRequests() {
       );
 
       toast.success("Registration rejected — saved to Rejected list");
+      markPathRead("/admin/registrations");
       setRejectModal(null);
       setRejectReason("");
     } catch (error) {

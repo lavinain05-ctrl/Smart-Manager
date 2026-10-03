@@ -35,6 +35,18 @@ export function NotificationProvider({ children }) {
   const [phonePermission, setPhonePermission] = useState(() => getNotificationPermission());
   const isFirstLoadRef = useRef(true);
   const seenNotificationIdsRef = useRef(new Set());
+  const mountTimestampRef = useRef(Date.now());
+  const toastedNotificationIdsRef = useRef(new Set());
+
+  // Load previously toasted notification IDs from sessionStorage to prevent re-toasting across refreshes
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("rwa_toasted_notifs");
+      if (saved) {
+        toastedNotificationIdsRef.current = new Set(JSON.parse(saved));
+      }
+    } catch {}
+  }, []);
 
   // Register service worker on mount and track permission
   useEffect(() => {
@@ -79,88 +91,132 @@ export function NotificationProvider({ children }) {
 
     const unsubscribe = subscribeNotifications(
       user.uid,
-      (incoming) => {
+      (incoming, meta = {}) => {
         setRawNotifications(incoming);
 
-        if (isFirstLoadRef.current) {
+        // If this is the initial load or any of the initial query sources are still pending,
+        // register all existing notifications as seen so historical ones NEVER trigger toasts/chimes.
+        if (isFirstLoadRef.current || meta?.isInitial) {
           incoming.forEach((item) => {
             if (item?.id) seenNotificationIdsRef.current.add(item.id);
           });
-          isFirstLoadRef.current = false;
-        } else {
-          incoming.forEach((item) => {
-            if (item?.id && !seenNotificationIdsRef.current.has(item.id)) {
-              seenNotificationIdsRef.current.add(item.id);
-
-              // CRITICAL: "but not send notification for every collect payment"
-              const isPayment =
-                item.type === "payment" ||
-                (item.title && item.title.toLowerCase().includes("payment")) ||
-                (item.title && item.title.toLowerCase().includes("fee paid"));
-
-              if (user?.role === "admin" && isPayment) {
-                return;
-              }
-
-              // Active phone/browser push notification if permission granted
-              if (getNotificationPermission() === "granted") {
-                showPhoneNotification(item.title || "D BLOCK RWA Notification", {
-                  body: item.message || "New operational update in society portal.",
-                  data: {
-                    url: item.link || (user?.role === "admin" ? "/admin/dashboard" : "/resident"),
-                  },
-                });
-              }
-
-              // Active notification in Admin Portal for registrations, profile requests, suggestions, complaints, messages, etc.
-              if (user?.role === "admin") {
-                // Play notification audio chime
-                playNotificationSound();
-
-                // Interactive in-app toast alert
-                toast((t) => (
-                  <div
-                    onClick={() => {
-                      toast.dismiss(t.id);
-                      if (item.link) {
-                        window.location.href = item.link;
-                      }
-                    }}
-                    className="flex items-start gap-2.5 cursor-pointer text-left select-none"
-                  >
-                    <span className="text-xl shrink-0">🔔</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-slate-900 leading-tight">
-                        {item.title}
-                      </p>
-                      <p className="text-[11px] text-slate-600 line-clamp-2 mt-0.5 leading-normal">
-                        {item.message}
-                      </p>
-                      {item.link && (
-                        <span className="inline-block mt-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700">
-                          View details →
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ), {
-                  duration: 6000,
-                  position: "top-right",
-                  id: `admin-toast-${item.id}`,
-                  style: {
-                    borderRadius: "14px",
-                    background: "#ffffff",
-                    color: "#0f172a",
-                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
-                    border: "1px solid #e2e8f0",
-                    padding: "12px 14px",
-                    maxWidth: "360px",
-                  },
-                });
-              }
-            }
-          });
+          if (!meta?.isInitial) {
+            isFirstLoadRef.current = false;
+          }
+          return;
         }
+
+        incoming.forEach((item) => {
+          if (!item?.id) return;
+
+          // If already recorded in this active listener run, skip
+          if (seenNotificationIdsRef.current.has(item.id)) return;
+          seenNotificationIdsRef.current.add(item.id);
+
+          // Never alert for notifications that are already marked read
+          if (item.read || localReadIds.has(item.id)) return;
+
+          // Never alert if this notification was already toasted in this browser tab/session
+          if (toastedNotificationIdsRef.current.has(item.id)) return;
+
+          // Check creation timestamp: ignore historical notifications created before session mount
+          const createdTime = item.createdAt?.toMillis
+            ? item.createdAt.toMillis()
+            : (item.createdAt ? new Date(item.createdAt).getTime() : 0);
+          
+          if (createdTime && createdTime < (mountTimestampRef.current - 15000)) {
+            // Notification is from before this browser session; belongs in badge/dropdown, not popup toast
+            return;
+          }
+
+          // CRITICAL: "but not send notification for every collect payment"
+          const isPayment =
+            item.type === "payment" ||
+            (item.title && item.title.toLowerCase().includes("payment")) ||
+            (item.title && item.title.toLowerCase().includes("fee paid"));
+
+          if (user?.role === "admin" && isPayment) {
+            return;
+          }
+
+          // Do not pop up an intrusive toast if the user is already looking at that exact screen
+          if (item.link && typeof window !== "undefined") {
+            const currentPath = window.location.pathname.replace(/\/+$/, "");
+            const targetPath = item.link.split("?")[0].replace(/\/+$/, "");
+            if (currentPath === targetPath) {
+              return;
+            }
+          }
+
+          // Record as toasted so it NEVER shows again in this session
+          toastedNotificationIdsRef.current.add(item.id);
+          try {
+            sessionStorage.setItem(
+              "rwa_toasted_notifs",
+              JSON.stringify(Array.from(toastedNotificationIdsRef.current))
+            );
+          } catch {}
+
+          // Active phone/browser push notification if permission granted
+          if (getNotificationPermission() === "granted") {
+            showPhoneNotification(item.title || "D BLOCK RWA Notification", {
+              body: item.message || "New operational update in society portal.",
+              data: {
+                url: item.link || (user?.role === "admin" ? "/admin/dashboard" : "/resident"),
+              },
+            });
+          }
+
+          // Active notification in Admin Portal for registrations, profile requests, suggestions, complaints, messages, etc.
+          if (user?.role === "admin") {
+            // Play notification audio chime
+            playNotificationSound();
+
+            // Interactive in-app toast alert
+            toast((t) => (
+              <div
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  markRead(item.id);
+                  if (item.link) {
+                    if (typeof window !== "undefined") {
+                      window.location.assign(item.link);
+                    }
+                  }
+                }}
+                className="flex items-start gap-2.5 cursor-pointer text-left select-none"
+              >
+                <span className="text-xl shrink-0">🔔</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-900 leading-tight">
+                    {item.title}
+                  </p>
+                  <p className="text-[11px] text-slate-600 line-clamp-2 mt-0.5 leading-normal">
+                    {item.message}
+                  </p>
+                  {item.link && (
+                    <span className="inline-block mt-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700">
+                      View details →
+                    </span>
+                  )}
+                </div>
+              </div>
+            ), {
+              duration: 6000,
+              position: "top-right",
+              id: `admin-toast-${item.id}`,
+              style: {
+                borderRadius: "14px",
+                background: "#ffffff",
+                color: "#0f172a",
+                boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+                border: "1px solid #e2e8f0",
+                padding: "12px 14px",
+                maxWidth: "360px",
+              },
+            });
+          }
+        });
       },
       user.role || "resident"
     );
@@ -271,11 +327,11 @@ export function NotificationProvider({ children }) {
       return next;
     });
 
-    // If personal notifications, update Firestore
+    // Update Firestore read status (personal, or admin role notifications)
     for (const notif of matchingNotifs) {
-      if (notif.userId === user?.uid) {
+      if (notif.userId === user?.uid || user?.role === "admin" || notif.userId === "admin") {
         markReadService(notif.id).catch((err) => {
-          console.error("Failed to mark personal notification read:", err);
+          console.error("Failed to mark notification read in Firestore:", err);
         });
       }
     }
@@ -296,11 +352,14 @@ export function NotificationProvider({ children }) {
       console.warn("Could not sync all read notifs to localStorage", e);
     }
 
-    // Mark all personal in Firestore
+    // Mark personal & admin notifications in Firestore
     try {
       await markAllReadService(user.uid);
+      if (user?.role === "admin") {
+        await markAllReadService("admin");
+      }
     } catch (err) {
-      console.error("Failed to mark all personal notifications read:", err);
+      console.error("Failed to mark notifications read in Firestore:", err);
     }
   }, [rawNotifications, user]);
 

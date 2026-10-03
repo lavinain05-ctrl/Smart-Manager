@@ -28,6 +28,11 @@ export function subscribeNotifications(userId, callback, userRole = "resident") 
   let broadcastNotifs = [];
   let roleNotifs = [];
 
+  const pendingSources = new Set(["user", "all"]);
+  if (userRole && userRole !== "all") {
+    pendingSources.add("role");
+  }
+
   const notify = () => {
     const combined = [...userNotifs, ...broadcastNotifs, ...roleNotifs];
     const uniqueMap = new Map();
@@ -39,16 +44,18 @@ export function subscribeNotifications(userId, callback, userRole = "resident") 
       const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
       return timeB - timeA;
     });
-    callback(sorted);
+    const isInitial = pendingSources.size > 0;
+    callback(sorted, { isInitial });
   };
 
-  const listenWithFallback = (qPrimary, qFallback, onData, label) => {
+  const listenWithFallback = (qPrimary, qFallback, onData, label, sourceKey) => {
     let activeUnsub = () => {};
     try {
       activeUnsub = onSnapshot(
         qPrimary,
         (snap) => {
           onData(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          if (sourceKey) pendingSources.delete(sourceKey);
           notify();
         },
         (err) => {
@@ -58,12 +65,18 @@ export function subscribeNotifications(userId, callback, userRole = "resident") 
               qFallback,
               (fallbackSnap) => {
                 onData(fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+                if (sourceKey) pendingSources.delete(sourceKey);
                 notify();
               },
               (fErr) => {
                 console.warn(`[Notifications] ${label} fallback error:`, fErr.message);
+                if (sourceKey) pendingSources.delete(sourceKey);
+                notify();
               }
             );
+          } else {
+            if (sourceKey) pendingSources.delete(sourceKey);
+            notify();
           }
         }
       );
@@ -71,8 +84,12 @@ export function subscribeNotifications(userId, callback, userRole = "resident") 
       if (qFallback) {
         activeUnsub = onSnapshot(qFallback, (fallbackSnap) => {
           onData(fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          if (sourceKey) pendingSources.delete(sourceKey);
           notify();
         });
+      } else {
+        if (sourceKey) pendingSources.delete(sourceKey);
+        notify();
       }
     }
     return () => activeUnsub();
@@ -84,7 +101,7 @@ export function subscribeNotifications(userId, callback, userRole = "resident") 
     orderBy("createdAt", "desc")
   );
   const qUserFallback = query(notificationsRef, where("userId", "==", userId));
-  const unsubUser = listenWithFallback(qUser, qUserFallback, (data) => { userNotifs = data; }, "User");
+  const unsubUser = listenWithFallback(qUser, qUserFallback, (data) => { userNotifs = data; }, "User", "user");
 
   const qAll = query(
     notificationsRef,
@@ -92,7 +109,7 @@ export function subscribeNotifications(userId, callback, userRole = "resident") 
     orderBy("createdAt", "desc")
   );
   const qAllFallback = query(notificationsRef, where("userId", "==", "all"));
-  const unsubAll = listenWithFallback(qAll, qAllFallback, (data) => { broadcastNotifs = data; }, "Broadcast");
+  const unsubAll = listenWithFallback(qAll, qAllFallback, (data) => { broadcastNotifs = data; }, "Broadcast", "all");
 
   let unsubRole = () => {};
   if (userRole && userRole !== "all") {
@@ -102,7 +119,7 @@ export function subscribeNotifications(userId, callback, userRole = "resident") 
       orderBy("createdAt", "desc")
     );
     const qRoleFallback = query(notificationsRef, where("userId", "==", userRole));
-    unsubRole = listenWithFallback(qRole, qRoleFallback, (data) => { roleNotifs = data; }, `Role (${userRole})`);
+    unsubRole = listenWithFallback(qRole, qRoleFallback, (data) => { roleNotifs = data; }, `Role (${userRole})`, "role");
   }
 
   return () => {

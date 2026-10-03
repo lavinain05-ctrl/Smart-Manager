@@ -1,8 +1,11 @@
-import { useState, Suspense } from "react";
+import { useState, useMemo, Suspense } from "react";
 import { Outlet, NavLink, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
+import { useResidents } from "../../context/ResidentContext";
 import ErrorBoundary from "../common/ErrorBoundary";
+import HeaderSearchBar from "../common/HeaderSearchBar";
+import ResidentProfileMenu from "../profile/ResidentProfileMenu";
 import {
   FaHome,
   FaFileInvoiceDollar,
@@ -29,6 +32,7 @@ import {
   FaSun,
   FaChevronLeft,
   FaSlidersH,
+  FaSearch,
 } from "react-icons/fa";
 import NotificationBell from "../notifications/NotificationBell";
 
@@ -36,9 +40,42 @@ export default function ResidentLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const { darkMode, toggleTheme } = useTheme();
+  const { residents = [] } = useResidents();
 
   // Mobile drawer state
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+
+  // Clean phone resolution for current user
+  const cleanPhone = useMemo(() => {
+    const raw = user?.phone || user?.mobile || (user?.email?.includes("@") ? user.email.split("@")[0] : "");
+    const digits = String(raw).replace(/\D/g, "");
+    return digits.length >= 10 ? digits.slice(-10) : digits;
+  }, [user]);
+
+  // Match resident profile
+  const resident = useMemo(() => {
+    const found = residents.find(
+      (r) =>
+        r.id === user?.residentId ||
+        r.id === user?.uid ||
+        (cleanPhone && String(r.mobile || "").replace(/\D/g, "").slice(-10) === cleanPhone) ||
+        (user?.name && r.owner?.toLowerCase() === user.name.toLowerCase())
+    );
+    if (found) return found;
+
+    if (user?.flat || user?.role === "committee" || user?.role === "admin") {
+      return {
+        id: user?.residentId || user?.uid,
+        owner: user?.name || "Resident",
+        name: user?.name || "Resident",
+        flat: user?.flat || "D Block",
+        block: user?.block || "",
+        mobile: user?.phone || user?.mobile || cleanPhone || "",
+      };
+    }
+    return null;
+  }, [residents, user, cleanPhone]);
 
   // Desktop sidebar collapse state
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -113,17 +150,19 @@ export default function ResidentLayout() {
             title="Go to Home / Dashboard"
             className="flex items-center gap-3 overflow-hidden group cursor-pointer hover:opacity-90 transition"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-lg shadow-lg shadow-blue-500/25 shrink-0 group-hover:scale-105 transition-transform">
-              <FaBuilding />
-            </div>
+            <img
+              src="/rwa-emblem.png"
+              alt="RWA Logo"
+              className="w-10 h-10 object-contain shrink-0 group-hover:scale-105 transition-transform"
+            />
 
             {!isCollapsed && (
               <div className="min-w-0 transition-opacity duration-200">
-                <h1 className="text-sm font-black tracking-tight leading-snug truncate text-white group-hover:text-blue-300 transition-colors">
-                  Resident Portal
+                <h1 className="text-xs font-black tracking-tight leading-snug truncate text-white group-hover:text-blue-300 transition-colors uppercase">
+                  Residents Welfare
                 </h1>
                 <p className="text-[10px] text-blue-400 font-bold tracking-wider uppercase truncate">
-                  {user?.name || "D Block Resident"}
+                  D-Block Indraprastha
                 </p>
               </div>
             )}
@@ -425,23 +464,39 @@ export default function ResidentLayout() {
 
       {/* Main Layout Area */}
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-        {/* Desktop Header */}
-        <header className="hidden lg:flex sticky top-0 z-20 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-8 items-center justify-between shadow-xs transition-colors">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
-              Resident Workspace
-            </span>
-            <span className="text-slate-300 dark:text-slate-700">•</span>
-            <span className="text-sm font-bold text-slate-800 dark:text-white">
-              D BLOCK RWA INDRAPRASTHA
-            </span>
+        {/* Desktop Header Matching User Reference */}
+        <header className="hidden lg:flex sticky top-0 z-30 h-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 xl:px-8 items-center justify-between gap-4 shadow-xs transition-colors">
+          {/* Left: Emblem + Residents Welfare Association / D-BLOCK INDRAPRASTHA */}
+          <Link
+            to="/resident/dashboard"
+            className="flex items-center gap-3 shrink-0 group hover:opacity-95 transition"
+          >
+            <img
+              src="/rwa-emblem.png"
+              alt="RWA Logo"
+              className="w-12 h-12 object-contain shrink-0 group-hover:scale-105 transition-transform"
+            />
+            <div className="flex flex-col">
+              <span className="text-base font-extrabold text-[#1a2e68] dark:text-white tracking-tight leading-tight">
+                Residents Welfare Association
+              </span>
+              <span className="text-[11px] font-black text-blue-800 dark:text-blue-400 tracking-wider uppercase">
+                D-BLOCK INDRAPRASTHA
+              </span>
+            </div>
+          </Link>
+
+          {/* Center: Search Bar (notices, events, complaints...) */}
+          <div className="flex-1 max-w-md mx-4 flex justify-center">
+            <HeaderSearchBar />
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Right: Committee switch, Notifications, Theme, Profile */}
+          <div className="flex items-center gap-3 shrink-0">
             {user?.role === "committee" && (
               <Link
                 to="/committee/dashboard"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition hover:scale-[1.02] active:scale-[0.98]"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition hover:scale-[1.02] active:scale-[0.98]"
                 title="Open Committee Executive Console"
               >
                 <FaSlidersH className="text-xs" />
@@ -449,67 +504,87 @@ export default function ResidentLayout() {
               </Link>
             )}
 
-            {/* Theme Toggle Button */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
-              title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            >
-              {darkMode ? <FaSun className="text-yellow-500" /> : <FaMoon />}
-            </button>
-
+            {/* Notification Bell */}
             <NotificationBell isDark={darkMode} />
+
+            {/* Resident Profile Menu Pill */}
+            <ResidentProfileMenu resident={resident} />
           </div>
         </header>
 
-        {/* Mobile Header */}
-        <header className="lg:hidden sticky top-0 z-30 h-14 sm:h-16 bg-slate-900 text-white flex items-center justify-between px-3 sm:px-4 shadow-md border-b border-slate-800">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={() => setMobileDrawerOpen(true)}
-              className="p-1.5 sm:p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white transition shrink-0"
-              aria-label="Open menu"
-            >
-              <FaBars className="text-base sm:text-lg" />
-            </button>
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs shrink-0">
-                <FaBuilding />
-              </div>
-              <h1 className="text-xs sm:text-sm font-bold truncate">Resident Portal</h1>
+        {/* Mobile Header Matching User Reference */}
+        <header className="lg:hidden sticky top-0 z-30 bg-white dark:bg-slate-900 text-slate-800 dark:text-white shadow-sm border-b border-slate-200 dark:border-slate-800">
+          <div className="h-16 flex items-center justify-between px-3 sm:px-4 gap-2">
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+              <button
+                type="button"
+                onClick={() => setMobileDrawerOpen(true)}
+                className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition shrink-0 cursor-pointer"
+                aria-label="Open menu"
+              >
+                <FaBars className="text-base" />
+              </button>
+              <Link
+                to="/resident/dashboard"
+                className="flex items-center gap-2 min-w-0 group"
+              >
+                <img
+                  src="/rwa-emblem.png"
+                  alt="RWA Logo"
+                  className="w-8 h-8 object-contain shrink-0"
+                />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs sm:text-sm font-extrabold text-[#1a2e68] dark:text-white truncate leading-tight">
+                    Residents Welfare Association
+                  </span>
+                  <span className="text-[9px] sm:text-[10px] font-black text-blue-700 dark:text-blue-400 tracking-wider uppercase truncate">
+                    D-BLOCK INDRAPRASTHA
+                  </span>
+                </div>
+              </Link>
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* Search Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setMobileSearchOpen((prev) => !prev)}
+                className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm transition cursor-pointer ${
+                  mobileSearchOpen
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                }`}
+                title="Search"
+              >
+                <FaSearch />
+              </button>
+
+              {user?.role === "committee" && (
+                <Link
+                  to="/committee/dashboard"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[11px] font-bold shadow-sm shrink-0 active:scale-95 transition"
+                  title="Switch to Committee Portal"
+                >
+                  <FaSlidersH className="text-[10px]" />
+                  <span>Committee</span>
+                </Link>
+              )}
+
+              <NotificationBell isDark={darkMode} />
+
+              <ResidentProfileMenu resident={resident} />
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {user?.role === "committee" && (
-              <Link
-                to="/committee/dashboard"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold shadow-sm shrink-0 active:scale-95 transition"
-                title="Switch to Committee Portal"
-              >
-                <FaSlidersH className="text-[11px]" />
-                <span>Committee</span>
-              </Link>
-            )}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-xs bg-slate-800 text-slate-300 hover:text-white transition"
-              title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            >
-              {darkMode ? <FaSun className="text-yellow-500" /> : <FaMoon />}
-            </button>
-            <NotificationBell isDark={true} />
-            <button
-              type="button"
-              onClick={logout}
-              className="text-[11px] sm:text-xs bg-red-600/80 hover:bg-red-600 text-white px-2 py-1 rounded-lg transition font-semibold"
-            >
-              Logout
-            </button>
-          </div>
+          {/* Expandable Mobile Search Bar */}
+          {mobileSearchOpen && (
+            <div className="px-3 pb-3 pt-1 border-t border-slate-100 dark:border-slate-800/80 animate-in fade-in slide-in-from-top-1 duration-150">
+              <HeaderSearchBar
+                isMobile={true}
+                onCloseMobile={() => setMobileSearchOpen(false)}
+              />
+            </div>
+          )}
         </header>
 
         {/* Page Content */}

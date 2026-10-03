@@ -54,6 +54,7 @@ import { subscribeSpecialCollections } from "../../services/specialCollectionSer
 import { DEFAULT_JOIN_GC_MESSAGE } from "./ResidentGarbage";
 import RecentUpdatesCard from "../../components/notifications/RecentUpdatesCard";
 import { useSettings } from "../../context/SettingsContext";
+import { fetchSocietyWeather, formatCurrentDate } from "../../services/weatherService";
 
 const GC_CONFIG = {
   participating: {
@@ -401,6 +402,51 @@ export default function ResidentDashboard() {
     });
   }, [user?.uid, isParticipating, isCurrentMonthPaid, currentMonthName, currentYearNum, currentMonthFee, notifications]);
 
+  const [weather, setWeather] = useState({
+    temp: 28,
+    condition: "Clear Sky",
+    icon: "☀️",
+    isDay: true,
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchSocietyWeather()
+      .then((data) => {
+        if (isMounted && data) setWeather(data);
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour >= 4 && hour < 12) return "Good Morning,";
+    if (hour >= 12 && hour < 17) return "Good Afternoon,";
+    return "Good Evening,";
+  }, []);
+
+  const formattedDate = useMemo(() => {
+    return formatCurrentDate(new Date());
+  }, []);
+
+  const residentSubtitle = useMemo(() => {
+    const block = resident?.block
+      ? (resident.block.toLowerCase().includes("block") ? resident.block : `${resident.block} Block`)
+      : "D Block";
+    const plot = resident?.plotNumber
+      ? `Plot ${resident.plotNumber}`
+      : (resident?.plot ? `Plot ${resident.plot}` : "");
+    const unit = resident?.unit
+      ? `Unit ${resident.unit}`
+      : (resident?.flat ? `Flat ${resident.flat}` : "");
+    const floor = resident?.floor ? `${resident.floor}` : "";
+    const parts = [block, plot, unit, floor].filter(Boolean);
+    return parts.length > 0 ? parts.join(" • ") : "D Block Resident";
+  }, [resident]);
+
   if (!resident) {
     if (residentsLoading || residents.length === 0) {
       return (
@@ -492,20 +538,20 @@ export default function ResidentDashboard() {
       {/* ═══════════ Scenic Society Hero Banner (Matching User Reference) ═══════════ */}
       <div className="relative group overflow-hidden rounded-3xl shadow-xl border border-slate-200/60 dark:border-slate-800 bg-slate-900 transition-all duration-300">
         {/* Background Image Container with subtle hover zoom */}
-        <div className="relative h-64 sm:h-72 md:h-80 w-full overflow-hidden">
+        <div className="relative min-h-[250px] sm:min-h-[280px] md:h-80 w-full overflow-hidden flex flex-col justify-between">
           <img
             src="/society-banner.jpg"
             alt="D Block RWA Society"
-            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-1000 ease-out"
+            className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-1000 ease-out"
           />
 
-          {/* Gradients: Vignette, Top Subtle Tint, Bottom Gradient for maximum readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/40 to-black/30" />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-transparent to-slate-950/40" />
+          {/* Gradients: Left Sapphire Blue Gradient matching user mockup, subtle bottom vignette */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0c2f82]/95 via-[#1344aa]/85 md:via-[#164db8]/55 to-black/35" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/20" />
 
           {/* Top Floating Society Badge & Verified Status */}
-          <div className="absolute top-4 left-4 right-4 flex items-center justify-between gap-2 z-10 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/20 text-white text-[11px] sm:text-xs font-bold tracking-wide shadow-sm">
+          <div className="relative top-0 left-0 right-0 p-4 sm:p-5 flex items-center justify-between gap-2 z-10 flex-wrap">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-white text-[11px] sm:text-xs font-bold tracking-wide shadow-sm">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               <span className="truncate">D BLOCK RWA • INDRAPRASTHA</span>
             </div>
@@ -520,27 +566,53 @@ export default function ResidentDashboard() {
             </div>
           </div>
 
-          {/* Center / Bottom Content: "Welcome" & "Your Society, Our Community" */}
-          <div className="absolute inset-0 flex flex-col justify-end p-5 sm:p-7 md:p-8 z-10 pb-6 sm:pb-8">
-            <div className="space-y-1.5 max-w-2xl">
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]">
-                Welcome
-              </h1>
-              <p className="text-base sm:text-lg md:text-xl font-semibold text-emerald-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
-                Your Society, Our Community
+          {/* Center / Bottom Content: Left Greeting + Right Weather/Date Widget */}
+          <div className="relative p-5 sm:p-7 md:p-8 z-10 flex flex-col md:flex-row items-start md:items-end justify-between gap-4 sm:gap-6">
+            {/* Left: Good Morning, Rahul Sharma 👋 */}
+            <div className="space-y-1 sm:space-y-1.5 max-w-xl">
+              <p className="text-base sm:text-lg md:text-xl font-medium text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]">
+                {greeting}
               </p>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-white tracking-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)] flex items-center gap-2">
+                <span>{resident.owner || user?.name || "Resident"}</span>
+                <span className="inline-block animate-wiggle origin-bottom-right">👋</span>
+              </h1>
 
-              <div className="flex flex-wrap items-center gap-2 pt-2">
+              {/* Subtitle Flat / Unit Pill */}
+              <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-2">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/20 backdrop-blur-md border border-white/25 text-white text-xs sm:text-sm font-bold shadow-sm">
                   <FaHome className="text-emerald-300 text-xs" />
-                  <span>Flat {resident.flat}</span>
-                  {resident.block && <span>({resident.block})</span>}
-                  {resident.floor && <span>• {resident.floor}</span>}
+                  <span>{residentSubtitle}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Weather & Date Widget Matching Mockup */}
+            <div className="shrink-0 w-full sm:w-auto">
+              <div className="inline-flex items-center gap-3.5 sm:gap-4 px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl bg-white/15 dark:bg-black/35 backdrop-blur-md border border-white/25 text-white shadow-xl">
+                {/* Weather Sun / Moon Icon */}
+                <span className="text-3xl sm:text-4xl select-none" role="img" aria-label="weather">
+                  {weather.icon}
+                </span>
+
+                {/* Temperature & Condition */}
+                <div className="flex flex-col">
+                  <span className="text-xl sm:text-2xl font-black tracking-tight leading-none text-white drop-shadow-sm">
+                    {weather.temp}°C
+                  </span>
+                  <span className="text-[11px] sm:text-xs font-semibold text-white/90 mt-0.5">
+                    {weather.condition}
+                  </span>
                 </div>
 
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-black/40 backdrop-blur-md border border-white/15 text-slate-200 text-xs sm:text-sm font-medium">
-                  <FaUser className="text-blue-300 text-xs" />
-                  <span>{resident.owner || "Resident"}</span>
+                {/* Vertical Divider & Current Date */}
+                <div className="border-l border-white/25 pl-3.5 sm:pl-4 flex flex-col justify-center">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-white/70">
+                    Today
+                  </span>
+                  <span className="text-xs sm:text-sm font-bold text-white whitespace-nowrap drop-shadow-sm">
+                    {formattedDate}
+                  </span>
                 </div>
               </div>
             </div>

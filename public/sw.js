@@ -1,11 +1,12 @@
 // Service Worker for D Block RWA Indraprastha PWA & High-Speed Launch Caching
-const CACHE_NAME = 'rwa-app-v46';
+const CACHE_NAME = 'rwa-app-v47';
 
 const STATIC_PRECACHE = [
   '/',
   '/index.html',
   '/manifest.json?v=12',
   '/favicon.svg?v=12',
+  '/rwa-emblem.png',
   '/icon-192.png?v=12',
   '/icon-512.png?v=12',
   '/apple-touch-icon.png?v=12',

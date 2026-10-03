@@ -545,9 +545,9 @@ export default function ResidentDashboard() {
             className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-1000 ease-out"
           />
 
-          {/* Gradients: Left Sapphire Blue Gradient matching user mockup, subtle bottom vignette */}
-          <div className="absolute inset-0 bg-gradient-to-r from-[#0c2f82]/95 via-[#1344aa]/85 md:via-[#164db8]/55 to-black/35" />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/20" />
+          {/* Subtle natural shading to preserve photo colors while keeping text readable */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/45 via-black/15 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-black/15" />
 
           {/* Top Floating Society Badge & Verified Status */}
           <div className="relative top-0 left-0 right-0 p-4 sm:p-5 flex items-center justify-between gap-2 z-10 flex-wrap">

@@ -502,7 +502,12 @@ service cloud.firestore {
     // ============================
 
     match /specialCollectionPayments/{id} {
-      allow create: if true;
+      allow create: if (
+        request.resource.data.amount is number &&
+        request.resource.data.amount > 0 &&
+        request.resource.data.amount <= 1000000 &&
+        (request.resource.data.specialCollectionId is string || request.resource.data.collectionId is string)
+      );
       allow read: if isSignedIn();
       allow update: if canUserCollectSpecial();
       allow delete: if isAdmin();
@@ -523,8 +528,12 @@ service cloud.firestore {
     // ============================
 
     match /utrLookup/{utr} {
-      allow read: if true;
-      allow create: if true;
+      allow read: if isSignedIn();
+      allow create: if (
+        request.resource.data.utr is string &&
+        request.resource.data.utr.size() >= 4 &&
+        request.resource.data.utr.size() <= 64
+      );
       allow update, delete: if isAdmin();
     }
 
@@ -534,7 +543,7 @@ service cloud.firestore {
 
     match /specialCollectionAudit/{id} {
       allow read: if isAdmin();
-      allow create: if true;
+      allow create: if isSignedIn() || canUserCollectSpecial();
       allow update, delete: if isAdmin();
     }
 

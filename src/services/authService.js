@@ -144,7 +144,7 @@ export async function writeAuthLookup(mobile, email, uid, personalEmail = "", fl
 
     // Also write flat lookup for fast recovery by flat number
     if (flat) {
-      const cleanFlat = String(flat).replace(/[\s-]/g, "").replace(/[\/\\]/g, "_").toUpperCase();
+      const cleanFlat = String(flat).replace(/[\s-]/g, "").replaceAll("/", "_").replaceAll("\\", "_").toUpperCase();
       if (cleanFlat) {
         await setDoc(doc(db, "authLookup", `flat_${cleanFlat}`), {
           ...updateData,
@@ -167,7 +167,7 @@ export async function deleteAuthLookup(mobile, flat = "") {
   try {
     await deleteDoc(doc(db, "authLookup", clean));
     if (flat) {
-      const cleanFlat = String(flat).replace(/[\s-]/g, "").replace(/[\/\\]/g, "_").toUpperCase();
+      const cleanFlat = String(flat).replace(/[\s-]/g, "").replaceAll("/", "_").replaceAll("\\", "_").toUpperCase();
       if (cleanFlat) {
         await deleteDoc(doc(db, "authLookup", `flat_${cleanFlat}`));
       }
@@ -384,7 +384,7 @@ export async function findPersonalEmailForIdentifier(identifier) {
   }
 
   // 3. Flat Number Lookup (e.g. "D571", "571", "D-571", "d571", "PH1/101")
-  const cleanFlat = raw.replace(/[\s-]/g, "").replace(/[\/\\]/g, "_").toUpperCase();
+  const cleanFlat = raw.replace(/[\s-]/g, "").replaceAll("/", "_").replaceAll("\\", "_").toUpperCase();
   const flatCandidates = [
     `flat_${cleanFlat}`,
   ];

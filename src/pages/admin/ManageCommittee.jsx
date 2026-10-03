@@ -43,6 +43,7 @@ import { normalizeMobile, mobileToAuthEmail, writeAuthLookup, isRealEmail } from
 import { adminResetPasswordFn, db, secondaryAuth } from "../../firebase/firebase";
 import { doc, updateDoc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { blockAccount, unblockAccount } from "../../services/blockService";
 import {
   toggleCommitteeGarbagePower,

@@ -100,6 +100,9 @@ export default function PaymentModal({
     return getCoveredMonths(startMonth, startYear, count);
   }, [isAdvance, durationMonths, startMonth, startYear]);
 
+  const startLabel = coveredMonths[0] ? `${coveredMonths[0].month} ${coveredMonths[0].year}` : "";
+  const endLabel = coveredMonths.length > 0 ? `${coveredMonths[coveredMonths.length - 1].month} ${coveredMonths[coveredMonths.length - 1].year}` : "";
+
   // Generate dynamic UPI QR Code when method === "UPI"
   useEffect(() => {
     if (method === "UPI" && amount > 0) {

@@ -2,6 +2,7 @@
  * Comprehensive Unit Test Suite for Property Identity & Validation Matrix
  * Run via: node src/tests/propertyIdentity.test.js
  */
+/* global process */
 
 import {
   normalizeFloor,

@@ -37,13 +37,13 @@ export default function ResidentReceiptsListModal({
     const list = [];
 
     // 1. Garbage maintenance receipts
-    garbagePayments.forEach((p) => {
+    garbagePayments.forEach((p, idx) => {
       const period = p.isAdvance && p.periodLabel
         ? `${p.periodLabel} (${p.advanceDuration || 1}M Advance)`
         : `${p.month || ""} ${p.year || ""}`.trim() || "Garbage Collection Fee";
 
       list.push({
-        id: p.id || p.receiptNumber || Math.random().toString(),
+        id: p.id || p.receiptNumber || `gb_${idx}`,
         type: "garbage",
         title: "Garbage Collection Fee",
         subtitle: period,
@@ -68,9 +68,9 @@ export default function ResidentReceiptsListModal({
     });
 
     // 2. Special collections receipts
-    specialPayments.forEach((p) => {
+    specialPayments.forEach((p, idx) => {
       list.push({
-        id: p.id || p.receiptNumber || Math.random().toString(),
+        id: p.id || p.receiptNumber || `sp_${idx}`,
         type: "special",
         title: p.collectionName || p.campaignName || "Special Collection",
         subtitle: p.purpose || "Special Contribution",

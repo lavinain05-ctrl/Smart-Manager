@@ -455,12 +455,11 @@ export async function connectPosiflowBluetooth(forceNew = false) {
 // Send binary ESC/POS data in chunks to prevent Bluetooth buffer overflow on POSIFLOW PSF588
 export async function sendBluetoothEscPos(bytes) {
   let char = cachedWriteCharacteristic;
-  let dev = cachedBluetoothDevice;
+  const dev = cachedBluetoothDevice;
 
   if (!dev?.gatt?.connected || !char) {
     const res = await connectPosiflowBluetooth();
     char = res.characteristic;
-    dev = res.device;
   }
 
   const CHUNK_SIZE = 80; // 80 bytes safe buffer for POSIFLOW 588 microcontroller

@@ -87,7 +87,7 @@ export default function CollectorHistory() {
       return user.assignedModules;
     }
     return ["garbage"];
-  }, [user?.assignedModules]);
+  }, [user]);
 
   const hasSpecial = assignedModules.includes("special_collections");
 

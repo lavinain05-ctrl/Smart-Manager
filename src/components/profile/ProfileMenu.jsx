@@ -8,6 +8,7 @@ import {
   FaUserShield,
   FaSlidersH,
   FaLaptop,
+  FaHome,
 } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";

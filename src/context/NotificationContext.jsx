@@ -35,11 +35,14 @@ export function NotificationProvider({ children }) {
   const [phonePermission, setPhonePermission] = useState(() => getNotificationPermission());
   const isFirstLoadRef = useRef(true);
   const seenNotificationIdsRef = useRef(new Set());
-  const mountTimestampRef = useRef(Date.now());
+  const mountTimestampRef = useRef(0);
   const toastedNotificationIdsRef = useRef(new Set());
 
   // Load previously toasted notification IDs from sessionStorage to prevent re-toasting across refreshes
   useEffect(() => {
+    if (!mountTimestampRef.current) {
+      mountTimestampRef.current = Date.now();
+    }
     try {
       const saved = sessionStorage.getItem("rwa_toasted_notifs");
       if (saved) {
@@ -177,7 +180,8 @@ export function NotificationProvider({ children }) {
               <div
                 onClick={() => {
                   toast.dismiss(t.id);
-                  markRead(item.id);
+                  setLocalReadIds((prev) => new Set(prev).add(item.id));
+                  markReadService(item.id).catch(() => {});
                   if (item.link) {
                     if (typeof window !== "undefined") {
                       window.location.assign(item.link);

@@ -1074,6 +1074,7 @@ export function GarbageProvider({ children }) {
     let orphansCleaned = 0;
     let orphansRelinked = 0;
     let flatsLinked = 0;
+    // eslint-disable-next-line no-useless-assignment
     let chargesSynced = 0;
     let billsSynced = 0;
     let effectiveStandardFee = 80;

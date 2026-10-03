@@ -406,7 +406,7 @@ export default function CollectorCollect() {
     return specialPayments.filter(
       (p) => p.collectionId === currentCampaign.id && p.status === "confirmed"
     );
-  }, [specialPayments, currentCampaign]);
+  }, [specialPayments, currentCampaign?.id]);
 
   // Check if resident has contributed to current campaign
   function getResidentContribution(resident) {

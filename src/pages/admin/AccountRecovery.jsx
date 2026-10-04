@@ -44,6 +44,7 @@ import {
   writeAuthLookup,
   deleteAuthLookup,
   mobileToAuthEmail,
+  adminResetUserCredentials,
 } from "../../services/authService";
 
 import {
@@ -198,9 +199,11 @@ export default function AccountRecovery() {
 
   // 1. Password Reset Handler
   async function handleResetPassword(req) {
-    const targetUid = req.residentId || matchedResident?.id;
-    if (!targetUid) {
-      toast.error("No resident UID found for this request.");
+    const effectiveMobile = normalizeMobile(req.mobile || matchedResident?.mobile || "");
+    const targetUid = req.residentId || matchedResident?.id || "";
+
+    if (!effectiveMobile && !targetUid) {
+      toast.error("No registered mobile number or resident ID found for this request.");
       return;
     }
 
@@ -216,46 +219,26 @@ export default function AccountRecovery() {
     try {
       setProcessing(true);
 
-      // Try Cloud Function (if deployed or on Blaze)
-      try {
-        await adminResetPasswordFn({
-          targetUid,
-          requestId: req.id,
-          password: chosenPassword,
-        });
-      } catch (fnErr) {
-        console.warn("[AccountRecovery] Cloud Function reset unavailable on Spark plan:", fnErr.message);
-      }
+      // Perform bulletproof credential reset (works directly on Spark plan and Blaze plan)
+      const resetResult = await adminResetUserCredentials({
+        targetUid,
+        mobile: effectiveMobile,
+        password: chosenPassword,
+        name: req.residentName || matchedResident?.owner || "",
+        role: "resident",
+        flat: req.flatNumber || req.plotNumber || matchedResident?.flat || "",
+        block: req.block || matchedResident?.block || "",
+      });
 
-      // Mark user document for forced password change upon next login and record passwordChangedAt
-      try {
-        await updateDoc(doc(db, "users", targetUid), {
-          mustChangePassword: true,
-          tempPasswordSetAt: serverTimestamp(),
-          passwordChangedAt: serverTimestamp(),
-        });
-      } catch (uErr) {
-        console.warn("[AccountRecovery] users doc update error:", uErr.message);
-      }
-
-      // Immediately terminate all sessions on other devices for this account
-      try {
-        await terminateAllOtherSessions(
-          targetUid,
-          null,
-          "Your password was reset by administrator. Please log in with your temporary password."
-        );
-      } catch (sessErr) {
-        console.warn("[AccountRecovery] Failed to terminate sessions:", sessErr.message);
-      }
-
-      // Update recovery request status to completed
+      // Update recovery request status to completed with resolved info
       try {
         await updateRecoveryRequest(req.id, {
           status: "completed",
-          adminNotes: adminNotes ? `${adminNotes} | Temp password set` : `Temporary password set: ${chosenPassword}`,
+          adminNotes: adminNotes ? `${adminNotes} | Temp password set: ${chosenPassword}` : `Temporary password set: ${chosenPassword}`,
           mustChangePassword: true,
           processedBy: user.uid,
+          resolvedUid: resetResult.uid,
+          resolvedAuthEmail: resetResult.authEmail,
         });
       } catch (rErr) {
         console.warn("[AccountRecovery] recovery request update error:", rErr.message);
@@ -264,7 +247,7 @@ export default function AccountRecovery() {
       // Notify resident
       try {
         await createNotification({
-          userId: targetUid,
+          userId: resetResult.uid || targetUid,
           title: "Password Reset Complete",
           message: "Your password has been reset by the Admin. Please contact Admin for your temporary password, then log in and set a new password.",
           type: "success",
@@ -273,7 +256,7 @@ export default function AccountRecovery() {
 
       setTempPassword(chosenPassword);
       setShowTempPassword(true);
-      toast.success("Password reset registered! Share temporary password with resident.");
+      toast.success("Password reset successfully! Ready to share with resident.");
       setSelectedRequest((prev) => (prev ? { ...prev, status: "completed" } : null));
     } catch (error) {
       console.error("[AccountRecovery] Reset error:", error);
@@ -567,6 +550,22 @@ export default function AccountRecovery() {
         }
       }
 
+      // 2b. Try plotNumber
+      if (!found && req.plotNumber) {
+        const plotClean = (req.plotNumber || "").trim().toUpperCase();
+        let sP = await getDocs(query(resCol, where("plotNumber", "==", plotClean)));
+        if (!sP.empty) {
+          let list = sP.docs.map((d) => ({ id: d.id, ...d.data() }));
+          if (req.block) {
+            const bMatch = list.find((r) =>
+              (r.block || "").toLowerCase().includes(req.block.toLowerCase())
+            );
+            if (bMatch) list = [bMatch];
+          }
+          found = list[0];
+        }
+      }
+
       // 3. Try residentId
       if (!found && req.residentId) {
         const rDoc = await getDoc(doc(db, "residents", req.residentId));
@@ -694,7 +693,7 @@ export default function AccountRecovery() {
                   <th className="text-left p-4 font-semibold text-gray-600">Request ID</th>
                   <th className="text-left p-4 font-semibold text-gray-600">Resident</th>
                   <th className="text-left p-4 font-semibold text-gray-600">Mobile</th>
-                  <th className="text-left p-4 font-semibold text-gray-600">Block / Floor / Flat</th>
+                  <th className="text-left p-4 font-semibold text-gray-600">Property Details</th>
                   <th className="text-left p-4 font-semibold text-gray-600">Type</th>
                   <th className="text-left p-4 font-semibold text-gray-600">Date</th>
                   <th className="text-left p-4 font-semibold text-gray-600">Status</th>
@@ -712,11 +711,31 @@ export default function AccountRecovery() {
                       {req.id.slice(0, 8)}...
                     </td>
                     <td className="p-4">
-                      <div className="font-medium">{req.residentName || "—"}</div>
+                      <div className="font-semibold text-gray-900">{req.residentName || "—"}</div>
+                      {req.fatherHusbandName && (
+                        <div className="text-[11px] text-gray-500 font-normal">
+                          S/D/W of: {req.fatherHusbandName}
+                        </div>
+                      )}
+                      {req.personType && (
+                        <span className="inline-block mt-0.5 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                          {req.personType === "TENANT" || req.personType === "RENTED" ? "Tenant" : "Owner"}
+                        </span>
+                      )}
                     </td>
-                    <td className="p-4 text-gray-600">{req.mobile || "—"}</td>
+                    <td className="p-4 text-gray-600 font-mono text-xs">
+                      <div>{req.mobile || "—"}</div>
+                      {req.alternateMobile && (
+                        <div className="text-[10px] text-gray-400">Alt: {req.alternateMobile}</div>
+                      )}
+                    </td>
                     <td className="p-4 text-gray-600">
-                      {req.block || "—"} / {req.floor || "—"} / {req.flatNumber || "—"}
+                      <div className="font-medium text-gray-900">
+                        {req.block || "—"} {req.plotNumber ? `· Plot ${req.plotNumber}` : ""}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {req.floor || "—"} {req.unitNumber ? `· Unit ${req.unitNumber}` : req.flatNumber ? `· ${req.flatNumber}` : ""}
+                      </div>
                     </td>
                     <td className="p-4">
                       <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg">
@@ -772,46 +791,71 @@ export default function AccountRecovery() {
             <div className="p-6 space-y-5">
 
               {/* Request Info Grid */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex items-start gap-2">
                   <FaUser className="text-gray-400 mt-0.5" />
                   <div>
                     <p className="text-xs text-gray-500">Resident Name</p>
-                    <p className="font-medium">{selectedRequest.residentName || matchedResident?.owner || "—"}</p>
+                    <p className="font-semibold text-gray-900">{selectedRequest.residentName || matchedResident?.owner || "—"}</p>
+                    {(selectedRequest.fatherHusbandName || matchedResident?.fatherHusbandName) && (
+                      <p className="text-[11px] text-gray-500 font-normal">
+                        S/D/W of: {selectedRequest.fatherHusbandName || matchedResident?.fatherHusbandName}
+                      </p>
+                    )}
                   </div>
                 </div>
+
                 <div className="flex items-start gap-2">
                   <FaPhone className="text-gray-400 mt-0.5" />
                   <div>
-                    <p className="text-xs text-gray-500">Mobile</p>
-                    <p className="font-medium">
+                    <p className="text-xs text-gray-500">Registered Mobile</p>
+                    <p className="font-semibold font-mono text-gray-900">
                       {selectedRequest.mobile || resolvedMobile || (matchedResident?.mobile ? `${matchedResident.mobile} (on record)` : "—")}
                     </p>
+                    {(selectedRequest.alternateMobile || matchedResident?.alternateMobile) && (
+                      <p className="text-[11px] text-gray-500 font-mono">
+                        Alt: {selectedRequest.alternateMobile || matchedResident?.alternateMobile}
+                      </p>
+                    )}
                   </div>
                 </div>
+
                 <div className="flex items-start gap-2">
                   <FaBuilding className="text-gray-400 mt-0.5" />
                   <div>
-                    <p className="text-xs text-gray-500">Block</p>
-                    <p className="font-medium">{selectedRequest.block || matchedResident?.block || "—"}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <FaLayerGroup className="text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-xs text-gray-500">Floor</p>
-                    <p className="font-medium">{selectedRequest.floor || matchedResident?.floor || "—"}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <FaHome className="text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-xs text-gray-500">Flat Number</p>
-                    <p className="font-medium">
-                      {selectedRequest.flatNumber || matchedResident?.flatNumber || matchedResident?.flat || "—"}
+                    <p className="text-xs text-gray-500">Block & Plot</p>
+                    <p className="font-medium text-gray-900">
+                      {selectedRequest.block || matchedResident?.block || "—"}
+                      {(selectedRequest.plotNumber || matchedResident?.plotNumber) && (
+                        <span> · Plot {selectedRequest.plotNumber || matchedResident?.plotNumber}</span>
+                      )}
                     </p>
                   </div>
                 </div>
+
+                <div className="flex items-start gap-2">
+                  <FaLayerGroup className="text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-gray-500">Floor & Unit</p>
+                    <p className="font-medium text-gray-900">
+                      {selectedRequest.floor || matchedResident?.floor || "—"}
+                      {(selectedRequest.unitNumber || selectedRequest.flatNumber || matchedResident?.flatNumber || matchedResident?.flat) && (
+                        <span> · {selectedRequest.unitNumber ? `Unit ${selectedRequest.unitNumber}` : selectedRequest.flatNumber || matchedResident?.flatNumber || matchedResident?.flat}</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2">
+                  <FaHome className="text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-gray-500">Occupancy Type</p>
+                    <span className="inline-block mt-0.5 text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                      {selectedRequest.personType === "TENANT" || selectedRequest.personType === "RENTED" || matchedResident?.personType === "TENANT" ? "Tenant / Rented" : "Property Owner"}
+                    </span>
+                  </div>
+                </div>
+
                 <div className="flex items-start gap-2">
                   {selectedRequest.requestType === "forgot_mobile" ? (
                     <FaPhone className="text-amber-500 mt-0.5" />
@@ -1095,34 +1139,14 @@ export default function AccountRecovery() {
                         </button>
                       </div>
 
-                      {/* Spark plan guide & console link */}
-                      <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800 space-y-1.5">
-                        <p className="font-semibold text-blue-900">💡 Firebase Spark Plan Note:</p>
-                        <p>
-                          If direct Cloud Functions are not active on your Firebase plan, you can also paste this temporary password directly in Firebase Auth:
-                        </p>
-                        <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded border border-blue-200 font-mono text-xs text-gray-700">
-                          <span>Auth Email: {(selectedRequest.mobile || matchedResident?.mobile)}@smart-manager-aad4d.firebaseapp.com</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(`${selectedRequest.mobile || matchedResident?.mobile}@smart-manager-aad4d.firebaseapp.com`);
-                              toast.success("Auth email copied!");
-                            }}
-                            className="text-blue-600 hover:underline font-bold text-[11px] ml-2"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                        <div className="pt-0.5">
-                          <a
-                            href="https://console.firebase.google.com/project/smart-manager-aad4d/authentication/users"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 font-semibold underline"
-                          >
-                            Open Firebase Console Users <FaExternalLinkAlt className="text-[10px]" />
-                          </a>
+                      {/* Active Credential Confirmation */}
+                      <div className="bg-emerald-100/70 border border-emerald-300 rounded-xl p-3.5 text-xs text-emerald-950 flex items-start gap-2.5">
+                        <FaCheckCircle className="text-emerald-600 mt-0.5 shrink-0 text-base" />
+                        <div className="leading-relaxed">
+                          <p className="font-bold text-emerald-900">Account Credentials Synchronized & Live:</p>
+                          <p className="text-emerald-800 mt-0.5">
+                            This temporary password is now active in Firebase Authentication. The resident can log in immediately with their registered mobile number <strong>{selectedRequest.mobile || matchedResident?.mobile}</strong> and this password. On first login, they will be required to set their permanent private password.
+                          </p>
                         </div>
                       </div>
                     </div>

@@ -10,6 +10,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   deleteDoc,
   collection,
   query,
@@ -18,9 +19,10 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
-import { auth, db } from "../firebase/firebase";
+import { auth, db, secondaryAuth, adminResetPasswordFn } from "../firebase/firebase";
 import { recordLoginEvent, getPortalFromRole, cleanUserIdentifier } from "./loginTrackerService";
 import { checkIfMobileBlocked } from "./blockService";
+import { terminateAllOtherSessions } from "./sessionService";
 
 // =============================
 // Constants
@@ -1172,5 +1174,202 @@ export function subscribeAuth(callback) {
   return () => {
     aborted = true;
     unsubscribe();
+  };
+}
+
+// =============================
+// Admin: Bulletproof Credential Reset (Spark & Blaze Resilient)
+// =============================
+
+export async function adminResetUserCredentials({
+  targetUid,
+  mobile,
+  password,
+  name = "",
+  role = "resident",
+  flat = "",
+  block = "",
+}) {
+  const cleanMobile = normalizeMobile(mobile);
+  if (!cleanMobile || cleanMobile.length !== 10) {
+    throw new Error("A valid 10-digit mobile number is required to reset credentials.");
+  }
+  if (!password || password.length < 6) {
+    throw new Error("Password must be at least 6 characters.");
+  }
+
+  // 1. Try Cloud Function first (if deployed on Blaze plan)
+  let cloudSuccess = false;
+  if (targetUid) {
+    try {
+      const fnResult = await adminResetPasswordFn({ targetUid, password });
+      if (fnResult?.data?.success) {
+        cloudSuccess = true;
+        console.log("[Auth] Cloud Function password reset succeeded for:", targetUid);
+      }
+    } catch (fnErr) {
+      console.log("[Auth] Cloud Function unavailable on Spark plan, using secondaryAuth:", fnErr.message);
+    }
+  }
+
+  let finalUid = targetUid;
+  let finalAuthEmail = mobileToAuthEmail(cleanMobile);
+
+  // 2. If Cloud Function didn't update password, provision via secondaryAuth
+  if (!cloudSuccess) {
+    let authUserCreated = false;
+
+    // Check if canonical email can be created
+    try {
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, finalAuthEmail, password);
+      finalUid = cred.user.uid;
+      authUserCreated = true;
+      console.log("[Auth] Created canonical secondaryAuth user:", finalUid);
+    } catch (createErr) {
+      if (
+        createErr.code === "auth/email-already-in-use" ||
+        createErr.message?.includes("email-already-in-use") ||
+        createErr.message?.includes("EMAIL_EXISTS")
+      ) {
+        // Canonical email already exists in Firebase Auth with old forgotten password.
+        // Create an alias versioned email for this mobile number!
+        finalAuthEmail = `${cleanMobile}.r${Date.now()}@${AUTH_EMAIL_DOMAIN}`;
+        const cred = await createUserWithEmailAndPassword(secondaryAuth, finalAuthEmail, password);
+        finalUid = cred.user.uid;
+        authUserCreated = true;
+        console.log("[Auth] Created versioned alias secondaryAuth user:", finalAuthEmail, finalUid);
+      } else {
+        throw createErr;
+      }
+    } finally {
+      try {
+        await signOut(secondaryAuth);
+      } catch {}
+    }
+  }
+
+  // 3. Find existing resident or user data to preserve everything
+  let existingData = {};
+  let originalResidentId = targetUid;
+
+  // Try reading target user doc
+  if (targetUid) {
+    try {
+      const uSnap = await getDoc(doc(db, "users", targetUid));
+      if (uSnap.exists()) {
+        existingData = { ...uSnap.data() };
+        originalResidentId = existingData.residentId || targetUid;
+      }
+    } catch (e) {
+      console.warn("[Auth] Failed to read old users doc:", e.message);
+    }
+  }
+
+  // Also check residents collection by mobile to preserve all flat / resident info
+  try {
+    const rSnap = await getDocs(query(collection(db, "residents"), where("mobile", "==", cleanMobile)));
+    if (!rSnap.empty) {
+      const rDoc = rSnap.docs[0];
+      originalResidentId = rDoc.id;
+      const rData = rDoc.data();
+      existingData = {
+        ...existingData,
+        name: existingData.name || rData.owner || name,
+        flat: existingData.flat || rData.flat || flat,
+        block: existingData.block || rData.block || block,
+        blockId: existingData.blockId || rData.blockId,
+        floor: existingData.floor || rData.floor,
+        flatNumber: existingData.flatNumber || rData.flatNumber,
+        plotNumber: existingData.plotNumber || rData.plotNumber,
+        unitNumber: existingData.unitNumber || rData.unitNumber,
+        fatherHusbandName: existingData.fatherHusbandName || rData.fatherHusbandName,
+        personType: existingData.personType || rData.personType,
+      };
+    }
+  } catch (e) {
+    console.warn("[Auth] Failed to check residents doc:", e.message);
+  }
+
+  // 4. Update authLookup so login instantly resolves this email and new UID
+  await setDoc(
+    doc(db, "authLookup", cleanMobile),
+    {
+      mobile: cleanMobile,
+      email: finalAuthEmail,
+      uid: finalUid,
+      name: existingData.name || name || "",
+      flat: existingData.flat || flat || "",
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  // 5. Update/create users/{finalUid}
+  const updatedUserDoc = {
+    ...existingData,
+    uid: finalUid,
+    residentId: originalResidentId || finalUid,
+    role: existingData.role || role || "resident",
+    phone: cleanMobile,
+    mobile: cleanMobile,
+    name: existingData.name || name || "",
+    mustChangePassword: true,
+    tempPasswordSetAt: serverTimestamp(),
+    passwordChangedAt: serverTimestamp(),
+    status: "active",
+    approved: true,
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(doc(db, "users", finalUid), updatedUserDoc, { merge: true });
+
+  // If finalUid is different from targetUid, also keep original targetUid marked
+  if (targetUid && targetUid !== finalUid) {
+    try {
+      await updateDoc(doc(db, "users", targetUid), {
+        mustChangePassword: true,
+        passwordChangedAt: serverTimestamp(),
+        activeAuthUid: finalUid,
+      });
+    } catch {}
+  }
+
+  // 6. Update residents doc with active authUid and link
+  if (originalResidentId) {
+    try {
+      await updateDoc(doc(db, "residents", originalResidentId), {
+        uid: finalUid,
+        authUid: finalUid,
+        mustChangePassword: true,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (rErr) {
+      console.warn("[Auth] Failed to update resident doc:", rErr.message);
+    }
+  }
+
+  // 7. Terminate any previous active sessions
+  try {
+    if (targetUid) {
+      await terminateAllOtherSessions(
+        targetUid,
+        null,
+        "Your password was reset by administrator. Please log in with your temporary password."
+      );
+    }
+    if (finalUid && finalUid !== targetUid) {
+      await terminateAllOtherSessions(
+        finalUid,
+        null,
+        "Your password was reset by administrator. Please log in with your temporary password."
+      );
+    }
+  } catch {}
+
+  return {
+    success: true,
+    tempPassword: password,
+    authEmail: finalAuthEmail,
+    uid: finalUid,
+    residentId: originalResidentId || finalUid,
   };
 }

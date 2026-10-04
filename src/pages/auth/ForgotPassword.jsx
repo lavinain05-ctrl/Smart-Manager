@@ -45,6 +45,7 @@ import {
   submitRecoveryRequest,
   RECOVERY_REQUEST_TYPES,
 } from "../../services/recoveryService";
+import { AVAILABLE_FLOORS } from "../../services/propertyService";
 
 import { createNotification } from "../../services/notificationService";
 import {
@@ -179,10 +180,15 @@ export default function ForgotPassword() {
     return clean.length === 10 ? clean : "";
   });
   const [name, setName] = useState("");
+  const [fatherHusbandName, setFatherHusbandName] = useState("");
   const [blockId, setBlockId] = useState("");
   const [block, setBlock] = useState("");
-  const [floor, setFloor] = useState("");
+  const [plotNumber, setPlotNumber] = useState("");
+  const [floor, setFloor] = useState("Ground Floor");
+  const [unitNumber, setUnitNumber] = useState("");
   const [flatNumber, setFlatNumber] = useState("");
+  const [personType, setPersonType] = useState("OWNER");
+  const [alternateMobile, setAlternateMobile] = useState("");
   const [description, setDescription] = useState("");
   const [requestType, setRequestType] = useState("forgot_password");
 
@@ -451,18 +457,19 @@ export default function ForgotPassword() {
       toast.error("Please select your block.");
       return;
     }
-    if (!floor.trim()) {
-      toast.error("Please enter your floor number.");
+    const resolvedPlot = (plotNumber || flatNumber || "").trim();
+    if (!resolvedPlot) {
+      toast.error("Please enter your plot / building number.");
       return;
     }
-    if (!flatNumber.trim()) {
-      toast.error("Please enter your flat number.");
+    if (!floor || !floor.trim()) {
+      toast.error("Please select your floor.");
       return;
     }
 
     if (activeTab === "forgot_password" && !forgotBoth) {
       if (!mobile || mobile.length !== 10) {
-        toast.error("Please enter a valid 10-digit mobile number.");
+        toast.error("Please enter a valid 10-digit registered mobile number.");
         return;
       }
     }
@@ -470,13 +477,22 @@ export default function ForgotPassword() {
     try {
       setLoading(true);
 
+      const computedFlat = unitNumber.trim()
+        ? `${resolvedPlot}-${unitNumber.trim()}`
+        : resolvedPlot;
+
       const id = await submitRecoveryRequest({
         mobile: mobile || "",
         name: name.trim(),
+        fatherHusbandName: fatherHusbandName.trim(),
         blockId,
         block,
+        plotNumber: resolvedPlot,
         floor: floor.trim(),
-        flatNumber: flatNumber.trim(),
+        unitNumber: unitNumber.trim(),
+        flatNumber: computedFlat,
+        personType,
+        alternateMobile: alternateMobile.trim(),
         requestType,
         description: description.trim(),
       });
@@ -1154,7 +1170,7 @@ export default function ForgotPassword() {
                   <FaUserShield className="text-indigo-600 mt-0.5 shrink-0 text-base" />
                   <div className="leading-relaxed">
                     <span className="font-bold block text-indigo-950">Admin Permission Account Recovery</span>
-                    If you don't have an email registered or need manual identity verification, enter your flat details below. Society Administration will verify your identity from society records and assist you.
+                    If you don't have an email registered or need manual identity verification, enter your registered resident details below. Society Administration will verify your identity from society records and assist you.
                   </div>
                 </div>
 
@@ -1169,18 +1185,24 @@ export default function ForgotPassword() {
                   <span className="text-gray-600 text-xs">I also forgot my registered mobile number</span>
                 </label>
 
-                {/* Mobile Number */}
+                {/* Registered Mobile Number */}
                 {!forgotBoth && (
                   <div>
-                    <label className="block mb-1.5 text-xs font-medium text-gray-700">Registered Mobile Number <span className="text-red-500">*</span></label>
+                    <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                      Registered Mobile Number <span className="text-red-500">*</span>
+                    </label>
                     <div className="relative">
-                      <FaPhone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span className="text-xs font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border">
+                          +91
+                        </span>
+                      </div>
                       <input
                         type="tel"
-                        placeholder="Enter 10-digit mobile number"
+                        placeholder="Enter 10-digit registered mobile"
                         value={mobile}
                         onChange={(e) => setMobile(normalizeMobile(e.target.value))}
-                        className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
+                        className="w-full pl-14 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
                         maxLength={10}
                         required
                       />
@@ -1188,74 +1210,177 @@ export default function ForgotPassword() {
                   </div>
                 )}
 
-                {/* Full Name */}
-                <div>
-                  <label className="block mb-1.5 text-xs font-medium text-gray-700">Full Name <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <FaUser className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                    <input
-                      type="text"
-                      placeholder="Enter your full name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Block */}
-                <div>
-                  <label className="block mb-1.5 text-xs font-medium text-gray-700">Block <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <FaBuilding className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                    <select
-                      value={blockId}
-                      onChange={(e) => {
-                        const selected = availableBlocks.find((b) => b.id === e.target.value);
-                        setBlockId(e.target.value);
-                        setBlock(selected?.name || "");
-                      }}
-                      className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm appearance-none bg-white"
-                      required
-                    >
-                      <option value="">Select your block</option>
-                      {availableBlocks.map((b) => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Floor & Flat */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* Personal Details: Full Name & Father/Husband Name */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block mb-1.5 text-xs font-medium text-gray-700">Floor <span className="text-red-500">*</span></label>
+                    <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                      Full Name <span className="text-red-500">*</span>
+                    </label>
                     <div className="relative">
-                      <FaLayerGroup className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                      <FaUser className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                       <input
                         type="text"
-                        placeholder="Floor"
-                        value={floor}
-                        onChange={(e) => setFloor(e.target.value)}
+                        placeholder="Enter your full name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
                         className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
                         required
                       />
                     </div>
                   </div>
+
                   <div>
-                    <label className="block mb-1.5 text-xs font-medium text-gray-700">Flat Number <span className="text-red-500">*</span></label>
+                    <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                      Father / Husband Name <span className="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <div className="relative">
+                      <FaUser className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                      <input
+                        type="text"
+                        placeholder="Father's or husband's name"
+                        value={fatherHusbandName}
+                        onChange={(e) => setFatherHusbandName(e.target.value)}
+                        className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Property Details: Block & Plot Number */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                      Block <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <FaBuilding className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                      <select
+                        value={blockId}
+                        onChange={(e) => {
+                          const selected = availableBlocks.find((b) => b.id === e.target.value);
+                          setBlockId(e.target.value);
+                          setBlock(selected?.name || "");
+                        }}
+                        className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm appearance-none bg-white"
+                        required
+                      >
+                        <option value="">Select your block</option>
+                        {availableBlocks.map((b) => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                      Plot / Building Number <span className="text-red-500">*</span>
+                    </label>
                     <div className="relative">
                       <FaHome className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                       <input
                         type="text"
-                        placeholder="e.g. 101"
-                        value={flatNumber}
-                        onChange={(e) => setFlatNumber(e.target.value)}
+                        placeholder="e.g. 572, 12, 104, D571"
+                        value={plotNumber}
+                        onChange={(e) => {
+                          setPlotNumber(e.target.value);
+                          setFlatNumber(e.target.value);
+                        }}
                         className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
                         required
                       />
                     </div>
+                  </div>
+                </div>
+
+                {/* Floor, Unit/Flat, and Resident Occupancy Type */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                      Floor <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <FaLayerGroup className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                      <select
+                        value={floor}
+                        onChange={(e) => setFloor(e.target.value)}
+                        className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-xs sm:text-sm bg-white"
+                        required
+                      >
+                        {AVAILABLE_FLOORS.map((fl) => (
+                          <option key={fl} value={fl}>
+                            {fl}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                      Flat / Unit <span className="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 101, A, Front"
+                      value={unitNumber}
+                      onChange={(e) => setUnitNumber(e.target.value)}
+                      className="w-full px-3 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-xs sm:text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                      Occupancy <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={personType === "TENANT" ? "RENTED" : personType}
+                      onChange={(e) => setPersonType(e.target.value)}
+                      className="w-full px-3 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-xs sm:text-sm bg-white font-medium"
+                      required
+                    >
+                      <option value="OWNER">Property Owner</option>
+                      <option value="RENTED">Tenant / Rented</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Dynamic Live Property Identity Preview Pill */}
+                {plotNumber && (
+                  <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900 flex items-center justify-between gap-2 shadow-xs animate-in fade-in">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                      <span>
+                        <strong className="text-emerald-950 font-bold">Property:</strong>{" "}
+                        {block ? `Block ${block}` : "Block Selected"}, Plot {plotNumber}, {floor}
+                        {unitNumber ? `, Unit ${unitNumber}` : " (Entire Floor)"}
+                      </span>
+                    </div>
+                    <span className="font-bold uppercase tracking-wider px-2 py-0.5 bg-emerald-600 text-white rounded text-[10px]">
+                      {personType === "TENANT" || personType === "RENTED" ? "RENTED" : "OWNER"}
+                    </span>
+                  </div>
+                )}
+
+                {/* Alternate Mobile */}
+                <div>
+                  <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                    Alternate Contact Mobile <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <span className="text-xs font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border">
+                        +91
+                      </span>
+                    </div>
+                    <input
+                      type="tel"
+                      placeholder="Alternate mobile for emergency / verification"
+                      value={alternateMobile}
+                      onChange={(e) => setAlternateMobile(normalizeMobile(e.target.value))}
+                      className="w-full pl-14 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
+                      maxLength={10}
+                    />
                   </div>
                 </div>
 
@@ -1265,7 +1390,7 @@ export default function ForgotPassword() {
                     Additional Details <span className="text-gray-400 font-normal">(optional)</span>
                   </label>
                   <textarea
-                    placeholder="Any additional information..."
+                    placeholder="Any additional information to help admin verify your account..."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     rows={2}
@@ -1277,8 +1402,9 @@ export default function ForgotPassword() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold text-sm transition shadow-md"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold text-sm transition shadow-md flex items-center justify-center gap-2"
                 >
+                  {loading && <FaSpinner className="animate-spin text-sm" />}
                   {loading ? "Submitting..." : "Submit Resident Recovery Request"}
                 </button>
 
@@ -1325,76 +1451,157 @@ export default function ForgotPassword() {
               </div>
             </div>
 
-            {/* Full Name */}
-            <div>
-              <label className="block mb-1.5 text-xs font-medium text-gray-700">Full Name</label>
-              <div className="relative">
-                <FaUser className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                <input
-                  type="text"
-                  placeholder="Enter your full name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Block */}
-            <div>
-              <label className="block mb-1.5 text-xs font-medium text-gray-700">Block</label>
-              <div className="relative">
-                <FaBuilding className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                <select
-                  value={blockId}
-                  onChange={(e) => {
-                    const selected = availableBlocks.find((b) => b.id === e.target.value);
-                    setBlockId(e.target.value);
-                    setBlock(selected?.name || "");
-                  }}
-                  className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm appearance-none bg-white"
-                  required
-                >
-                  <option value="">Select your block</option>
-                  {availableBlocks.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Floor & Flat */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Full Name & Father/Husband Name */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block mb-1.5 text-xs font-medium text-gray-700">Floor</label>
+                <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
                 <div className="relative">
-                  <FaLayerGroup className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <FaUser className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                   <input
                     type="text"
-                    placeholder="Floor"
-                    value={floor}
-                    onChange={(e) => setFloor(e.target.value)}
+                    placeholder="Enter your full name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                     className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
                     required
                   />
                 </div>
               </div>
+
               <div>
-                <label className="block mb-1.5 text-xs font-medium text-gray-700">Flat Number</label>
+                <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                  Father / Husband Name <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <div className="relative">
+                  <FaUser className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <input
+                    type="text"
+                    placeholder="Father's or husband's name"
+                    value={fatherHusbandName}
+                    onChange={(e) => setFatherHusbandName(e.target.value)}
+                    className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Block & Plot */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                  Block <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <FaBuilding className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <select
+                    value={blockId}
+                    onChange={(e) => {
+                      const selected = availableBlocks.find((b) => b.id === e.target.value);
+                      setBlockId(e.target.value);
+                      setBlock(selected?.name || "");
+                    }}
+                    className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm appearance-none bg-white"
+                    required
+                  >
+                    <option value="">Select your block</option>
+                    {availableBlocks.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                  Plot / Building Number <span className="text-red-500">*</span>
+                </label>
                 <div className="relative">
                   <FaHome className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                   <input
                     type="text"
-                    placeholder="e.g. 101"
-                    value={flatNumber}
-                    onChange={(e) => setFlatNumber(e.target.value)}
+                    placeholder="e.g. 572, 12, 104, D571"
+                    value={plotNumber}
+                    onChange={(e) => {
+                      setPlotNumber(e.target.value);
+                      setFlatNumber(e.target.value);
+                    }}
                     className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
                     required
                   />
                 </div>
               </div>
             </div>
+
+            {/* Floor, Unit/Flat, and Resident Type */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                  Floor <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <FaLayerGroup className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <select
+                    value={floor}
+                    onChange={(e) => setFloor(e.target.value)}
+                    className="w-full pl-10 pr-4 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-xs sm:text-sm bg-white"
+                    required
+                  >
+                    {AVAILABLE_FLOORS.map((fl) => (
+                      <option key={fl} value={fl}>
+                        {fl}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                  Flat / Unit <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 101, A"
+                  value={unitNumber}
+                  onChange={(e) => setUnitNumber(e.target.value)}
+                  className="w-full px-3 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-xs sm:text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1.5 text-xs font-medium text-gray-700">
+                  Occupancy <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={personType === "TENANT" ? "RENTED" : personType}
+                  onChange={(e) => setPersonType(e.target.value)}
+                  className="w-full px-3 border rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none text-xs sm:text-sm bg-white font-medium"
+                  required
+                >
+                  <option value="OWNER">Property Owner</option>
+                  <option value="RENTED">Tenant / Rented</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Live Property Identity Preview Pill */}
+            {plotNumber && (
+              <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900 flex items-center justify-between gap-2 shadow-xs animate-in fade-in">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                  <span>
+                    <strong className="text-emerald-950 font-bold">Property:</strong>{" "}
+                    {block ? `Block ${block}` : "Block Selected"}, Plot {plotNumber}, {floor}
+                    {unitNumber ? `, Unit ${unitNumber}` : " (Entire Floor)"}
+                  </span>
+                </div>
+                <span className="font-bold uppercase tracking-wider px-2 py-0.5 bg-emerald-600 text-white rounded text-[10px]">
+                  {personType === "TENANT" || personType === "RENTED" ? "RENTED" : "OWNER"}
+                </span>
+              </div>
+            )}
 
             {/* Description (optional) */}
             <div>
@@ -1402,7 +1609,7 @@ export default function ForgotPassword() {
                 Additional Details <span className="text-gray-400 font-normal">(optional)</span>
               </label>
               <textarea
-                placeholder="Any additional information..."
+                placeholder="Any additional information to help admin verify your account..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={2}
@@ -1414,8 +1621,9 @@ export default function ForgotPassword() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold text-sm transition shadow-md"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold text-sm transition shadow-md flex items-center justify-center gap-2"
             >
+              {loading && <FaSpinner className="animate-spin text-sm" />}
               {loading ? "Submitting..." : "Submit Mobile Recovery Request"}
             </button>
           </form>

@@ -50,7 +50,20 @@ export const STATUS_LABELS = {
 // =============================
 // Matches the submitted info using public authLookup or residents collection.
 
-async function findMatchingResident({ mobile, name, blockId, block, floor, flatNumber }) {
+async function findMatchingResident({
+  mobile,
+  name,
+  fatherHusbandName,
+  blockId,
+  block,
+  plotNumber,
+  floor,
+  unitNumber,
+  flatNumber,
+  personType,
+  alternateMobile,
+  email,
+}) {
   // 1. Check authLookup by mobile (publicly accessible before login)
   if (mobile && mobile.length === 10) {
     try {
@@ -59,12 +72,18 @@ async function findMatchingResident({ mobile, name, blockId, block, floor, flatN
         const data = lookupSnap.data();
         return {
           residentId: data.uid || "",
-          residentName: name || "",
+          residentName: name || data.name || "",
+          fatherHusbandName: fatherHusbandName || data.fatherHusbandName || "",
           mobile,
-          blockId: blockId || "",
-          block: block || "",
-          floor: floor || "",
-          flatNumber: flatNumber || "",
+          alternateMobile: alternateMobile || data.alternateMobile || "",
+          email: email || data.personalEmail || data.email || "",
+          blockId: blockId || data.blockId || "",
+          block: block || data.block || "",
+          plotNumber: plotNumber || data.plotNumber || "",
+          floor: floor || data.floor || "",
+          unitNumber: unitNumber || data.unitNumber || "",
+          flatNumber: flatNumber || data.flat || "",
+          personType: personType || data.personType || "OWNER",
         };
       }
     } catch (err) {
@@ -88,11 +107,17 @@ async function findMatchingResident({ mobile, name, blockId, block, floor, flatN
         return {
           residentId: docSnap.id,
           residentName: data.owner || name || "",
+          fatherHusbandName: data.fatherHusbandName || fatherHusbandName || "",
           mobile: data.mobile || mobile || "",
+          alternateMobile: data.alternateMobile || alternateMobile || "",
+          email: data.email || email || "",
           block: data.block || block || "",
           blockId: data.blockId || blockId || "",
+          plotNumber: data.plotNumber || plotNumber || "",
           floor: data.floor || floor || "",
+          unitNumber: data.unitNumber || unitNumber || "",
           flatNumber: data.flatNumber || data.flat || flatNumber || "",
+          personType: data.personType || personType || "OWNER",
         };
       }
     }
@@ -101,20 +126,40 @@ async function findMatchingResident({ mobile, name, blockId, block, floor, flatN
   }
 
   // 3. If mobile is not provided (Forgot Mobile / Forgot Both / Contact Admin),
-  // allow submission to Admin queue as long as flat/block or name is provided.
-  if (!mobile && (flatNumber || name)) {
+  // allow submission to Admin queue as long as flat/plot/block or name is provided.
+  if (!mobile && (flatNumber || plotNumber || name)) {
     return {
       residentId: "",
       residentName: name || "",
+      fatherHusbandName: fatherHusbandName || "",
       mobile: mobile || "",
+      alternateMobile: alternateMobile || "",
+      email: email || "",
       blockId: blockId || "",
       block: block || "",
+      plotNumber: plotNumber || "",
       floor: floor || "",
-      flatNumber: flatNumber || "",
+      unitNumber: unitNumber || "",
+      flatNumber: flatNumber || plotNumber || "",
+      personType: personType || "OWNER",
     };
   }
 
-  return null;
+  return {
+    residentId: "",
+    residentName: name || "",
+    fatherHusbandName: fatherHusbandName || "",
+    mobile: mobile || "",
+    alternateMobile: alternateMobile || "",
+    email: email || "",
+    blockId: blockId || "",
+    block: block || "",
+    plotNumber: plotNumber || "",
+    floor: floor || "",
+    unitNumber: unitNumber || "",
+    flatNumber: flatNumber || plotNumber || "",
+    personType: personType || "OWNER",
+  };
 }
 
 // =============================
@@ -124,28 +169,45 @@ async function findMatchingResident({ mobile, name, blockId, block, floor, flatN
 export async function submitRecoveryRequest({
   mobile,
   name,
+  fatherHusbandName,
   blockId,
   block,
+  plotNumber,
   floor,
+  unitNumber,
   flatNumber,
+  personType,
+  alternateMobile,
+  email,
   requestType,
   description,
 }) {
   // Normalize inputs
   const normalizedMobile = (mobile || "").replace(/\D/g, "").slice(0, 10);
-  const normalizedFlat = (flatNumber || "").trim().toUpperCase();
+  const normalizedAltMobile = (alternateMobile || "").replace(/\D/g, "").slice(0, 10);
+  const normalizedPlot = (plotNumber || "").trim().toUpperCase();
+  const normalizedUnit = (unitNumber || "").trim();
+  const computedFlat = (flatNumber || (normalizedUnit ? `${normalizedPlot}-${normalizedUnit}` : normalizedPlot)).trim().toUpperCase();
   const normalizedName = (name || "").trim();
+  const normalizedFather = (fatherHusbandName || "").trim();
   const normalizedFloor = (floor || "").trim();
   const normalizedBlock = (block || "").trim();
+  const normalizedEmail = (email || "").trim().toLowerCase();
 
   // Verify resident identity
   const match = await findMatchingResident({
     mobile: normalizedMobile || undefined,
     name: normalizedName,
+    fatherHusbandName: normalizedFather,
     blockId,
     block: normalizedBlock,
+    plotNumber: normalizedPlot,
     floor: normalizedFloor,
-    flatNumber: normalizedFlat,
+    unitNumber: normalizedUnit,
+    flatNumber: computedFlat,
+    personType: personType || "OWNER",
+    alternateMobile: normalizedAltMobile,
+    email: normalizedEmail,
   });
 
   if (!match) {
@@ -154,33 +216,41 @@ export async function submitRecoveryRequest({
     );
   }
 
-  // Check for existing pending request for same resident
-  try {
-    const existingQuery = query(
-      recoveryRef,
-      where("residentId", "==", match.residentId),
-      where("status", "==", "pending")
-    );
-    const existingSnap = await getDocs(existingQuery);
-    if (!existingSnap.empty) {
-      throw new Error(
-        "You already have a pending recovery request. Please wait for Admin verification."
+  // Check for existing pending request for same resident (if residentId known)
+  if (match.residentId) {
+    try {
+      const existingQuery = query(
+        recoveryRef,
+        where("residentId", "==", match.residentId),
+        where("status", "==", "pending")
       );
+      const existingSnap = await getDocs(existingQuery);
+      if (!existingSnap.empty) {
+        throw new Error(
+          "You already have a pending recovery request. Please wait for Admin verification."
+        );
+      }
+    } catch (error) {
+      if (error.message.includes("pending recovery request")) throw error;
+      // Permission error on read is expected for unauthenticated — proceed
     }
-  } catch (error) {
-    if (error.message.includes("pending recovery request")) throw error;
-    // Permission error on read is expected for unauthenticated — proceed
   }
 
-  // Create recovery request
+  // Create recovery request with full registration-matched details
   const docRef = await addDoc(recoveryRef, {
-    residentId: match.residentId,
-    residentName: match.residentName,
-    mobile: match.mobile,
-    blockId: match.blockId,
-    block: normalizedBlock || match.block,
-    floor: match.floor,
-    flatNumber: match.flatNumber,
+    residentId: match.residentId || "",
+    residentName: match.residentName || normalizedName,
+    fatherHusbandName: match.fatherHusbandName || normalizedFather || "",
+    mobile: match.mobile || normalizedMobile,
+    alternateMobile: match.alternateMobile || normalizedAltMobile || "",
+    email: match.email || normalizedEmail || "",
+    blockId: match.blockId || blockId || "",
+    block: normalizedBlock || match.block || "",
+    plotNumber: normalizedPlot || match.plotNumber || "",
+    floor: normalizedFloor || match.floor || "",
+    unitNumber: normalizedUnit || match.unitNumber || "",
+    flatNumber: computedFlat || match.flatNumber || "",
+    personType: personType || match.personType || "OWNER",
     requestType: requestType || "forgot_password",
     description: (description || "").trim(),
     status: "pending",

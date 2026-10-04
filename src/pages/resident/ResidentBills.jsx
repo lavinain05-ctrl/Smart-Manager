@@ -16,6 +16,7 @@ import {
   isPriorToResidentBillingStart,
   getAvailableBillingMonthsForResident,
   getElapsedBillingCycles,
+  hasMonthCollectionStarted,
   formatDueDate,
 } from "../../utils/billingCycle";
 
@@ -180,8 +181,12 @@ export default function ResidentBills() {
     return [...enrichedBills, ...synthBills, ...unbilledCycleBills]
       .filter((b) => !isPriorToCollectionStart(b.month, b.year) && !isPriorToResidentBillingStart(canonicalResident, b.month, b.year))
       .filter((b) => {
-        if (monthFilter !== "All" && b.month !== monthFilter) return false;
-        if (statusFilter !== "All" && b.displayStatus !== statusFilter) return false;
+        // Collection of a month starts at end of month (after the 30th) or starting of next month.
+        // Do not show pending in that month; only show pending after the last date (30th) of that month.
+        const isPaid = b.status === "Paid" || b.status === "paid" || b.status === "Exempted" || b.displayStatus === "Paid" || b.isAdvance;
+        if (!isPaid && !hasMonthCollectionStarted(b.month, b.year)) {
+          return false;
+        }
         return true;
       })
       .sort((a, b) => {

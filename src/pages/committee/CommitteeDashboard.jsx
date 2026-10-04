@@ -367,18 +367,16 @@ export default function CommitteeDashboard() {
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
                 isCurrentMonthPaid
                   ? "bg-emerald-200 dark:bg-emerald-900/60 text-emerald-950 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700"
-                  : pendingBilling.isCurrentCycleOverdue
-                  ? "bg-rose-200 dark:bg-rose-900/60 text-rose-950 dark:text-rose-200 border-rose-300 dark:border-rose-700"
                   : pendingBilling.hasOverdue
-                  ? "bg-amber-200 dark:bg-amber-900/60 text-amber-950 dark:text-amber-200 border-amber-300 dark:border-amber-700"
+                  ? "bg-rose-200 dark:bg-rose-900/60 text-rose-950 dark:text-rose-200 border-rose-300 dark:border-rose-700"
                   : "bg-amber-200 dark:bg-amber-900/60 text-amber-950 dark:text-amber-200 border-amber-300 dark:border-amber-700"
               }`}>
                 {isCurrentMonthPaid
                   ? "✅ Garbage Fee Paid"
-                  : pendingBilling.isCurrentCycleOverdue
-                  ? "⚠️ Garbage Fee Overdue"
                   : pendingBilling.hasOverdue
-                  ? "⚠️ Sep Overdue • Oct Due"
+                  ? pendingBilling.pendingCount > 1
+                    ? `⚠️ ${pendingBilling.pendingCount} Months Due`
+                    : "⚠️ Garbage Fee Due"
                   : "🔔 Garbage Fee Due"}
               </span>
               <span className="text-xs font-bold text-slate-800 dark:text-slate-200">

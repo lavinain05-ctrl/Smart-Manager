@@ -197,6 +197,21 @@ export function getAvailableBillingMonthsForResident(resident, year) {
  * Returns all billing cycles from the resident's start (or society start Sep 2026)
  * up to the current calendar month & year.
  */
+/**
+ * Checks whether the collection period for a given month and year has officially started.
+ * The collection of a month is NOT taken in advance or at the start/during the month.
+ * It strictly starts at the end of that month (after the 30th) or starting of next month.
+ * Returns true if current time is after the 30th of that month.
+ */
+export function hasMonthCollectionStarted(month, year) {
+  const y = Number(year) || new Date().getFullYear();
+  const mIndex = typeof month === "number" ? month : MONTH_NAMES.indexOf(month);
+  if (mIndex === -1) return false;
+  const dueDay = getLastDateOfMonth(mIndex, y);
+  const cycleEnd = new Date(y, mIndex, dueDay, 23, 59, 59, 999);
+  return new Date() > cycleEnd;
+}
+
 export function getElapsedBillingCycles(resident = null) {
   const now = new Date();
   const currentY = now.getFullYear();
@@ -217,14 +232,18 @@ export function getElapsedBillingCycles(resident = null) {
     const dueDateStr = formatDueDate(mName, y);
     const dueDay = getLastDateOfMonth(m, y);
     const parsedDue = new Date(y, m, dueDay, 23, 59, 59, 999);
-    const isPastDueDate = parsedDue < now;
-    cycles.push({
-      month: mName,
-      year: y,
-      monthIndex: m,
-      dueDate: dueDateStr,
-      isOverdue: isPastDueDate,
-    });
+
+    // Collection of a month is starting in end of month or starting of next month.
+    // Do not show pending in that month; show pending after the last date (30th) of that month!
+    if (now > parsedDue) {
+      cycles.push({
+        month: mName,
+        year: y,
+        monthIndex: m,
+        dueDate: dueDateStr,
+        isOverdue: true,
+      });
+    }
     m++;
     if (m > 11) {
       m = 0;

@@ -12,11 +12,17 @@ import {
   FaTimesCircle,
   FaEnvelope,
   FaPhone,
+  FaPhoneAlt,
   FaBuilding,
   FaCalendarAlt,
   FaShieldAlt,
   FaExclamationTriangle,
   FaTrash,
+  FaKey,
+  FaLeaf,
+  FaVenusMars,
+  FaBriefcase,
+  FaAmbulance,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -81,6 +87,7 @@ export default function RegistrationRequests() {
   const [approveFloor, setApproveFloor] = useState("Ground Floor");
   const [approveUnit, setApproveUnit] = useState("");
   const [approvePersonType, setApprovePersonType] = useState("OWNER");
+  const [approveGarbageParticipation, setApproveGarbageParticipation] = useState("participating");
   const [approveFlat, setApproveFlat] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -196,9 +203,18 @@ export default function RegistrationRequests() {
         const s = search.toLowerCase();
         return (
           r.name?.toLowerCase().includes(s) ||
+          r.fatherHusbandName?.toLowerCase().includes(s) ||
           r.email?.toLowerCase().includes(s) ||
           r.mobile?.includes(s) ||
-          r.flat?.toLowerCase().includes(s)
+          r.alternateMobile?.includes(s) ||
+          r.emergencyContact?.includes(s) ||
+          r.flat?.toLowerCase().includes(s) ||
+          r.plotNumber?.toLowerCase().includes(s) ||
+          r.unitNumber?.toLowerCase().includes(s) ||
+          r.block?.toLowerCase().includes(s) ||
+          r.floor?.toLowerCase().includes(s) ||
+          r.personType?.toLowerCase().includes(s) ||
+          r.occupation?.toLowerCase().includes(s)
         );
       }
       return true;
@@ -233,6 +249,7 @@ export default function RegistrationRequests() {
           floor: approveFloor || approveModal.floor || "Ground Floor",
           unitNumber: approveUnit !== undefined ? approveUnit : (approveModal.unitNumber || ""),
           personType: approvePersonType || approveModal.personType || "OWNER",
+          garbageParticipation: approveGarbageParticipation || approveModal.garbageParticipation || "not_participating",
           flat: approveFlat || approveModal.flat,
         },
         {
@@ -260,7 +277,7 @@ export default function RegistrationRequests() {
         performedByName: "Admin",
         targetId: approveModal.uid || approveModal.id,
         targetName: approveModal.name,
-        details: `Plot: ${approvePlot || approveModal.plotNumber || approveModal.flat}, Floor: ${approveFloor || approveModal.floor}, Block: ${approveModal.block}, Role: ${approvePersonType}, Charge: ₹${charge || 0}`,
+        details: `Plot: ${approvePlot || approveModal.plotNumber || approveModal.flat}, Floor: ${approveFloor || approveModal.floor}, Block: ${approveBlock || approveModal.block}, Role: ${approvePersonType}, Garbage: ${approveGarbageParticipation}, Charge: ₹${charge || 0}`,
       });
 
       toast.success("Registration approved — resident account created");
@@ -273,6 +290,7 @@ export default function RegistrationRequests() {
       setApproveFloor("Ground Floor");
       setApproveUnit("");
       setApprovePersonType("OWNER");
+      setApproveGarbageParticipation("participating");
       setApproveFlat("");
     } catch (error) {
       console.error(error);
@@ -417,88 +435,76 @@ export default function RegistrationRequests() {
         <div className="space-y-4">
           {pagedRequests.map((req) => {
             const isPending = req.status === "pending";
+            const isApproved = req.status === "approved";
+            const isRejected = req.status === "rejected";
             const warnings = isPending ? getDuplicateWarnings(req) : [];
+            const isTenant = (req.personType || "").toUpperCase() === "TENANT" || (req.personType || "").toUpperCase() === "RENTED";
+            const isGC = req.garbageParticipation === "participating";
+            const plotDisplay = req.plotNumber || (req.flat ? req.flat.split("-")[0] : "—");
+            const unitDisplay = req.unitNumber || (req.flat && req.flat.includes("-") ? req.flat.split("-").slice(1).join("-") : "");
+            const fullFlatCode = req.flat || (unitDisplay ? `${plotDisplay}-${unitDisplay}` : plotDisplay);
 
             return (
               <div
                 key={req.id}
-                className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${
-                  isPending ? "border-l-4 border-l-yellow-500" :
-                  req.status === "approved" ? "border-l-4 border-l-green-500" :
-                  "border-l-4 border-l-red-500"
+                className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition duration-200 hover:shadow-md ${
+                  isPending ? "border-l-4 border-l-amber-500 border-slate-200" :
+                  isApproved ? "border-l-4 border-l-emerald-500 border-slate-200" :
+                  "border-l-4 border-l-rose-500 border-slate-200"
                 }`}
               >
-                <div className="p-5">
-                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      {/* Resident Info */}
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
-                          <FaUser className="text-emerald-600" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-lg">{req.name}</p>
-                          {req.fatherHusbandName && (
-                            <p className="text-xs text-gray-500">S/o / D/o: {req.fatherHusbandName}</p>
-                          )}
-                        </div>
+                <div className="p-5 space-y-4">
+                  {/* Top Header: Applicant Name, Badges & Action Buttons */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-lg shrink-0 shadow-sm ${
+                        isPending ? "bg-amber-100 text-amber-800" :
+                        isApproved ? "bg-emerald-100 text-emerald-800" :
+                        "bg-rose-100 text-rose-800"
+                      }`}>
+                        {req.name ? req.name.charAt(0).toUpperCase() : <FaUser />}
                       </div>
-
-                      {/* Details Grid */}
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
-                        <div className="bg-gray-50 rounded-xl p-2.5">
-                          <span className="text-gray-400 text-xs flex items-center gap-1"><FaBuilding className="text-[10px]" /> Block</span>
-                          <p className="font-semibold">{req.block || "—"}</p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-bold text-lg text-slate-900 truncate">{req.name}</h3>
+                          {/* Occupancy Role Badge */}
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            isTenant
+                              ? "bg-purple-50 text-purple-700 border border-purple-200"
+                              : "bg-blue-50 text-blue-700 border border-blue-200"
+                          }`}>
+                            <FaKey className="text-[10px]" />
+                            {isTenant ? "Tenant (Rented)" : "Property Owner"}
+                          </span>
+                          {/* Garbage Service Badge */}
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            isGC
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : "bg-slate-100 text-slate-600 border border-slate-200"
+                          }`}>
+                            <FaLeaf className="text-[10px]" />
+                            {isGC ? "GC: Participating" : "GC: Opted-Out"}
+                          </span>
+                          {/* Status Badge */}
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            isPending
+                              ? "bg-amber-100 text-amber-800"
+                              : isApproved
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-rose-100 text-rose-800"
+                          }`}>
+                            {isPending && <FaClock className="text-[10px]" />}
+                            {isApproved && <FaCheckCircle className="text-[10px]" />}
+                            {isRejected && <FaTimesCircle className="text-[10px]" />}
+                            {isPending ? "Pending Approval" : isApproved ? "Approved" : "Rejected"}
+                          </span>
                         </div>
-                        <div className="bg-gray-50 rounded-xl p-2.5">
-                          <span className="text-gray-400 text-xs flex items-center gap-1">Floor</span>
-                          <p className="font-semibold">{req.floor || "—"}</p>
-                        </div>
-                        <div className="bg-gray-50 rounded-xl p-2.5">
-                          <span className="text-gray-400 text-xs flex items-center gap-1"><FaHome className="text-[10px]" /> Flat</span>
-                          <p className="font-semibold">{req.flat || "—"}</p>
-                        </div>
-                        <div className="bg-gray-50 rounded-xl p-2.5">
-                          <span className="text-gray-400 text-xs flex items-center gap-1"><FaPhone className="text-[10px]" /> Mobile</span>
-                          <p className="font-semibold">{req.mobile || "—"}</p>
-                        </div>
-                        <div className="bg-gray-50 rounded-xl p-2.5">
-                          <span className="text-gray-400 text-xs flex items-center gap-1"><FaEnvelope className="text-[10px]" /> Email</span>
-                          <p className="font-semibold text-xs truncate">{req.email || "—"}</p>
-                        </div>
-                      </div>
-
-                      {req.gender && (
-                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                          {req.gender && <span>Gender: {req.gender}</span>}
-                          {req.dob && <span>DOB: {req.dob}</span>}
-                          {req.occupation && <span>Occupation: {req.occupation}</span>}
-                        </div>
-                      )}
-
-                      {/* Duplicate Warnings */}
-                      {warnings.length > 0 && (
-                        <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                          <p className="text-xs font-bold text-amber-700 flex items-center gap-1 mb-1">
-                            <FaExclamationTriangle /> Duplicate Warnings
+                        {req.fatherHusbandName && (
+                          <p className="text-xs text-slate-500 font-medium mt-0.5">
+                            Father / Husband: <strong className="text-slate-800">{req.fatherHusbandName}</strong>
                           </p>
-                          {warnings.map((w, i) => (
-                            <p key={i} className="text-xs text-amber-600">• {w}</p>
-                          ))}
-                        </div>
-                      )}
-
-                      {req.rejectionReason && (
-                        <div className="mt-2 bg-red-50 rounded-xl p-3">
-                          <p className="text-xs text-red-600"><strong>Rejection Reason:</strong> {req.rejectionReason}</p>
-                        </div>
-                      )}
-
-                      <p className="text-[10px] text-gray-400 mt-3 flex items-center gap-1">
-                        <FaClock /> Registered: {formatDate(req.registeredAt)}
-                        {req.approvedAt && <span>• Approved: {formatDate(req.approvedAt)}</span>}
-                        {req.rejectedAt && <span>• Rejected: {formatDate(req.rejectedAt)}</span>}
-                      </p>
+                        )}
+                      </div>
                     </div>
 
                     {/* Actions */}
@@ -516,28 +522,29 @@ export default function RegistrationRequests() {
                               setApproveFloor(req.floor || "Ground Floor");
                               setApproveUnit(req.unitNumber || "");
                               setApprovePersonType(req.personType || "OWNER");
+                              setApproveGarbageParticipation(req.garbageParticipation || "participating");
                               setApproveFlat(req.flat || "");
                             }}
                             disabled={loadingId === req.id}
-                            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-green-600 text-white hover:bg-green-700 font-medium transition text-sm disabled:opacity-50 shadow-sm"
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 font-semibold transition text-sm disabled:opacity-50 shadow-sm"
                           >
                             <FaCheck /> Approve
                           </button>
                           <button
                             onClick={() => { setRejectModal(req); setRejectReason(""); }}
                             disabled={loadingId === req.id}
-                            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 font-medium transition text-sm disabled:opacity-50"
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 font-semibold transition text-sm disabled:opacity-50 border border-red-200"
                           >
                             <FaTimes /> Reject
                           </button>
                         </>
-                      ) : req.status === "approved" ? (
-                        <span className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 bg-green-100 text-green-700">
-                          <FaCheckCircle /> Approved
+                      ) : isApproved ? (
+                        <span className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 bg-green-100 text-green-700 border border-green-200">
+                          <FaCheckCircle /> Account Created
                         </span>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 bg-red-100 text-red-700">
+                          <span className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 bg-red-100 text-red-700 border border-red-200">
                             <FaTimesCircle /> Rejected
                           </span>
                           <button
@@ -550,6 +557,143 @@ export default function RegistrationRequests() {
                           </button>
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Section 1: Property & Residence Details (Hierarchy) */}
+                  <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <FaBuilding className="text-emerald-600" /> Property & Residence Hierarchy
+                      </span>
+                      <span className="text-xs font-mono font-bold bg-white border border-slate-200 text-emerald-800 px-2.5 py-0.5 rounded-md">
+                        Flat ID: {fullFlatCode}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      <div className="bg-white border border-slate-200/60 rounded-lg p-2.5">
+                        <span className="text-slate-400 text-[10px] font-semibold block uppercase">1. Block</span>
+                        <p className="font-bold text-slate-800 text-xs sm:text-sm mt-0.5 truncate">{req.block || "—"}</p>
+                      </div>
+                      <div className="bg-white border border-slate-200/60 rounded-lg p-2.5">
+                        <span className="text-slate-400 text-[10px] font-semibold block uppercase">2. Plot / Building No.</span>
+                        <p className="font-bold text-slate-800 text-xs sm:text-sm mt-0.5 truncate">{plotDisplay}</p>
+                      </div>
+                      <div className="bg-white border border-slate-200/60 rounded-lg p-2.5">
+                        <span className="text-slate-400 text-[10px] font-semibold block uppercase">3. Floor</span>
+                        <p className="font-bold text-slate-800 text-xs sm:text-sm mt-0.5 truncate">{req.floor || "—"}</p>
+                      </div>
+                      <div className="bg-white border border-slate-200/60 rounded-lg p-2.5">
+                        <span className="text-slate-400 text-[10px] font-semibold block uppercase">4. Flat / Unit No.</span>
+                        <p className="font-bold text-slate-800 text-xs sm:text-sm mt-0.5 truncate">
+                          {unitDisplay || "Single / Full Floor"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 2: Contact Information Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    {/* Primary Mobile */}
+                    <div className="bg-blue-50/50 border border-blue-200/60 rounded-xl p-3">
+                      <span className="text-blue-700 font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5">
+                        <FaPhone className="text-blue-600 text-[11px]" /> Registered Mobile (Login ID) *
+                      </span>
+                      <p className="font-extrabold text-slate-900 text-sm mt-1">{req.mobile || "—"}</p>
+                    </div>
+
+                    {/* Alternate Mobile */}
+                    <div className="bg-white border border-slate-200/70 rounded-xl p-3">
+                      <span className="text-slate-500 font-semibold text-[10px] uppercase tracking-wide flex items-center gap-1.5">
+                        <FaPhoneAlt className="text-slate-400 text-[10px]" /> Alternate Mobile
+                      </span>
+                      <p className="font-bold text-slate-800 text-xs sm:text-sm mt-1">
+                        {req.alternateMobile || <span className="text-slate-400 font-normal italic">None specified</span>}
+                      </p>
+                    </div>
+
+                    {/* Emergency Contact */}
+                    <div className="bg-white border border-slate-200/70 rounded-xl p-3">
+                      <span className="text-slate-500 font-semibold text-[10px] uppercase tracking-wide flex items-center gap-1.5">
+                        <FaAmbulance className="text-rose-500 text-[10px]" /> Emergency Contact
+                      </span>
+                      <p className="font-bold text-slate-800 text-xs sm:text-sm mt-1">
+                        {req.emergencyContact || <span className="text-slate-400 font-normal italic">None specified</span>}
+                      </p>
+                    </div>
+
+                    {/* Email */}
+                    <div className="bg-white border border-slate-200/70 rounded-xl p-3">
+                      <span className="text-slate-500 font-semibold text-[10px] uppercase tracking-wide flex items-center gap-1.5">
+                        <FaEnvelope className="text-slate-400 text-[10px]" /> Email Address
+                      </span>
+                      <p className="font-bold text-slate-800 text-xs sm:text-sm truncate mt-1" title={req.email || "Not Provided"}>
+                        {req.email || <span className="text-slate-400 font-normal italic">Not provided</span>}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Section 3: Personal Information & Preferences */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {/* Father / Husband Name */}
+                    <div className="bg-white border border-slate-200/70 rounded-xl p-2.5">
+                      <span className="text-slate-400 text-[10px] font-semibold block uppercase">Father / Husband</span>
+                      <p className="font-bold text-slate-800 text-xs mt-0.5 truncate">{req.fatherHusbandName || "—"}</p>
+                    </div>
+
+                    {/* Gender */}
+                    <div className="bg-white border border-slate-200/70 rounded-xl p-2.5">
+                      <span className="text-slate-400 text-[10px] font-semibold flex items-center gap-1 uppercase">
+                        <FaVenusMars className="text-[10px]" /> Gender
+                      </span>
+                      <p className="font-bold text-slate-800 text-xs mt-0.5">{req.gender || "—"}</p>
+                    </div>
+
+                    {/* DOB */}
+                    <div className="bg-white border border-slate-200/70 rounded-xl p-2.5">
+                      <span className="text-slate-400 text-[10px] font-semibold flex items-center gap-1 uppercase">
+                        <FaCalendarAlt className="text-[10px]" /> Date of Birth
+                      </span>
+                      <p className="font-bold text-slate-800 text-xs mt-0.5">{req.dob || "—"}</p>
+                    </div>
+
+                    {/* Occupation */}
+                    <div className="bg-white border border-slate-200/70 rounded-xl p-2.5">
+                      <span className="text-slate-400 text-[10px] font-semibold flex items-center gap-1 uppercase">
+                        <FaBriefcase className="text-[10px]" /> Occupation
+                      </span>
+                      <p className="font-bold text-slate-800 text-xs mt-0.5 truncate">{req.occupation || "—"}</p>
+                    </div>
+                  </div>
+
+                  {/* Duplicate Warnings */}
+                  {warnings.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                      <p className="text-xs font-bold text-amber-700 flex items-center gap-1 mb-1">
+                        <FaExclamationTriangle /> Duplicate Property / Identity Warnings
+                      </p>
+                      {warnings.map((w, i) => (
+                        <p key={i} className="text-xs text-amber-600">• {w}</p>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Rejection Reason */}
+                  {req.rejectionReason && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                      <p className="text-xs text-red-600"><strong>Rejection Reason:</strong> {req.rejectionReason}</p>
+                    </div>
+                  )}
+
+                  {/* Footer Timestamps */}
+                  <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100">
+                    <span className="flex items-center gap-1">
+                      <FaClock /> Submitted: {formatDate(req.registeredAt)}
+                    </span>
+                    <div className="flex items-center gap-3">
+                      {req.approvedAt && <span className="text-emerald-600 font-medium">✓ Approved: {formatDate(req.approvedAt)}</span>}
+                      {req.rejectedAt && <span className="text-rose-600 font-medium">✕ Rejected: {formatDate(req.rejectedAt)}</span>}
                     </div>
                   </div>
                 </div>
@@ -571,44 +715,119 @@ export default function RegistrationRequests() {
       {/* Approve Modal */}
       {approveModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b">
-              <h2 className="text-xl font-bold text-green-600 flex items-center gap-2">
-                <FaCheckCircle /> Approve Registration
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h2 className="text-xl font-bold text-emerald-600 flex items-center gap-2">
+                <FaCheckCircle /> Approve Resident Registration
               </h2>
+              <button
+                onClick={() => {
+                  setApproveModal(null);
+                  setApproveBlockId("");
+                  setApproveBlock("");
+                  setApprovePlot("");
+                  setApproveFloor("Ground Floor");
+                  setApproveUnit("");
+                  setApprovePersonType("OWNER");
+                  setApproveGarbageParticipation("participating");
+                  setApproveFlat("");
+                }}
+                className="text-slate-400 hover:text-slate-600 text-lg p-1"
+              >
+                ✕
+              </button>
             </div>
             <div className="p-6 space-y-4">
-              <div className="bg-green-50 rounded-xl p-4">
-                <p className="font-bold">{approveModal.name}</p>
-                <p className="text-sm text-gray-700 font-medium">
-                  Block {approveModal.block} • Plot {approveModal.plotNumber || approveModal.flat} • Floor {approveModal.floor || "Ground Floor"}
-                  {approveModal.unitNumber ? ` • Unit ${approveModal.unitNumber}` : ""}
-                </p>
-                <p className="text-xs text-gray-600 mt-1">{approveModal.email || approveModal.mobile}</p>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                    (approveModal.personType === "TENANT" || approveModal.personType === "RENTED") ? "bg-amber-100 text-amber-700" :
-                    approveModal.personType === "FAMILY_MEMBER" ? "bg-purple-100 text-purple-700" :
-                    "bg-blue-100 text-blue-700"
+              {/* Applicant Profile Summary */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900">{approveModal.name}</h3>
+                    {approveModal.fatherHusbandName && (
+                      <p className="text-xs text-slate-500 font-medium">
+                        Father / Husband: <strong className="text-slate-700">{approveModal.fatherHusbandName}</strong>
+                      </p>
+                    )}
+                  </div>
+                  <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                    (approveModal.personType === "TENANT" || approveModal.personType === "RENTED")
+                      ? "bg-purple-100 text-purple-700 border border-purple-200"
+                      : "bg-blue-100 text-blue-700 border border-blue-200"
                   }`}>
-                    {(approveModal.personType === "TENANT" || approveModal.personType === "RENTED") ? "RENTED" : (approveModal.personType || "OWNER")}
+                    {(approveModal.personType === "TENANT" || approveModal.personType === "RENTED") ? "Tenant" : "Property Owner"}
                   </span>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${approveModal.garbageParticipation === "participating" ? "bg-emerald-100 text-emerald-700" : "bg-orange-100 text-orange-700"}`}>
-                    GC: {approveModal.garbageParticipation === "participating" ? "Participating" : "Not Participating"}
-                  </span>
+                </div>
+
+                {/* Contact & Personal Metadata */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                  <div className="bg-white border rounded-lg p-2">
+                    <span className="text-slate-400 text-[10px] block">Mobile (Login ID)</span>
+                    <span className="font-bold text-slate-800">{approveModal.mobile || "—"}</span>
+                  </div>
+                  <div className="bg-white border rounded-lg p-2">
+                    <span className="text-slate-400 text-[10px] block">Alternate Mobile</span>
+                    <span className="font-bold text-slate-800">{approveModal.alternateMobile || "—"}</span>
+                  </div>
+                  <div className="bg-white border rounded-lg p-2">
+                    <span className="text-slate-400 text-[10px] block">Emergency Contact</span>
+                    <span className="font-bold text-slate-800">{approveModal.emergencyContact || "—"}</span>
+                  </div>
+                  <div className="bg-white border rounded-lg p-2">
+                    <span className="text-slate-400 text-[10px] block">Email</span>
+                    <span className="font-bold text-slate-800 truncate block">{approveModal.email || "—"}</span>
+                  </div>
+                  <div className="bg-white border rounded-lg p-2">
+                    <span className="text-slate-400 text-[10px] block">DOB / Gender</span>
+                    <span className="font-bold text-slate-800">{approveModal.dob || "—"} ({approveModal.gender || "—"})</span>
+                  </div>
+                  <div className="bg-white border rounded-lg p-2">
+                    <span className="text-slate-400 text-[10px] block">Occupation</span>
+                    <span className="font-bold text-slate-800 truncate block">{approveModal.occupation || "—"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Garbage Collection Service Toggle */}
+              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 space-y-2">
+                <label className="text-xs font-bold text-emerald-900 flex items-center gap-1.5 uppercase tracking-wide">
+                  <FaLeaf className="text-emerald-600" /> Garbage Collection Service Preference
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setApproveGarbageParticipation("participating")}
+                    className={`p-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                      approveGarbageParticipation === "participating"
+                        ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <FaCheck className="text-[10px]" /> Participating (Standard)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setApproveGarbageParticipation("not_participating")}
+                    className={`p-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                      approveGarbageParticipation === "not_participating"
+                        ? "bg-slate-700 text-white border-slate-700 shadow-sm"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <FaTimes className="text-[10px]" /> Not Participating (Opt-out)
+                  </button>
                 </div>
               </div>
 
               {/* Canonical Property Details & Override */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
-                <p className="text-sm font-bold text-blue-800 flex items-center gap-1.5">
+              <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-4 space-y-3">
+                <p className="text-sm font-bold text-blue-900 flex items-center gap-1.5">
                   <FaBuilding className="text-blue-600" /> Verify Canonical Property Identity
                 </p>
-                <p className="text-xs text-blue-700">Ensure the Block, Plot, Floor, and Unit are accurate before approving.</p>
+                <p className="text-xs text-blue-700">Ensure Block, Plot, Floor, and Unit are accurate before creating official resident account.</p>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block mb-1 text-xs font-semibold text-gray-700">Block</label>
+                    <label className="block mb-1 text-xs font-semibold text-gray-700">Block *</label>
                     <select
                       value={approveBlockId}
                       onChange={(e) => {
@@ -617,7 +836,7 @@ export default function RegistrationRequests() {
                         setApproveBlockId(bid);
                         setApproveBlock(blk?.name || "");
                       }}
-                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-green-500 outline-none"
+                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                     >
                       <option value="">— Keep: {approveModal.block || "None"} —</option>
                       {blocks.map((b) => (
@@ -627,13 +846,13 @@ export default function RegistrationRequests() {
                   </div>
 
                   <div>
-                    <label className="block mb-1 text-xs font-semibold text-gray-700">Plot Number *</label>
+                    <label className="block mb-1 text-xs font-semibold text-gray-700">Plot / Building Number *</label>
                     <input
                       type="text"
-                      placeholder="e.g. 12 or D572"
+                      placeholder="e.g. 572, 12, 104"
                       value={approvePlot}
                       onChange={(e) => setApprovePlot(e.target.value)}
-                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-green-500 outline-none"
+                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                     />
                   </div>
                 </div>
@@ -644,7 +863,7 @@ export default function RegistrationRequests() {
                     <select
                       value={approveFloor}
                       onChange={(e) => setApproveFloor(e.target.value)}
-                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-green-500 outline-none"
+                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                     >
                       {AVAILABLE_FLOORS.map((fl) => (
                         <option key={fl} value={fl}>
@@ -656,14 +875,14 @@ export default function RegistrationRequests() {
 
                   <div>
                     <label className="block mb-1 text-xs font-semibold text-gray-700">
-                      Flat Number <span className="text-gray-400 font-normal">(optional)</span>
+                      Flat / Unit Number <span className="text-gray-400 font-normal">(optional)</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. 1 or A (leave blank if single)"
+                      placeholder="e.g. 1, A, 2 (leave blank if full floor)"
                       value={approveUnit}
                       onChange={(e) => setApproveUnit(e.target.value)}
-                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-green-500 outline-none"
+                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                     />
                   </div>
                 </div>
@@ -673,11 +892,19 @@ export default function RegistrationRequests() {
                   <select
                     value={approvePersonType === "TENANT" ? "RENTED" : approvePersonType}
                     onChange={(e) => setApprovePersonType(e.target.value)}
-                    className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-green-500 outline-none"
+                    className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                   >
                     <option value="OWNER">Property Owner</option>
-                    <option value="RENTED">Rented</option>
+                    <option value="RENTED">Tenant (Rented)</option>
                   </select>
+                </div>
+
+                {/* Address Hierarchy Preview Pill */}
+                <div className="bg-white border border-blue-200/80 rounded-lg p-2.5 text-xs text-blue-900 flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Hierarchy Preview:</span>
+                  <span className="font-bold text-emerald-800 font-mono">
+                    {approveBlock || approveModal.block || "Block"} ➔ Plot {approvePlot || "—"} ➔ {approveFloor} ➔ {approveUnit ? `Unit ${approveUnit}` : "Full Floor"}
+                  </span>
                 </div>
               </div>
 
@@ -690,9 +917,9 @@ export default function RegistrationRequests() {
                   placeholder="e.g. 200"
                   value={charge}
                   onChange={(e) => setCharge(e.target.value)}
-                  className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-green-500 outline-none"
+                  className="w-full border rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
-                <p className="text-xs text-gray-400 mt-1">Monthly maintenance/garbage charge for this resident</p>
+                <p className="text-xs text-gray-400 mt-1">Monthly maintenance / garbage charge for this resident</p>
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
@@ -705,6 +932,7 @@ export default function RegistrationRequests() {
                   setApproveFloor("Ground Floor");
                   setApproveUnit("");
                   setApprovePersonType("OWNER");
+                  setApproveGarbageParticipation("participating");
                   setApproveFlat("");
                 }}
                 className="px-5 py-2.5 rounded-xl border hover:bg-gray-50 font-medium transition"
@@ -714,7 +942,7 @@ export default function RegistrationRequests() {
               <button
                 onClick={handleApprove}
                 disabled={loadingId === approveModal.id}
-                className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold transition disabled:bg-gray-400"
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition disabled:bg-gray-400 shadow-sm"
               >
                 {loadingId === approveModal.id ? "Approving..." : "Approve & Create Account"}
               </button>

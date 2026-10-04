@@ -504,8 +504,9 @@ export async function approveRegistration(requestId, request, charge, overrides 
     console.warn("[approveRegistration] Property resolution note:", propErr.message);
   }
 
-  // Garbage status from registration choice
-  const gcStatus = request.garbageParticipation === "participating"
+  // Garbage status from registration choice or admin override
+  const gcChoice = overrides.garbageParticipation || request.garbageParticipation || "not_participating";
+  const gcStatus = gcChoice === "participating"
     ? "participating"
     : "not_participating";
 
@@ -574,7 +575,7 @@ export async function approveRegistration(requestId, request, charge, overrides 
     familyMembers: [],
     status: "Active",
     garbageStatus: gcStatus,
-    garbageParticipation: request.garbageParticipation || "not_participating",
+    garbageParticipation: gcChoice,
     garbageJoinedAt: gcStatus === "participating" ? serverTimestamp() : null,
     garbageJoinedMonth: gcStatus === "participating" ? new Date().toLocaleString("default", { month: "long" }) : null,
     garbageJoinedYear: gcStatus === "participating" ? new Date().getFullYear() : null,

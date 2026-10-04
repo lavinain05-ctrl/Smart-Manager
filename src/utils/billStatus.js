@@ -20,10 +20,11 @@ export function parseDueDate(dueDate, month, year) {
     }
   }
 
-  // Due date is strictly the last calendar day of the billing month
+  // Due date is strictly the 30th of the billing month (never after 30th; 28/29 for Feb)
   if (mIndex !== -1 && yNum) {
-    const lastDay = new Date(yNum, mIndex + 1, 0).getDate();
-    return new Date(yNum, mIndex, lastDay, 23, 59, 59, 999);
+    const maxDays = new Date(yNum, mIndex + 1, 0).getDate();
+    const dueDay = Math.min(30, maxDays);
+    return new Date(yNum, mIndex, dueDay, 23, 59, 59, 999);
   }
 
   // Fallback: If formatted differently, attempt Date parsing

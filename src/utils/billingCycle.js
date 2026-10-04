@@ -64,19 +64,19 @@ export function getAvailableBillingMonths(year) {
 }
 
 /**
- * Returns the last calendar day (e.g. 28, 29, 30, 31) of a given month and year.
+ * Returns the due day for a given month and year (strictly 30th, never after 30th; 28/29 for Feb).
  */
 export function getLastDateOfMonth(month, year) {
   const y = Number(year) || new Date().getFullYear();
   const mIndex = typeof month === "number" ? month : MONTH_NAMES.indexOf(month);
   if (mIndex === -1) return 30;
-  // Day 0 of the following month is the last day of the target month
-  return new Date(y, mIndex + 1, 0).getDate();
+  const maxDays = new Date(y, mIndex + 1, 0).getDate();
+  return Math.min(30, maxDays);
 }
 
 /**
- * Returns the formatted due date for a given billing month and year (e.g., "30 September 2026", "31 October 2026").
- * Due date is strictly the last date of that billing month.
+ * Returns the formatted due date for a given billing month and year (e.g., "30 September 2026", "30 October 2026").
+ * Due date is strictly the 30th of that billing month (never after the 30th date).
  */
 export function formatDueDate(month, year) {
   const y = Number(year) || new Date().getFullYear();
@@ -88,8 +88,8 @@ export function formatDueDate(month, year) {
   } else {
     mIndex = MONTH_NAMES.indexOf(month);
   }
-  const lastDay = mIndex !== -1 ? new Date(y, mIndex + 1, 0).getDate() : 30;
-  return `${lastDay} ${mName || "September"} ${y}`;
+  const dueDay = getLastDateOfMonth(mIndex !== -1 ? mIndex : mName, y);
+  return `${dueDay} ${mName || "September"} ${y}`;
 }
 
 /**
@@ -215,7 +215,8 @@ export function getElapsedBillingCycles(resident = null) {
   while (y < currentY || (y === currentY && m <= currentMIdx)) {
     const mName = MONTH_NAMES[m];
     const dueDateStr = formatDueDate(mName, y);
-    const parsedDue = new Date(y, m + 1, 0, 23, 59, 59, 999);
+    const dueDay = getLastDateOfMonth(m, y);
+    const parsedDue = new Date(y, m, dueDay, 23, 59, 59, 999);
     const isPastDueDate = parsedDue < now;
     cycles.push({
       month: mName,
@@ -237,7 +238,7 @@ export function getElapsedBillingCycles(resident = null) {
 /**
  * Resolves all unpaid / pending billing cycles for a resident across all elapsed periods.
  * Accurately lists all months (e.g. "September 2026 & October 2026"), calculates total dues,
- * and sets canonical due dates to the last day of each month.
+ * and sets canonical due dates to the 30th of each month (never after 30th).
  */
 export function getResidentPendingBillingCycles({
   resident,
@@ -299,10 +300,12 @@ export function getResidentPendingBillingCycles({
   }
 
   const hasOverdue = unpaidCycles.some((c) => c.isOverdue);
+  const overdueCycles = unpaidCycles.filter((c) => c.isOverdue);
   const currentMonthName = MONTH_NAMES[now.getMonth()];
   const currentYearNum = now.getFullYear();
-  const currentCycle = unpaidCycles.find((c) => c.month === currentMonthName && c.year === currentYearNum) || unpaidCycles[unpaidCycles.length - 1];
-  const primaryDueDate = currentCycle ? currentCycle.dueDate : formatDueDate(currentMonthName, currentYearNum);
+  const currentCycle = unpaidCycles.find((c) => c.month === currentMonthName && c.year === currentYearNum);
+  const isCurrentCycleOverdue = currentCycle ? currentCycle.isOverdue : false;
+  const primaryDueDate = currentCycle ? currentCycle.dueDate : (unpaidCycles[unpaidCycles.length - 1]?.dueDate || formatDueDate(currentMonthName, currentYearNum));
 
   return {
     unpaidCycles,
@@ -311,6 +314,8 @@ export function getResidentPendingBillingCycles({
     totalDueAmount,
     monthsLabel,
     hasOverdue,
+    overdueCycles,
+    isCurrentCycleOverdue,
     primaryDueDate,
     monthlyCharge: charge,
   };

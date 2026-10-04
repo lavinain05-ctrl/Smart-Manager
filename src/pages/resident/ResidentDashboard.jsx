@@ -739,12 +739,18 @@ export default function ResidentDashboard() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span
                       className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-                        isPastDue
+                        pendingBilling.isCurrentCycleOverdue
                           ? "bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300"
+                          : pendingBilling.hasOverdue
+                          ? "bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-200"
                           : "bg-amber-100 text-amber-900 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300"
                       }`}
                     >
-                      {isPastDue ? "⚠️ Overdue Payment" : "🔔 Monthly Fee Due"}
+                      {pendingBilling.isCurrentCycleOverdue
+                        ? "⚠️ Overdue Payment"
+                        : pendingBilling.hasOverdue
+                        ? "⚠️ Sep Overdue • Oct Due"
+                        : "🔔 Monthly Fee Due"}
                     </span>
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       Billing Cycle: {pendingBilling.monthsLabel || `${currentMonthName} ${currentYearNum}`}
@@ -773,9 +779,14 @@ export default function ResidentDashboard() {
                     </span>
                     <span>
                       Due Date:{" "}
-                      <strong className={isPastDue ? "text-rose-600 font-bold" : "text-slate-900 dark:text-white font-semibold"}>
+                      <strong className={pendingBilling.isCurrentCycleOverdue ? "text-rose-600 font-bold" : "text-slate-900 dark:text-white font-semibold"}>
                         {pendingBilling.primaryDueDate}
                       </strong>
+                      {pendingBilling.hasOverdue && !pendingBilling.isCurrentCycleOverdue && (
+                        <span className="text-rose-600 dark:text-rose-400 font-semibold ml-1.5">
+                          (Sep Overdue: 30 September 2026)
+                        </span>
+                      )}
                     </span>
                     {collectorName && (
                       <span>

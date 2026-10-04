@@ -858,7 +858,7 @@ export default function Register() {
                       )}
                     </div>
                     <div className="text-[10px] sm:text-[11px] font-normal text-slate-500 truncate">
-                      Doorstep pickup (₹80/mo billed post-service)
+                      Standard collection with monthly receipt
                     </div>
                   </div>
                 </button>
@@ -894,7 +894,7 @@ export default function Register() {
                       )}
                     </div>
                     <div className="text-[10px] sm:text-[11px] font-normal text-slate-500 truncate">
-                      Opt-out of pickup (₹0/mo, self-disposal)
+                      Opt-out of society waste pickup
                     </div>
                   </div>
                 </button>
@@ -949,9 +949,8 @@ export default function Register() {
                           </div>
                           <ul className="list-disc list-inside text-[11px] sm:text-xs text-emerald-900/90 space-y-1">
                             <li>Society waste collectors visit your doorstep daily every morning.</li>
-                            <li>Standard society charge: <strong>₹80 per month</strong>.</li>
-                            <li>Billed <strong>post-service</strong> at the end of each month (not taken in advance).</li>
-                            <li>Instant digital payment receipt with payment history in your portal.</li>
+                            <li>Billed <strong>post-service</strong> at the end of each completed month (not taken in advance).</li>
+                            <li>Instant digital payment receipt with complete payment history in your portal.</li>
                           </ul>
                         </div>
 
@@ -962,7 +961,7 @@ export default function Register() {
                           </div>
                           <ul className="list-disc list-inside text-[11px] sm:text-xs text-amber-900/90 space-y-1">
                             <li>Collectors will not visit your flat for waste pickup.</li>
-                            <li><strong>₹0/month</strong> charges (no garbage fee added to your flat).</li>
+                            <li>No garbage collection charges will be billed to your flat.</li>
                             <li>You are responsible for safely disposing of household waste independently per municipal rules.</li>
                           </ul>
                         </div>

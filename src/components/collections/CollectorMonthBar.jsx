@@ -104,7 +104,7 @@ export default function CollectorMonthBar({
             onClick={handlePrevMonth}
             disabled={isPrevDisabled}
             className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-600 flex items-center justify-center transition active:scale-95"
-            title={isPrevDisabled ? "Collection starts October 2026" : "Previous Month"}
+            title={isPrevDisabled ? "Collection starts September 2026" : "Previous Month"}
           >
             <FaChevronLeft className="text-xs" />
           </button>
@@ -197,7 +197,7 @@ export default function CollectorMonthBar({
           onClick={handlePrevMonth}
           disabled={isPrevDisabled}
           className="w-8 h-8 rounded-lg bg-white shadow-xs border border-gray-200 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-600 flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0"
-          title={isPrevDisabled ? "Collection starts October 2026" : "Previous Month"}
+          title={isPrevDisabled ? "Collection starts September 2026" : "Previous Month"}
         >
           <FaChevronLeft className="text-[11px]" />
         </button>

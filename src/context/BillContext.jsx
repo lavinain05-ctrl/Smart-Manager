@@ -71,7 +71,7 @@ export function BillProvider({ children }) {
 
   async function generateBills() {
     if (isPriorToCollectionStart(selectedMonth, selectedYear)) {
-      toast.error("Collection starts from October 2026. Cannot generate bills for previous periods.");
+      toast.error("Collection starts from September 2026. Cannot generate bills for previous periods.");
       return;
     }
 

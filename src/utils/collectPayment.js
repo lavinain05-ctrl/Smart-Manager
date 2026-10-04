@@ -33,7 +33,7 @@ export async function collectResidentPayment({
 }) {
   try {
     if (isPriorToCollectionStart(month, year)) {
-      toast.error("Collection starts from October 2026. Cannot collect for previous periods.");
+      toast.error("Collection starts from September 2026. Cannot collect for previous periods.");
       return false;
     }
 

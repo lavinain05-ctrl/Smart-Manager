@@ -24,7 +24,7 @@ export default function MonthSelector() {
         </h2>
 
         <p className="text-slate-500 text-xs sm:text-sm">
-          Select month and year (from Oct 2026)
+          Select month and year (from Sep 2026)
         </p>
       </div>
 

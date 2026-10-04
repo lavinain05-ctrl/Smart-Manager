@@ -1,7 +1,7 @@
 /**
  * Billing Cycle Configuration & Utilities
- * Official collection launched starting October 2026.
- * Months prior to October 2026 are not involved in billing, collections, or dues.
+ * Official collection launched starting September 2026.
+ * Months prior to September 2026 are not involved in billing, collections, or dues.
  */
 
 export const MONTH_NAMES = [
@@ -20,12 +20,12 @@ export const MONTH_NAMES = [
 ];
 
 export const COLLECTION_START_YEAR = 2026;
-export const COLLECTION_START_MONTH = "October";
-export const COLLECTION_START_MONTH_INDEX = 9; // October (0-indexed)
+export const COLLECTION_START_MONTH = "September";
+export const COLLECTION_START_MONTH_INDEX = 8; // September (0-indexed)
 
 /**
- * Checks whether a given month and year precedes the official collection launch date (October 2026).
- * Returns true if the period is before October 2026.
+ * Checks whether a given month and year precedes the official collection launch date (September 2026).
+ * Returns true if the period is before September 2026.
  */
 export function isPriorToCollectionStart(month, year) {
   const y = Number(year);
@@ -51,7 +51,7 @@ export function getAvailableBillingYears(futureYears = 3) {
 
 /**
  * Returns available billing months for a given year.
- * For 2026, only returns October, November, December.
+ * For 2026, only returns September, October, November, December.
  * For subsequent years (2027+), returns all 12 months.
  */
 export function getAvailableBillingMonths(year) {
@@ -92,8 +92,8 @@ export function parseDateSafely(val) {
  * Returns { month, year, monthIndex } representing the starting billing period for a resident.
  * 
  * Rules:
- * 1. Global baseline: October 2026 (no collection or bills prior to this).
- * 2. Resident registration month: If registered after October 2026, billing starts from their registration month.
+ * 1. Global baseline: September 2026 (no collection or bills prior to this).
+ * 2. Resident registration month: If registered after September 2026, billing starts from their registration month.
  * 3. Garbage participation month: If opted into garbage after registration, billing starts from when participation began.
  * 
  * Whichever of these dates is latest will be the resident's official collection & billing start.
@@ -165,7 +165,7 @@ export function getResidentBillingStart(resident) {
  * Returns true if prior (i.e. the resident is NOT responsible for bills, dues, or collections in that period).
  */
 export function isPriorToResidentBillingStart(resident, month, year) {
-  // Always prior if before society launch (Oct 2026)
+  // Always prior if before society launch (Sep 2026)
   if (isPriorToCollectionStart(month, year)) return true;
   if (!resident) return false;
 

@@ -19,7 +19,7 @@ function normalizeFlat(flat) {
 
 export function isGcParticipating(resident) {
   if (!resident) return false;
-  const status = resident.garbageStatus ?? resident.gcStatus;
+  const status = resident.garbageStatus ?? resident.gcStatus ?? resident.garbageParticipation;
   // Exact string match (canonical format)
   if (status === "participating" || status === true) return true;
   // Explicitly not participating or paused must take precedence

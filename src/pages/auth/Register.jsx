@@ -16,10 +16,15 @@ import {
   FaEye,
   FaEyeSlash,
   FaChevronLeft,
+  FaChevronDown,
+  FaChevronUp,
   FaArrowRight,
   FaShieldAlt,
   FaLayerGroup,
   FaSpinner,
+  FaQuestionCircle,
+  FaInfoCircle,
+  FaExclamationCircle,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -144,7 +149,9 @@ export default function Register() {
   const [gender, setGender] = useState("");
   const [occupation, setOccupation] = useState("");
   const [emergencyContact, setEmergencyContact] = useState("");
-  const [garbageParticipation, setGarbageParticipation] = useState("participating");
+  const [garbageParticipation, setGarbageParticipation] = useState("");
+  const [garbageError, setGarbageError] = useState(false);
+  const [showGarbageInfo, setShowGarbageInfo] = useState(false);
 
   // Load blocks from Firestore
   useEffect(() => {
@@ -217,6 +224,17 @@ export default function Register() {
     const trimmedEmail = email.trim();
     if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       toast.error("Please enter a valid email address");
+      return;
+    }
+
+    // 8. Validate Garbage Collection participation (compulsory)
+    if (!garbageParticipation) {
+      setGarbageError(true);
+      toast.error("Please choose whether you want to participate in the Garbage Collection Service");
+      const gcSection = document.getElementById("garbage-collection-section");
+      if (gcSection) {
+        gcSection.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
       return;
     }
 
@@ -738,71 +756,227 @@ export default function Register() {
             </div>
 
             {/* ─────────────────────────────────────────────────────────────
-                SECTION 5: Garbage Collection Service
+                SECTION 5: Garbage Collection Service (Compulsory Selection)
             ───────────────────────────────────────────────────────────── */}
-            <div className="bg-slate-50/70 border border-slate-100 rounded-3xl p-4 sm:p-5 space-y-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm shadow-xs">
-                  <FaLeaf />
+            <div
+              id="garbage-collection-section"
+              className={`rounded-3xl p-4 sm:p-5 space-y-3.5 transition-all duration-300 ${
+                garbageError && !garbageParticipation
+                  ? "bg-red-50/70 border-2 border-red-400 shadow-md shadow-red-100/60"
+                  : "bg-slate-50/80 border border-slate-200/90"
+              }`}
+            >
+              {/* Header with Title & Compulsory Status */}
+              <div className="flex items-start sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm shadow-xs transition-colors ${
+                      garbageParticipation === "participating"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : garbageParticipation === "not_participating"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-emerald-50 text-emerald-600"
+                    }`}
+                  >
+                    <FaLeaf />
+                  </div>
+                  <div>
+                    <h2 className="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-1.5">
+                      <span>Garbage Collection Service</span>
+                      <span className="text-red-500 font-extrabold text-sm" title="Compulsory selection">*</span>
+                    </h2>
+                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
+                      Do you want to participate in the society's door-to-door garbage service?
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-sm sm:text-base font-bold text-slate-800">
-                    Garbage Collection Service
-                  </h2>
-                  <p className="text-[11px] sm:text-xs text-slate-400 font-medium">
-                    Do you want to participate in the society's door-to-door garbage service?
-                  </p>
-                </div>
+
+                {/* Status Badge */}
+                {garbageParticipation ? (
+                  <span
+                    className={`text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0 ${
+                      garbageParticipation === "participating"
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                        : "bg-amber-100 text-amber-800 border border-amber-200"
+                    }`}
+                  >
+                    <FaCheckCircle className="text-[10px]" />
+                    {garbageParticipation === "participating" ? "Participating" : "Opted Out"}
+                  </span>
+                ) : (
+                  <span
+                    className={`text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0 flex items-center gap-1 transition-colors ${
+                      garbageError
+                        ? "bg-red-100 text-red-700 border border-red-300 animate-pulse"
+                        : "bg-slate-200/80 text-slate-700 border border-slate-300/60"
+                    }`}
+                  >
+                    {garbageError && <FaExclamationCircle className="text-[11px] text-red-600" />}
+                    Selection Required *
+                  </span>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {/* Validation Alert if user tried to submit without selecting */}
+              {garbageError && !garbageParticipation && (
+                <div className="text-xs font-semibold text-red-700 bg-red-100/80 border border-red-200 rounded-xl px-3.5 py-2.5 flex items-center gap-2 animate-fadeIn">
+                  <FaExclamationCircle className="shrink-0 text-red-600 text-sm" />
+                  <span>Please choose either "Participating" or "Not Participating" to proceed. Selection is compulsory.</span>
+                </div>
+              )}
+
+              {/* Options Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-0.5">
                 <button
                   type="button"
-                  onClick={() => setGarbageParticipation("participating")}
-                  className={`p-3.5 sm:p-4 rounded-2xl border-2 text-left transition font-semibold flex items-center gap-3 cursor-pointer ${
+                  onClick={() => {
+                    setGarbageParticipation("participating");
+                    setGarbageError(false);
+                  }}
+                  className={`p-3.5 sm:p-4 rounded-2xl border-2 text-left transition-all font-semibold flex items-center gap-3 cursor-pointer ${
                     garbageParticipation === "participating"
-                      ? "border-emerald-500 bg-emerald-50/90 text-emerald-800 shadow-sm"
-                      : "border-slate-200 bg-white hover:border-slate-300 text-slate-600"
+                      ? "border-emerald-500 bg-emerald-50/90 text-emerald-900 shadow-sm ring-2 ring-emerald-400/25"
+                      : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/30 text-slate-700"
                   }`}
                 >
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 ${
-                    garbageParticipation === "participating"
-                      ? "bg-emerald-500 text-white"
-                      : "bg-slate-100 text-slate-400"
-                  }`}>
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shrink-0 transition-colors ${
+                      garbageParticipation === "participating"
+                        ? "bg-emerald-500 text-white shadow-xs"
+                        : "bg-slate-100 text-slate-400"
+                    }`}
+                  >
                     <FaCheckCircle />
                   </div>
-                  <div>
-                    <div className="text-xs sm:text-sm font-bold">Participating</div>
-                    <div className="text-[10px] sm:text-[11px] font-normal text-slate-500">
-                      Standard collection with monthly receipt
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs sm:text-sm font-bold flex items-center gap-1.5">
+                      <span>Participating</span>
+                      {garbageParticipation === "participating" && (
+                        <span className="text-[10px] bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
+                          Selected
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] sm:text-[11px] font-normal text-slate-500 truncate">
+                      Doorstep pickup (₹80/mo billed post-service)
                     </div>
                   </div>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setGarbageParticipation("not_participating")}
-                  className={`p-3.5 sm:p-4 rounded-2xl border-2 text-left transition font-semibold flex items-center gap-3 cursor-pointer ${
+                  onClick={() => {
+                    setGarbageParticipation("not_participating");
+                    setGarbageError(false);
+                  }}
+                  className={`p-3.5 sm:p-4 rounded-2xl border-2 text-left transition-all font-semibold flex items-center gap-3 cursor-pointer ${
                     garbageParticipation === "not_participating"
-                      ? "border-amber-500 bg-amber-50/90 text-amber-800 shadow-sm"
-                      : "border-slate-200 bg-white hover:border-slate-300 text-slate-600"
+                      ? "border-amber-500 bg-amber-50/90 text-amber-900 shadow-sm ring-2 ring-amber-400/25"
+                      : "border-slate-200 bg-white hover:border-amber-300 hover:bg-amber-50/30 text-slate-700"
                   }`}
                 >
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 ${
-                    garbageParticipation === "not_participating"
-                      ? "bg-amber-500 text-white"
-                      : "bg-slate-100 text-slate-400"
-                  }`}>
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shrink-0 transition-colors ${
+                      garbageParticipation === "not_participating"
+                        ? "bg-amber-500 text-white shadow-xs"
+                        : "bg-slate-100 text-slate-400"
+                    }`}
+                  >
                     <FaCheckCircle />
                   </div>
-                  <div>
-                    <div className="text-xs sm:text-sm font-bold">Not Participating</div>
-                    <div className="text-[10px] sm:text-[11px] font-normal text-slate-500">
-                      Opt-out of society waste pickup
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs sm:text-sm font-bold flex items-center gap-1.5">
+                      <span>Not Participating</span>
+                      {garbageParticipation === "not_participating" && (
+                        <span className="text-[10px] bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded font-bold">
+                          Selected
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] sm:text-[11px] font-normal text-slate-500 truncate">
+                      Opt-out of pickup (₹0/mo, self-disposal)
                     </div>
                   </div>
                 </button>
+              </div>
+
+              {/* Explanation Button & Details Panel */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowGarbageInfo((prev) => !prev)}
+                  className="w-full sm:w-auto inline-flex items-center justify-between sm:justify-start gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50/90 hover:bg-blue-100 border border-blue-200 transition-all cursor-pointer shadow-2xs"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <FaQuestionCircle className="text-blue-600 text-sm shrink-0" />
+                    <span>Why is this asked? What does this service mean?</span>
+                  </span>
+                  {showGarbageInfo ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-blue-700 font-bold bg-blue-200/60 px-2 py-0.5 rounded-md">
+                      Hide explanation <FaChevronUp className="text-[9px]" />
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-blue-700 font-bold bg-blue-200/60 px-2 py-0.5 rounded-md">
+                      Click to understand <FaChevronDown className="text-[9px]" />
+                    </span>
+                  )}
+                </button>
+
+                {/* Expandable Explanation Panel */}
+                {showGarbageInfo && (
+                  <div className="mt-3 p-4 sm:p-5 bg-white border border-blue-200/90 rounded-2xl shadow-sm space-y-3.5 text-xs text-slate-700 animate-fadeIn">
+                    <div className="flex items-center gap-2 text-blue-900 font-bold text-sm border-b border-blue-100 pb-2.5">
+                      <FaInfoCircle className="text-blue-600 text-base shrink-0" />
+                      <span>About Door-to-Door Garbage Collection & Why We Ask</span>
+                    </div>
+
+                    <div className="space-y-3 leading-relaxed">
+                      <div>
+                        <h4 className="font-bold text-slate-900 flex items-center gap-1.5 text-xs sm:text-sm">
+                          <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                          Why is your selection compulsory during registration?
+                        </h4>
+                        <p className="text-slate-600 pl-3.5 pt-1 text-[11px] sm:text-xs">
+                          The society organizes daily morning door-to-door waste collectors assigned to each block and flat. In order to plan collection routes and configure your flat's monthly maintenance ledger before approving your registration, we need your choice in advance.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                        <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 sm:p-3.5">
+                          <div className="font-bold text-emerald-900 flex items-center gap-1.5 pb-1 text-xs">
+                            <FaCheckCircle className="text-emerald-600 text-xs shrink-0" />
+                            If you choose "Participating":
+                          </div>
+                          <ul className="list-disc list-inside text-[11px] sm:text-xs text-emerald-900/90 space-y-1">
+                            <li>Society waste collectors visit your doorstep daily every morning.</li>
+                            <li>Standard society charge: <strong>₹80 per month</strong>.</li>
+                            <li>Billed <strong>post-service</strong> at the end of each month (not taken in advance).</li>
+                            <li>Instant digital payment receipt with payment history in your portal.</li>
+                          </ul>
+                        </div>
+
+                        <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 sm:p-3.5">
+                          <div className="font-bold text-amber-900 flex items-center gap-1.5 pb-1 text-xs">
+                            <FaCheckCircle className="text-amber-600 text-xs shrink-0" />
+                            If you choose "Not Participating":
+                          </div>
+                          <ul className="list-disc list-inside text-[11px] sm:text-xs text-amber-900/90 space-y-1">
+                            <li>Collectors will not visit your flat for waste pickup.</li>
+                            <li><strong>₹0/month</strong> charges (no garbage fee added to your flat).</li>
+                            <li>You are responsible for safely disposing of household waste independently per municipal rules.</li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-start gap-2.5 text-[11px] sm:text-xs text-slate-600">
+                        <span className="text-base leading-none">💡</span>
+                        <div>
+                          <strong className="text-slate-800">Can you change your mind later?</strong> Yes! Residents can easily update their participation status at any time after registration via their Resident Portal profile or by informing the RWA committee.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

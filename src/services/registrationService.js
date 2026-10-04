@@ -241,6 +241,11 @@ export async function submitRegistration({
     throw new Error("Please enter a valid email address.");
   }
 
+  // --- Step 8b: Validate garbage participation choice (compulsory) ---
+  if (!garbageParticipation || (garbageParticipation !== "participating" && garbageParticipation !== "not_participating")) {
+    throw new Error("Please select your choice for the Garbage Collection Service.");
+  }
+
   // --- Step 9: Create Firebase Auth account using pseudo-email from Mobile ---
   const authEmail = mobileToAuthEmail(normalizedMobile);
   let credential;

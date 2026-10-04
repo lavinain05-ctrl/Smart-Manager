@@ -22,7 +22,10 @@ function lazy(importFn) {
         err?.message?.includes("Expected a JavaScript-or-Wasm module script") ||
         err?.message?.includes("error loading dynamically imported module") ||
         (err?.message?.includes("text/html") && err?.message?.includes("MIME")) ||
-        err?.message?.includes("Loading chunk");
+        err?.message?.includes("text/plain") ||
+        err?.message?.includes("404") ||
+        err?.message?.includes("Loading chunk") ||
+        err?.name === "TypeError";
 
       if (isChunkError) {
         const lastReload = sessionStorage.getItem("rwa_chunk_retry");

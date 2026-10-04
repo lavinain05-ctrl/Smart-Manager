@@ -65,6 +65,7 @@ export function syncBlockWiseResidents({
   year = new Date().getFullYear(),
 }) {
   const targetYearNum = Number(year);
+  const targetMonth = month;
 
   // 1. Index payments for target month & year
   // Keyed by residentId and by clean 10-digit mobile
@@ -306,6 +307,7 @@ export function syncBlockWiseMonthlyBills({
   year = new Date().getFullYear(),
 }) {
   const targetYearNum = Number(year);
+  const targetMonth = month;
 
   // 1. Create fast lookups
   const residentMap = new Map();

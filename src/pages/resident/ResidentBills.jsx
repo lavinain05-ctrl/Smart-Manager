@@ -15,6 +15,7 @@ import {
   getAvailableBillingMonths,
   isPriorToResidentBillingStart,
   getAvailableBillingMonthsForResident,
+  formatDueDate,
 } from "../../utils/billingCycle";
 
 export default function ResidentBills() {
@@ -148,7 +149,7 @@ export default function ResidentBills() {
           paymentId: p.receiptNumber,
           paymentDate: p.paymentDate,
           paymentMethod: p.paymentMethod,
-          dueDate: `10 ${p.month} ${p.year}`,
+          dueDate: formatDueDate(p.month, p.year),
           isAdvance: Boolean(p.isAdvance),
           periodLabel: p.periodLabel || "",
         };

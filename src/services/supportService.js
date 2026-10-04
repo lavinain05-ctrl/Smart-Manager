@@ -142,9 +142,9 @@ export const DEFAULT_SUPPORT_FAQS = [
     category: "billing",
     question: "How and when are monthly bills generated?",
     answer:
-      "Monthly garbage and maintenance bills are generated on the 1st of every month for all enrolled, participating flats. The standard due date is the 10th of each month. You can review all current and past bills in the 'My Bills' section.",
+      "Monthly garbage and maintenance bills are generated on the 1st of every month for all enrolled, participating flats. The standard due date is the last date of each month. You can review all current and past bills in the 'My Bills' section.",
     badge: "Monthly Bills",
-    tips: "Paying before the 10th ensures uninterrupted doorstep collection service.",
+    tips: "Paying on or before the last date of the month ensures uninterrupted doorstep collection service.",
     actionLink: "/resident/bills",
     actionText: "Check My Bills",
     active: true,

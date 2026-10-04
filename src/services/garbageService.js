@@ -17,7 +17,7 @@ import {
 } from "firebase/firestore";
 
 import { db } from "../firebase/firebase";
-import { isPriorToCollectionStart, isPriorToResidentBillingStart } from "../utils/billingCycle";
+import { isPriorToCollectionStart, isPriorToResidentBillingStart, formatDueDate } from "../utils/billingCycle";
 
 // =============================================
 // Collection References
@@ -289,7 +289,7 @@ export async function generateMonthlyGarbageBills(accounts, month, year, existin
         paymentDate: "",
         paymentMethod: "",
         collectedById: "",
-        dueDate: `10 ${month} ${year}`,
+        dueDate: formatDueDate(month, year),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });

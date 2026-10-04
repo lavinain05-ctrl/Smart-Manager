@@ -39,7 +39,7 @@ import { useResidents } from "../../context/ResidentContext";
 import { useGarbage } from "../../context/GarbageContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useBills } from "../../context/BillContext";
-import { isPriorToCollectionStart, isPriorToResidentBillingStart } from "../../utils/billingCycle";
+import { isPriorToCollectionStart, isPriorToResidentBillingStart, formatDueDate } from "../../utils/billingCycle";
 import { useBilling } from "../../context/BillingContext";
 import { useNotices } from "../../context/NoticeContext";
 import { useComplaints } from "../../context/ComplaintContext";
@@ -214,7 +214,7 @@ export default function ResidentDashboard() {
         displayStatus: matchPay.paymentMethod === "Exempted" ? "Exempted" : "Paid",
         paymentDate: matchPay.paymentDate,
         paymentMethod: matchPay.paymentMethod,
-        dueDate: bill?.dueDate || `10 ${selectedMonth} ${selectedYear}`,
+        dueDate: bill?.dueDate || formatDueDate(selectedMonth, selectedYear),
       };
     }
     return bill ? { ...bill, displayStatus: getDisplayStatus(bill) } : null;
@@ -763,7 +763,7 @@ export default function ResidentDashboard() {
                     <span>
                       Due Date:{" "}
                       <strong className={isPastDue ? "text-rose-600 font-bold" : "text-slate-900 dark:text-white font-semibold"}>
-                        {currentBill?.dueDate || `10 ${currentMonthName} ${currentYearNum}`}
+                        {currentBill?.dueDate || formatDueDate(currentMonthName, currentYearNum)}
                       </strong>
                     </span>
                     {collectorName && (

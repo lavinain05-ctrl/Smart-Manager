@@ -20,6 +20,7 @@ import {
   isPriorToCollectionStart,
   getAvailableBillingYears,
   getAvailableBillingMonths,
+  formatDueDate,
 } from "../../utils/billingCycle";
 
 export default function GarbageBills() {
@@ -100,7 +101,7 @@ export default function GarbageBills() {
           paidAmount: isPaid ? Number(paymentMatch.amount || charge) : 0,
           month: selectedMonth,
           year: Number(selectedYear),
-          dueDate: `10 ${selectedMonth} ${selectedYear}`,
+          dueDate: formatDueDate(selectedMonth, selectedYear),
           paymentDate: paymentMatch?.paymentDate || "",
           paymentMethod: paymentMatch?.paymentMethod || "",
           collectedBy: paymentMatch?.collector || "",

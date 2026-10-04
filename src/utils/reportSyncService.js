@@ -5,6 +5,8 @@
 // ============================================================================
 
 import { isGcParticipating } from "../services/statisticsService";
+import { formatDueDate } from "./billingCycle";
+import { parseDueDate } from "./billStatus";
 
 /**
  * Natural alphanumeric sort for flat numbers (e.g., "1", "2", "10", "101", "102A")
@@ -171,7 +173,7 @@ export function syncBlockWiseResidents({
     let displayStatus = "Pending";
     if (isPaid) {
       displayStatus = bill?.status === "Exempted" || payment?.paymentMethod === "Exempted" ? "Exempted" : "Paid";
-    } else if (bill?.status === "Overdue" || (bill?.dueDate && new Date(bill.dueDate) < new Date())) {
+    } else if (bill?.status === "Overdue" || (parseDueDate(bill?.dueDate, targetMonth, targetYearNum) && parseDueDate(bill?.dueDate, targetMonth, targetYearNum) < new Date())) {
       displayStatus = "Overdue";
     }
 
@@ -367,7 +369,7 @@ export function syncBlockWiseMonthlyBills({
     let finalStatus = "Pending";
     if (isPaid) {
       finalStatus = b.status === "Exempted" || payment?.paymentMethod === "Exempted" ? "Exempted" : "Paid";
-    } else if (b.status === "Overdue" || (b.dueDate && new Date(b.dueDate) < new Date())) {
+    } else if (b.status === "Overdue" || (parseDueDate(b.dueDate, targetMonth, targetYearNum) && parseDueDate(b.dueDate, targetMonth, targetYearNum) < new Date())) {
       finalStatus = "Overdue";
     }
 
@@ -479,7 +481,7 @@ export function syncBlockWiseMonthlyBills({
       pendingAmount,
       status: isPaid ? "Paid" : "Pending",
       isPaid,
-      dueDate: "10th of Month",
+      dueDate: formatDueDate(targetMonth, targetYearNum),
       paymentDate: payment?.paymentDate || "—",
       paymentMethod: payment?.paymentMethod || payment?.paymentMode || (isPaid ? "Cash/Direct" : "—"),
       receiptNumber: payment?.receiptNumber || payment?.receiptNo || (isPaid ? "REC-DIRECT" : "—"),

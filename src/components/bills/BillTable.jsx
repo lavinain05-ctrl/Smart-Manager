@@ -9,6 +9,7 @@ import {
 
 import { generateSingleBillPDF } from "../../utils/printReportHelper";
 import { formatResidentFloor } from "../../services/propertyService";
+import { formatDueDate } from "../../utils/billingCycle";
 import Pagination from "../common/Pagination";
 
 export default function BillTable({
@@ -214,7 +215,7 @@ export default function BillTable({
             </div>
             <div>
               <div class="item-row"><span class="item-lbl">Billing Period:</span> <span class="item-val">${bill.month} ${bill.year}</span></div>
-              <div class="item-row"><span class="item-lbl">Due Date:</span> <span class="item-val">${bill.dueDate || "10th of Month"}</span></div>
+              <div class="item-row"><span class="item-lbl">Due Date:</span> <span class="item-val">${bill.dueDate || formatDueDate(bill.month, bill.year)}</span></div>
               <div class="item-row"><span class="item-lbl">Status:</span> <span class="item-val" style="color: ${isPaid ? '#16a34a' : '#dc2626'}">${status}</span></div>
             </div>
           </div>
@@ -245,7 +246,7 @@ export default function BillTable({
               ${
                 isPaid
                   ? `Receipt ID: <strong>${bill.paymentId || "CONFIRMED"}</strong> • Paid on: <strong>${bill.paymentDate || "Recorded"}</strong> via <strong>${bill.paymentMethod || "Cash"}</strong>.`
-                  : `Please clear dues by ${bill.dueDate || "the due date"} to ensure uninterrupted society services.`
+                  : `Please clear dues by ${bill.dueDate || formatDueDate(bill.month, bill.year)} to ensure uninterrupted society services.`
               }
             </div>
           </div>

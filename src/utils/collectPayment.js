@@ -3,7 +3,7 @@ import { doc, getDocs, query, where, collection, addDoc, updateDoc, serverTimest
 import { db } from "../firebase/firebase";
 
 import { addBill, updateBill } from "../services/billService";
-import { isPriorToCollectionStart, isPriorToResidentBillingStart, getResidentBillingStart } from "./billingCycle";
+import { isPriorToCollectionStart, isPriorToResidentBillingStart, getResidentBillingStart, formatDueDate } from "./billingCycle";
 
 // =============================
 // collectResidentPayment
@@ -134,7 +134,7 @@ export async function collectResidentPayment({
           paymentId: receiptNo,
           paymentDate: paymentData.date || new Date().toLocaleDateString("en-IN"),
           paymentMethod: paymentData.method || "Cash",
-          dueDate: `10 ${mName} ${yNum}`,
+          dueDate: formatDueDate(mName, yNum),
           isAdvance,
           periodLabel,
         });
@@ -252,7 +252,7 @@ export async function collectResidentPayment({
             paymentDate: paymentData.date,
             paymentMethod: paymentData.method,
             collectedById: collectorId || "",
-            dueDate: `10 ${mName} ${yNum}`,
+            dueDate: formatDueDate(mName, yNum),
             isAdvance,
             periodLabel,
             createdAt: serverTimestamp(),

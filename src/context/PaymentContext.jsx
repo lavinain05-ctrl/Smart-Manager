@@ -27,6 +27,7 @@ import { isGcParticipating } from "../services/statisticsService";
 import { useBilling } from "./BillingContext";
 import { useAuth } from "./AuthContext";
 import { logActivity } from "../services/activityLogService";
+import { formatDueDate } from "../utils/billingCycle";
 
 const PaymentContext = createContext();
 
@@ -177,7 +178,7 @@ export function PaymentProvider({ children }) {
                 paymentId: p.receiptNumber || "",
                 paymentDate: p.paymentDate || "",
                 paymentMethod: p.paymentMethod || "Cash",
-                dueDate: `10 ${p.month} ${p.year}`,
+                dueDate: formatDueDate(p.month, p.year),
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               });
@@ -260,7 +261,7 @@ export function PaymentProvider({ children }) {
                 paymentDate: p.paymentDate || "",
                 paymentMethod: p.paymentMethod || "Cash",
                 collectedById: p.collectorId || "",
-                dueDate: `10 ${p.month} ${p.year}`,
+                dueDate: formatDueDate(p.month, p.year),
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               });
@@ -405,7 +406,7 @@ export function PaymentProvider({ children }) {
             paymentDate: payment.paymentDate || new Date().toLocaleDateString("en-IN"),
             paymentMethod: payment.paymentMethod || "Cash",
             collectedById: payment.collectorId || "",
-            dueDate: `10 ${payment.month} ${payment.year}`,
+            dueDate: formatDueDate(payment.month, payment.year),
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });

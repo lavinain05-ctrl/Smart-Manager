@@ -296,7 +296,7 @@ export default function GarbageSettings() {
                 placeholder="10"
               />
               <p className="text-xs text-slate-400 mt-1.5">
-                Monthly bills will show this day as the payment deadline (e.g., 10th of every month).
+                Standard society billing sets due date to the last date of each month.
               </p>
             </div>
 

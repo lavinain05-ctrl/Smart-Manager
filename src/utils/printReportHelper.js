@@ -7,6 +7,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import toast from "react-hot-toast";
 import { formatResidentFloor } from "../services/propertyService";
+import { formatDueDate } from "./billingCycle";
 
 /**
  * Executes direct printing via a hidden isolated iframe.
@@ -1733,7 +1734,7 @@ export function generateSingleBillPDF(bill, settings = {}) {
 
   const rightItems = [
     ["Billing Period:", `${bill.month || "Current"} ${bill.year || ""}`],
-    ["Due Date:", bill.dueDate || "10th of Month"],
+    ["Due Date:", bill.dueDate || formatDueDate(bill.month, bill.year)],
     ["Payment Status:", status],
   ];
 
@@ -1835,7 +1836,7 @@ export function generateSingleBillPDF(bill, settings = {}) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     doc.setTextColor(185, 28, 28);
-    doc.text(`Please clear dues before ${bill.dueDate || "10th of Month"} to ensure uninterrupted society service.`, 20, currentY + 14);
+    doc.text(`Please clear dues before ${bill.dueDate || formatDueDate(bill.month, bill.year)} to ensure uninterrupted society service.`, 20, currentY + 14);
     doc.text(`Payment can be made via UPI / Cash to assigned door-to-door collector or at RWA Office.`, 20, currentY + 20);
   }
 

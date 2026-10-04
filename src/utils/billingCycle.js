@@ -64,6 +64,35 @@ export function getAvailableBillingMonths(year) {
 }
 
 /**
+ * Returns the last calendar day (e.g. 28, 29, 30, 31) of a given month and year.
+ */
+export function getLastDateOfMonth(month, year) {
+  const y = Number(year) || new Date().getFullYear();
+  const mIndex = typeof month === "number" ? month : MONTH_NAMES.indexOf(month);
+  if (mIndex === -1) return 30;
+  // Day 0 of the following month is the last day of the target month
+  return new Date(y, mIndex + 1, 0).getDate();
+}
+
+/**
+ * Returns the formatted due date for a given billing month and year (e.g., "30 September 2026", "31 October 2026").
+ * Due date is strictly the last date of that billing month.
+ */
+export function formatDueDate(month, year) {
+  const y = Number(year) || new Date().getFullYear();
+  let mName = month;
+  let mIndex = -1;
+  if (typeof month === "number") {
+    mIndex = month;
+    mName = MONTH_NAMES[month] || "September";
+  } else {
+    mIndex = MONTH_NAMES.indexOf(month);
+  }
+  const lastDay = mIndex !== -1 ? new Date(y, mIndex + 1, 0).getDate() : 30;
+  return `${lastDay} ${mName || "September"} ${y}`;
+}
+
+/**
  * Safely parses any date value (Firestore Timestamp, ISO string, Date object, or numeric timestamp)
  * into a JavaScript Date object. Returns null if invalid or undefined.
  */

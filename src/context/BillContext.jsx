@@ -21,7 +21,7 @@ import { useResidents } from "./ResidentContext";
 import { useBilling } from "./BillingContext";
 import { useAuth } from "./AuthContext";
 import { isGcParticipating } from "../services/statisticsService";
-import { isPriorToCollectionStart, isPriorToResidentBillingStart } from "../utils/billingCycle";
+import { isPriorToCollectionStart, isPriorToResidentBillingStart, formatDueDate } from "../utils/billingCycle";
 
 const BillContext = createContext();
 
@@ -123,7 +123,7 @@ export function BillProvider({ children }) {
               status: "Pending",
               paymentId: "",
               paymentDate: "",
-              dueDate: `10 ${selectedMonth} ${selectedYear}`,
+              dueDate: formatDueDate(selectedMonth, selectedYear),
             });
 
             // Also ensure matching garbageBills doc exists
@@ -161,7 +161,7 @@ export function BillProvider({ children }) {
                   paymentDate: "",
                   paymentMethod: "",
                   collectedById: "",
-                  dueDate: `10 ${selectedMonth} ${selectedYear}`,
+                  dueDate: formatDueDate(selectedMonth, selectedYear),
                   createdAt: serverTimestamp(),
                   updatedAt: serverTimestamp(),
                 });
@@ -178,7 +178,7 @@ export function BillProvider({ children }) {
                 await createNotification({
                   userId: tId,
                   title: `🔔 Garbage Fee Due: ${selectedMonth} ${selectedYear}`,
-                  message: `Your garbage collection fee of ₹${fee} for ${selectedMonth} ${selectedYear} is due. Due date: 10 ${selectedMonth} ${selectedYear}.`,
+                  message: `Your garbage collection fee of ₹${fee} for ${selectedMonth} ${selectedYear} is due. Due date: ${formatDueDate(selectedMonth, selectedYear)}.`,
                   type: "payment",
                   link: "/resident/bills",
                 });

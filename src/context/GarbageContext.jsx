@@ -57,7 +57,7 @@ import {
   getGarbageAccountByResidentId,
   relinkGarbageAccount as relinkAccountSvc,
 } from "../services/garbageService";
-import { isPriorToCollectionStart } from "../utils/billingCycle";
+import { isPriorToCollectionStart, formatDueDate } from "../utils/billingCycle";
 
 import { linkResidentToFlat } from "../services/blockFlatService";
 
@@ -574,7 +574,7 @@ export function GarbageProvider({ children }) {
           createBulkNotifications({
             userIds: uniqueUserIds,
             title: `🔔 Garbage Fee Due: ${selectedMonth} ${selectedYear}`,
-            message: `Your garbage collection bill for ${selectedMonth} ${selectedYear} has been generated. Due date: 10 ${selectedMonth} ${selectedYear}.`,
+            message: `Your garbage collection bill for ${selectedMonth} ${selectedYear} has been generated. Due date: ${formatDueDate(selectedMonth, selectedYear)}.`,
             type: "payment",
             link: "/resident/bills",
           }).catch((err) => console.warn("Could not dispatch bulk bill notifications:", err));
@@ -616,7 +616,7 @@ export function GarbageProvider({ children }) {
           paymentDate: paymentData.paymentDate || new Date().toLocaleDateString("en-IN"),
           paymentMethod: paymentData.paymentMethod || "Cash",
           collectedBy: paymentData.collectedBy || user?.name || "Admin",
-          dueDate: `10 ${bill?.month || selectedMonth} ${bill?.year || selectedYear}`,
+          dueDate: formatDueDate(bill?.month || selectedMonth, bill?.year || selectedYear),
         });
         bill = {
           id: effectiveBillId,
@@ -1380,7 +1380,7 @@ export function GarbageProvider({ children }) {
             paidAmount: isPaid ? Number(paymentMatch.amount || fee) : 0,
             month: selectedMonth,
             year: Number(selectedYear),
-            dueDate: `10 ${selectedMonth} ${selectedYear}`,
+            dueDate: formatDueDate(selectedMonth, selectedYear),
             paymentDate: paymentMatch?.paymentDate || "",
             paymentMethod: paymentMatch?.paymentMethod || "",
             paymentId: paymentMatch?.receiptNumber || paymentMatch?.paymentId || "",
@@ -1401,7 +1401,7 @@ export function GarbageProvider({ children }) {
             amount: fee,
             status: isPaid ? "Paid" : "Pending",
             paidAmount: isPaid ? Number(paymentMatch.amount || fee) : 0,
-            dueDate: `10 ${selectedMonth} ${selectedYear}`,
+            dueDate: formatDueDate(selectedMonth, selectedYear),
             paymentDate: paymentMatch?.paymentDate || "",
             paymentMethod: paymentMatch?.paymentMethod || "",
             collectedBy: paymentMatch?.collector || "",

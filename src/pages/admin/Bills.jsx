@@ -19,7 +19,7 @@ import { subscribeSettings } from "../../services/settingsService";
 import { isGcParticipating } from "../../services/statisticsService";
 import { syncBlockWiseMonthlyBills } from "../../utils/reportSyncService";
 import { generateBlockWiseMonthlyBillsPDF } from "../../utils/printReportHelper";
-import { isPriorToCollectionStart } from "../../utils/billingCycle";
+import { isPriorToCollectionStart, formatDueDate } from "../../utils/billingCycle";
 
 import MonthSelector from "../../components/common/MonthSelector";
 import BillSummaryCards from "../../components/bills/BillSummaryCards";
@@ -123,7 +123,7 @@ export default function Bills() {
           displayStatus: isPaid ? "Paid" : "Pending",
           month: selectedMonth,
           year: Number(selectedYear),
-          dueDate: `10 ${selectedMonth} ${selectedYear}`,
+          dueDate: formatDueDate(selectedMonth, selectedYear),
           paymentDate: paymentMatch?.paymentDate || "",
           paymentMethod: paymentMatch?.paymentMethod || "",
           paymentId: paymentMatch?.receiptNumber || paymentMatch?.paymentId || "",

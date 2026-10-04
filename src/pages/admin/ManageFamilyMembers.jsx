@@ -38,9 +38,9 @@ import {
 } from "../../services/residentService";
 
 import { deleteUserAccount } from "../../services/accountDeletionService";
-import { blockAccount, unblockAccount } from "../../services/blockService";
 import { adminResetPasswordFn, db } from "../../firebase/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { terminateAllOtherSessions } from "../../services/sessionService";
 
 import { useResidents } from "../../context/ResidentContext";
 import { useBlockFlat } from "../../context/BlockFlatContext";
@@ -335,28 +335,49 @@ export default function ManageFamilyMembers() {
       const chosenPassword =
         customPassword || "RWA@" + Math.floor(100000 + Math.random() * 900000);
 
+      let cloudSuccess = false;
       try {
         const result = await adminResetPasswordFn({
           targetUid: resetTarget.id,
           password: chosenPassword,
         });
         if (result?.data?.tempPassword) {
+          cloudSuccess = true;
           setTempPasswordResult(result.data.tempPassword);
-          toast.success("Password reset successfully!");
-          return;
         }
       } catch (fnErr) {
         console.warn("Cloud function reset:", fnErr.message);
       }
 
-      // Mark mustChangePassword in firestore
-      await updateDoc(doc(db, "users", resetTarget.id), {
-        mustChangePassword: true,
-        tempPasswordSetAt: serverTimestamp(),
-      });
+      // Mark mustChangePassword and passwordChangedAt in firestore
+      try {
+        await updateDoc(doc(db, "users", resetTarget.id), {
+          mustChangePassword: true,
+          tempPasswordSetAt: serverTimestamp(),
+          passwordChangedAt: serverTimestamp(),
+        });
+      } catch (docErr) {
+        console.warn("users doc update error:", docErr.message);
+      }
+
+      // Invalidate all other active sessions for this family member
+      try {
+        await terminateAllOtherSessions(
+          resetTarget.id,
+          null,
+          "Password was reset by administrator. Please log in with your temporary password."
+        );
+      } catch (sessErr) {
+        console.warn("Failed to terminate family member sessions:", sessErr.message);
+      }
+
+      if (cloudSuccess) {
+        toast.success("Password reset successfully! Other devices logged out.");
+        return;
+      }
 
       setTempPasswordResult(chosenPassword);
-      toast.success("Temporary password generated!");
+      toast.success("Temporary password generated! Other devices logged out.");
     } catch (err) {
       console.error(err);
       toast.error(err.message || "Failed to reset password.");

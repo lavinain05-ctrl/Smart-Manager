@@ -527,17 +527,43 @@ exports.adminResetPassword = onCall({ cors: true }, async (request) => {
     }
   }
 
-  // 11. Set mustChangePassword flag on the user's Firestore doc
+  // 11. Set mustChangePassword flag and passwordChangedAt on the user's Firestore doc
   try {
     await db.collection("users").doc(targetUid).update({
       mustChangePassword: true,
+      passwordChangedAt: FieldValue.serverTimestamp(),
     });
   } catch (error) {
     console.error("User doc update error:", error);
     // Non-fatal — the flag check will still work via recovery request
   }
 
-  console.log(`[adminResetPassword] Password reset for ${targetUid} by admin ${callerUid}`);
+  // 12. Revoke Firebase Auth refresh tokens across all devices
+  try {
+    await auth.revokeRefreshTokens(targetUid);
+  } catch (err) {
+    console.warn("[Cloud Function] auth.revokeRefreshTokens note:", err.message);
+  }
+
+  // 13. Revoke all activeSessions documents for this target user
+  try {
+    const sessSnap = await db.collection("activeSessions").where("uid", "==", targetUid).get();
+    if (!sessSnap.empty) {
+      const batch = db.batch();
+      sessSnap.docs.forEach((docSnap) => {
+        batch.update(docSnap.ref, {
+          isActive: false,
+          revokedAt: FieldValue.serverTimestamp(),
+          revokedReason: "Password was reset by administrator. Please log in again.",
+        });
+      });
+      await batch.commit();
+    }
+  } catch (sessErr) {
+    console.warn("[Cloud Function] activeSessions revocation note:", sessErr.message);
+  }
+
+  console.log(`[adminResetPassword] Password reset and all sessions terminated for ${targetUid} by admin ${callerUid}`);
 
   return {
     success: true,

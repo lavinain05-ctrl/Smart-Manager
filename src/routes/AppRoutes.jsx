@@ -535,6 +535,10 @@ function AppContent() {
             path="garbage/history"
             element={<GarbageCollectorHistory />}
           />
+          <Route
+            path="profile"
+            element={<ResidentProfile />}
+          />
         </Route>
 
         {/* Resident Routes */}

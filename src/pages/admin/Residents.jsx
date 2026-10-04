@@ -48,6 +48,7 @@ import { getGarbageMonthlyStats, isGcParticipating } from "../../services/statis
 import { adminResetPasswordFn, db } from "../../firebase/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { blockAccount, unblockAccount } from "../../services/blockService";
+import { terminateAllOtherSessions } from "../../services/sessionService";
 
 export default function Residents() {
   const {
@@ -206,32 +207,49 @@ export default function Residents() {
         "RWA@" + Math.floor(100000 + Math.random() * 900000);
 
       // 1. Try Cloud Function
+      let cloudSuccess = false;
       try {
         const result = await adminResetPasswordFn({
           targetUid: resetTarget.id,
           password: chosenPassword,
         });
         if (result?.data?.tempPassword) {
+          cloudSuccess = true;
           setTempPasswordResult(result.data.tempPassword);
-          toast.success("Password reset successfully!");
-          return;
         }
       } catch (fnErr) {
         console.warn("Cloud function reset:", fnErr.message);
       }
 
-      // 2. Mark mustChangePassword flag on user document
+      // 2. Mark mustChangePassword flag on user document and revoke all sessions
       try {
         await updateDoc(doc(db, "users", resetTarget.id), {
           mustChangePassword: true,
           tempPasswordSetAt: serverTimestamp(),
+          passwordChangedAt: serverTimestamp(),
         });
       } catch (docErr) {
         console.warn("User doc update:", docErr.message);
       }
 
+      // 3. Immediately revoke active sessions across all devices for this resident
+      try {
+        await terminateAllOtherSessions(
+          resetTarget.id,
+          null,
+          "Password was reset by administrator. Please log in with your temporary password."
+        );
+      } catch (sessErr) {
+        console.warn("Failed to terminate resident sessions:", sessErr.message);
+      }
+
+      if (cloudSuccess) {
+        toast.success("Password reset successfully! Other devices logged out.");
+        return;
+      }
+
       setTempPasswordResult(chosenPassword);
-      toast.success("Password reset registered! Please share with resident.");
+      toast.success("Password reset registered! Other devices logged out. Please share password with resident.");
     } catch (error) {
       console.error(error);
       toast.error(error.message || "Failed to reset password.");

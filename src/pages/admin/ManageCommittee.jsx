@@ -45,6 +45,7 @@ import { doc, updateDoc, setDoc, getDoc, serverTimestamp } from "firebase/firest
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { blockAccount, unblockAccount } from "../../services/blockService";
+import { terminateAllOtherSessions } from "../../services/sessionService";
 import {
   toggleCommitteeGarbagePower,
   toggleCommitteeSpecialPower,
@@ -528,15 +529,15 @@ export default function ManageCommittee() {
       const chosenPassword =
         customPassword || "RWA@" + Math.floor(100000 + Math.random() * 900000);
 
+      let cloudSuccess = false;
       try {
         const result = await adminResetPasswordFn({
           targetUid: memberId,
           password: chosenPassword,
         });
         if (result?.data?.tempPassword) {
+          cloudSuccess = true;
           setTempPasswordResult(result.data.tempPassword);
-          toast.success("Password reset successfully!");
-          return;
         }
       } catch (fnErr) {
         console.warn("Cloud function reset:", fnErr.message);
@@ -554,7 +555,7 @@ export default function ManageCommittee() {
             await signOut(secondaryAuth);
             console.log("[Committee] Reset created missing Auth user:", newUid);
             await writeAuthLookup(targetPhone, authEmail, newUid, resetTarget.email || "", resetTarget.flat || "", resetTarget.name || "");
-            await setDoc(doc(db, "users", newUid), { ...resetTarget, role: "committee", mustChangePassword: true }, { merge: true });
+            await setDoc(doc(db, "users", newUid), { ...resetTarget, role: "committee", mustChangePassword: true, passwordChangedAt: serverTimestamp() }, { merge: true });
             await setDoc(doc(db, "committee", newUid), { ...resetTarget, uid: newUid, mustChangePassword: true }, { merge: true });
           }
         } catch (createErr) {
@@ -562,11 +563,12 @@ export default function ManageCommittee() {
         }
       }
 
-      // Mark mustChangePassword in Firestore
+      // Mark mustChangePassword and passwordChangedAt in Firestore
       try {
         await updateDoc(doc(db, "users", memberId), {
           mustChangePassword: true,
           tempPasswordSetAt: serverTimestamp(),
+          passwordChangedAt: serverTimestamp(),
         });
       } catch {}
       try {
@@ -575,8 +577,24 @@ export default function ManageCommittee() {
         });
       } catch {}
 
+      // Immediately revoke all other sessions across devices for this committee member
+      try {
+        await terminateAllOtherSessions(
+          memberId,
+          null,
+          "Password was reset by administrator. Please log in with your temporary password."
+        );
+      } catch (sessErr) {
+        console.warn("Failed to terminate committee sessions:", sessErr.message);
+      }
+
+      if (cloudSuccess) {
+        toast.success("Password reset successfully! Other devices logged out.");
+        return;
+      }
+
       setTempPasswordResult(chosenPassword);
-      toast.success("Temporary password generated!");
+      toast.success("Temporary password generated! Other devices logged out.");
     } catch (err) {
       console.error(err);
       toast.error(err.message || "Failed to reset password.");

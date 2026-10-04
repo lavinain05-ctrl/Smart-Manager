@@ -8,6 +8,7 @@ import {
   FaRecycle,
   FaTrash,
   FaBuilding,
+  FaUserCircle,
 } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
@@ -58,6 +59,12 @@ export default function CollectorLayout() {
       });
     }
 
+    items.push({
+      name: "Profile",
+      icon: <FaUserCircle />,
+      path: "/collector/profile",
+    });
+
     return items;
   }, [hasGarbage]);
 
@@ -85,8 +92,19 @@ export default function CollectorLayout() {
 
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <NotificationBell isDark={true} />
+          <NavLink
+            to="/collector/profile"
+            title="My Profile & Change Password"
+            className={({ isActive }) =>
+              `text-white/90 hover:text-white text-xl p-2 rounded-xl transition ${
+                isActive ? "bg-white/20 text-white" : "hover:bg-white/10"
+              }`
+            }
+          >
+            <FaUserCircle />
+          </NavLink>
           <button
             onClick={logout}
             aria-label="Logout"

@@ -38,6 +38,7 @@ import {
   where,
 } from "firebase/firestore";
 import { createNotification } from "../../services/notificationService";
+import { terminateAllOtherSessions } from "../../services/sessionService";
 import {
   normalizeMobile,
   writeAuthLookup,
@@ -215,14 +216,26 @@ export default function AccountRecovery() {
         console.warn("[AccountRecovery] Cloud Function reset unavailable on Spark plan:", fnErr.message);
       }
 
-      // Mark user document for forced password change upon next login
+      // Mark user document for forced password change upon next login and record passwordChangedAt
       try {
         await updateDoc(doc(db, "users", targetUid), {
           mustChangePassword: true,
           tempPasswordSetAt: serverTimestamp(),
+          passwordChangedAt: serverTimestamp(),
         });
       } catch (uErr) {
         console.warn("[AccountRecovery] users doc update error:", uErr.message);
+      }
+
+      // Immediately terminate all sessions on other devices for this account
+      try {
+        await terminateAllOtherSessions(
+          targetUid,
+          null,
+          "Your password was reset by administrator. Please log in with your temporary password."
+        );
+      } catch (sessErr) {
+        console.warn("[AccountRecovery] Failed to terminate sessions:", sessErr.message);
       }
 
       // Update recovery request status to completed

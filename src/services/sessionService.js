@@ -3,6 +3,7 @@ import {
   doc,
   setDoc,
   updateDoc,
+  getDoc,
   getDocs,
   query,
   where,
@@ -21,6 +22,7 @@ export function startNewSessionId() {
   const newId = "sess_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 10);
   if (typeof window !== "undefined" && window.localStorage) {
     localStorage.setItem("rwa_active_session_id", newId);
+    localStorage.setItem("rwa_session_login_time", Date.now().toString());
   }
   return newId;
 }
@@ -28,6 +30,7 @@ export function startNewSessionId() {
 export function resetSessionId() {
   if (typeof window !== "undefined" && window.localStorage) {
     localStorage.removeItem("rwa_active_session_id");
+    localStorage.removeItem("rwa_session_login_time");
   }
 }
 
@@ -39,6 +42,7 @@ export function getOrCreateSessionId() {
   if (!id) {
     id = "sess_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 10);
     localStorage.setItem("rwa_active_session_id", id);
+    localStorage.setItem("rwa_session_login_time", Date.now().toString());
   }
   return id;
 }
@@ -54,27 +58,53 @@ export async function initDeviceSession(user) {
     const deviceInfo = getClientDeviceInfo();
     const sessionDocRef = doc(db, "activeSessions", sessionId);
 
-    await setDoc(
-      sessionDocRef,
-      {
-        sessionId,
-        uid: user.uid,
-        userName: user.name || "User",
-        userEmail: user.email || user.phone || "",
-        userRole: (user.role || "resident").toLowerCase(),
-        device: deviceInfo.device, // "Desktop" | "Mobile" | "Tablet"
-        os: deviceInfo.os,         // "Windows" | "macOS" | "Android" | "iOS" | "Linux"
-        browser: deviceInfo.browser, // "Chrome" | "Edge" | "Firefox" | "Safari"
-        screen: deviceInfo.screen,
-        userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-        isActive: true,
-        revokedReason: "",
-        revokedAt: null,
-        lastActiveAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    // If document already exists, check if it was revoked
+    let wasRevoked = false;
+    let existingCreatedAt = null;
+    try {
+      const existingSnap = await getDoc(sessionDocRef);
+      if (existingSnap.exists()) {
+        const existingData = existingSnap.data();
+        existingCreatedAt = existingData.createdAt || null;
+        if (existingData.isActive === false && existingData.revokedReason && existingData.revokedReason !== "User signed out") {
+          wasRevoked = true;
+          console.warn("[SessionService] Device session was revoked:", existingData.revokedReason);
+          return sessionId;
+        }
+      }
+    } catch {
+      // Non-fatal if getDoc fails
+    }
+
+    if (!wasRevoked) {
+      await setDoc(
+        sessionDocRef,
+        {
+          sessionId,
+          uid: user.uid,
+          userName: user.name || "User",
+          userEmail: user.email || user.phone || "",
+          userRole: (user.role || "resident").toLowerCase(),
+          device: deviceInfo.device, // "Desktop" | "Mobile" | "Tablet"
+          os: deviceInfo.os,         // "Windows" | "macOS" | "Android" | "iOS" | "Linux"
+          browser: deviceInfo.browser, // "Chrome" | "Edge" | "Firefox" | "Safari"
+          screen: deviceInfo.screen,
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+          isActive: true,
+          revokedReason: "",
+          revokedAt: null,
+          lastActiveAt: serverTimestamp(),
+          createdAt: existingCreatedAt || serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+
+    if (typeof window !== "undefined" && window.localStorage) {
+      if (!localStorage.getItem("rwa_session_login_time")) {
+        localStorage.setItem("rwa_session_login_time", Date.now().toString());
+      }
+    }
 
     return sessionId;
   } catch (error) {
@@ -123,13 +153,17 @@ export function subscribeCurrentSession(sessionId, onRevoked) {
             return;
           }
 
-          // If revocation happened before this listener was mounted, ignore stale event
           const revokedTime = data.revokedAt?.toMillis
             ? data.revokedAt.toMillis()
             : data.revokedAt ? new Date(data.revokedAt).getTime() : 0;
 
-          if (revokedTime && revokedTime < listenerStartTime - 1000) {
-            console.log("[SessionService] Disregarding old revoked timestamp from previous session");
+          const createdAtTime = data.createdAt?.toMillis
+            ? data.createdAt.toMillis()
+            : data.createdAt ? new Date(data.createdAt).getTime() : 0;
+
+          // If this session document was explicitly created AFTER the revocation, ignore stale revocation
+          if (revokedTime && createdAtTime && createdAtTime > revokedTime) {
+            console.log("[SessionService] Session was created after revocation, ignoring old revoke");
             return;
           }
 
@@ -269,10 +303,31 @@ export async function terminateSession(sessionId, reason = "Logged out by admini
 export async function terminateAllOtherSessions(
   uid,
   keepSessionId = null,
-  reason = "Logged out because password was changed"
+  reason = "Your password was changed. You were logged out from other devices."
 ) {
   if (!uid) return;
 
+  // 1. Immediately update current device's local session timestamp so this device is preserved
+  if (keepSessionId && typeof window !== "undefined" && window.localStorage) {
+    localStorage.setItem("rwa_session_login_time", (Date.now() + 5000).toString());
+  }
+
+  // 2. Set passwordChangedAt on users/{uid} in Firestore
+  // This acts as a real-time signal for any active listener on any connected device!
+  try {
+    const userDocRef = doc(db, "users", uid);
+    await setDoc(
+      userDocRef,
+      {
+        passwordChangedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn("[SessionService] Failed to set passwordChangedAt on user:", err.message);
+  }
+
+  // 3. Invalidate activeSessions docs for this user
   try {
     const q = query(sessionsRef, where("uid", "==", uid));
     const snap = await getDocs(q);

@@ -18,9 +18,18 @@ import {
   FaEnvelope,
   FaCreditCard,
   FaPrint,
+  FaLock,
+  FaEye,
+  FaEyeSlash,
+  FaShieldAlt,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
+import {
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+} from "firebase/auth";
 
 import ThemeCard from "../../components/settings/ThemeCard";
 import BackupCard from "../../components/settings/BackupCard";
@@ -34,8 +43,13 @@ import {
   writeAuthLookup,
   deleteAuthLookup,
   normalizeMobile,
+  mobileToAuthEmail,
   AUTH_EMAIL_DOMAIN,
 } from "../../services/authService";
+import {
+  terminateAllOtherSessions,
+  getOrCreateSessionId,
+} from "../../services/sessionService";
 import { saveGarbageSettings } from "../../services/garbageService";
 
 const TABS = [
@@ -284,6 +298,88 @@ export default function Settings() {
   // Check if admin is currently using mobile-based auth or has mobile linked
   const linkedPhone = user?.phone || (user?.email?.endsWith(`@${AUTH_EMAIL_DOMAIN}`) ? user.email.split("@")[0] : null);
   const isMobileLinked = Boolean(linkedPhone);
+
+  // Admin password change state
+  const [adminCurrentPw, setAdminCurrentPw] = useState("");
+  const [adminNewPw, setAdminNewPw] = useState("");
+  const [adminConfirmPw, setAdminConfirmPw] = useState("");
+  const [showAdminCurrentPw, setShowAdminCurrentPw] = useState(false);
+  const [showAdminNewPw, setShowAdminNewPw] = useState(false);
+  const [changingAdminPw, setChangingAdminPw] = useState(false);
+
+  async function handleChangeAdminPassword(e) {
+    e.preventDefault();
+    if (changingAdminPw) return;
+
+    if (!adminCurrentPw) {
+      toast.error("Please enter your current admin password");
+      return;
+    }
+    if (adminNewPw.length < 6) {
+      toast.error("New password must be at least 6 characters");
+      return;
+    }
+    if (adminNewPw !== adminConfirmPw) {
+      toast.error("New passwords do not match");
+      return;
+    }
+
+    setChangingAdminPw(true);
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        toast.error("Session expired. Please log in again.");
+        return;
+      }
+
+      const emailForAuth = currentUser.email || (user?.phone ? mobileToAuthEmail(user.phone) : user?.email);
+      if (!emailForAuth) {
+        toast.error("Could not verify your admin credentials.");
+        return;
+      }
+
+      // Re-authenticate admin with current password
+      const credential = EmailAuthProvider.credential(emailForAuth, adminCurrentPw);
+      await reauthenticateWithCredential(currentUser, credential);
+
+      // Update to new password in Firebase Auth
+      await updatePassword(currentUser, adminNewPw);
+
+      // Invalidate all other active sessions and trigger real-time logout on other devices
+      const currentSessionId = getOrCreateSessionId();
+      await terminateAllOtherSessions(
+        currentUser.uid,
+        currentSessionId,
+        "Admin password was changed. You were logged out from other devices."
+      );
+
+      toast.success("Admin password changed successfully! All other devices have been logged out.");
+      setAdminCurrentPw("");
+      setAdminNewPw("");
+      setAdminConfirmPw("");
+    } catch (error) {
+      console.error("[Settings] Change admin password error:", error);
+      const code = error.code || "";
+      const msg = error.message || "";
+
+      if (
+        code === "auth/invalid-credential" ||
+        code === "auth/wrong-password" ||
+        msg.includes("wrong-password") ||
+        msg.includes("invalid-credential")
+      ) {
+        toast.error("Incorrect current password. Please check what you typed and try again.");
+      } else if (code === "auth/weak-password" || msg.includes("weak-password")) {
+        toast.error("New password is too weak. Please use at least 6 characters.");
+      } else if (code === "auth/requires-recent-login" || msg.includes("requires-recent-login")) {
+        toast.error("For security, please log out and log in again before changing password.");
+      } else {
+        toast.error(error.message || "Failed to change admin password.");
+      }
+    } finally {
+      setChangingAdminPw(false);
+    }
+  }
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -663,6 +759,89 @@ export default function Settings() {
                   {migrateLoading ? "Updating..." : (isMobileLinked ? "Update Login" : "Link Mobile")}
                 </button>
               </div>
+            </div>
+
+            {/* Change Admin Password */}
+            <div className="border-t border-gray-100 pt-4 space-y-3">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                  <FaLock className="text-red-500" /> Change Administrator Password
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Update your admin login password. For security, changing your password will immediately log out your admin account from all other devices.
+                </p>
+              </div>
+
+              <form onSubmit={handleChangeAdminPassword} className="space-y-3 max-w-lg">
+                <div className="relative">
+                  <input
+                    type={showAdminCurrentPw ? "text" : "password"}
+                    placeholder="Current Admin Password"
+                    value={adminCurrentPw}
+                    onChange={(e) => setAdminCurrentPw(e.target.value)}
+                    autoComplete="current-password"
+                    className="w-full pl-3 pr-10 border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminCurrentPw((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
+                  >
+                    {showAdminCurrentPw ? <FaEyeSlash /> : <FaEye />}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="relative">
+                    <input
+                      type={showAdminNewPw ? "text" : "password"}
+                      placeholder="New Password (min 6 chars)"
+                      value={adminNewPw}
+                      onChange={(e) => setAdminNewPw(e.target.value)}
+                      autoComplete="new-password"
+                      className="w-full pl-3 pr-10 border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminNewPw((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
+                    >
+                      {showAdminNewPw ? <FaEyeSlash /> : <FaEye />}
+                    </button>
+                  </div>
+
+                  <div>
+                    <input
+                      type="password"
+                      placeholder="Confirm New Password"
+                      value={adminConfirmPw}
+                      onChange={(e) => setAdminConfirmPw(e.target.value)}
+                      autoComplete="new-password"
+                      className="w-full px-3 border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-1">
+                  <button
+                    type="submit"
+                    disabled={changingAdminPw || !adminCurrentPw || !adminNewPw || adminNewPw !== adminConfirmPw}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white rounded-xl font-semibold text-sm transition shadow-sm"
+                  >
+                    {changingAdminPw ? (
+                      <>
+                        <FaSpinner className="animate-spin text-xs" />
+                        <span>Updating Password...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FaLock className="text-xs" />
+                        <span>Update Password & Logout Other Devices</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
 

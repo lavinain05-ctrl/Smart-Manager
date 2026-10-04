@@ -371,7 +371,8 @@ export default function ResidentProfile() {
 
   const isFamily = user?.role === "family";
   const isCommittee = user?.role === "committee";
-  const canRequest = !isFamily && !isCommittee;
+  // Allow primary residents and committee members to request profile updates / add missing details
+  const canRequest = !isFamily;
   const pendingRequests = myRequests.filter((r) => r.status === "pending");
 
   return (

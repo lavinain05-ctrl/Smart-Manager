@@ -33,9 +33,9 @@ import { useCommittee } from "../../context/CommitteeContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useBilling } from "../../context/BillingContext";
 import { useAuth } from "../../context/AuthContext";
-import { deleteUserAccount } from "../../services/accountDeletionService";
 import { adminResetPasswordFn, db } from "../../firebase/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { terminateAllOtherSessions } from "../../services/sessionService";
 import {
   subscribeAllSpecialPayments,
   subscribeSpecialCollections,
@@ -188,15 +188,15 @@ export default function Collectors() {
         "RWA@" + Math.floor(100000 + Math.random() * 900000);
 
       // 1. Try Cloud Function
+      let cloudSuccess = false;
       try {
         const result = await adminResetPasswordFn({
           targetUid: resetTarget.id,
           password: chosenPassword,
         });
         if (result?.data?.tempPassword) {
+          cloudSuccess = true;
           setTempPasswordResult(result.data.tempPassword);
-          toast.success("Password reset successfully!");
-          return;
         }
       } catch (fnErr) {
         console.warn("Cloud function reset:", fnErr.message);
@@ -207,6 +207,7 @@ export default function Collectors() {
         await updateDoc(doc(db, "users", resetTarget.id), {
           mustChangePassword: true,
           tempPasswordSetAt: serverTimestamp(),
+          passwordChangedAt: serverTimestamp(),
         });
         await updateDoc(doc(db, "collectors", resetTarget.id), {
           mustChangePassword: true,
@@ -215,8 +216,24 @@ export default function Collectors() {
         console.warn("User doc update:", docErr.message);
       }
 
+      // 3. Immediately revoke active sessions across all devices for this collector
+      try {
+        await terminateAllOtherSessions(
+          resetTarget.id,
+          null,
+          "Password was reset by administrator. Please log in with your temporary password."
+        );
+      } catch (sessErr) {
+        console.warn("Failed to terminate collector sessions:", sessErr.message);
+      }
+
+      if (cloudSuccess) {
+        toast.success("Password reset successfully! Other devices logged out.");
+        return;
+      }
+
       setTempPasswordResult(chosenPassword);
-      toast.success("Password reset registered! Please share with collector.");
+      toast.success("Password reset registered! Other devices logged out. Please share with collector.");
     } catch (error) {
       console.error(error);
       toast.error(error.message || "Failed to reset password.");

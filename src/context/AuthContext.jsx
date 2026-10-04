@@ -112,6 +112,12 @@ export function AuthProvider({ children }) {
         } catch {}
 
         try {
+          if (!localStorage.getItem("rwa_session_login_time")) {
+            localStorage.setItem("rwa_session_login_time", Date.now().toString());
+          }
+        } catch {}
+
+        try {
           if (!sessionStorage.getItem("rwa_session_counted")) {
             sessionStorage.setItem("rwa_session_counted", "true");
             const prevCount = parseInt(localStorage.getItem("rwa_user_login_count") || "0", 10);
@@ -183,6 +189,47 @@ export function AuthProvider({ children }) {
         userDocUnsub = onSnapshot(doc(db, "users", currentUser.uid), async (docSnap) => {
           if (docSnap.exists()) {
             let data = docSnap.data();
+
+            // Real-time multi-device logout: Detect if password was changed on another device
+            if (data.passwordChangedAt) {
+              const pwChangedMillis = data.passwordChangedAt?.toMillis
+                ? data.passwordChangedAt.toMillis()
+                : data.passwordChangedAt ? new Date(data.passwordChangedAt).getTime() : 0;
+
+              const sessionLoginTime = parseInt(
+                localStorage.getItem("rwa_session_login_time") || "0",
+                10
+              );
+
+              // If this device was logged in before the password change (allow 2s buffer)
+              if (pwChangedMillis > 0 && sessionLoginTime > 0 && sessionLoginTime < pwChangedMillis - 2000) {
+                if (!isLoggingOutRef.current) {
+                  isLoggingOutRef.current = true;
+                  console.warn("[AuthContext] Password was changed on another device. Revoking this session immediately.");
+                  if (sessionUnsubscribeRef.current) {
+                    sessionUnsubscribeRef.current();
+                    sessionUnsubscribeRef.current = null;
+                  }
+                  if (touchIntervalRef.current) {
+                    clearInterval(touchIntervalRef.current);
+                    touchIntervalRef.current = null;
+                  }
+                  stopImpersonating(true);
+                  resetSessionId();
+                  try {
+                    localStorage.removeItem("rwa_cached_user_profile");
+                    localStorage.removeItem("rwa_session_login_time");
+                  } catch {}
+                  logoutService().catch(() => {});
+                  setUser(null);
+                  toast.error("Your password was changed. You have been logged out from this device.", {
+                    id: "remote-pw-changed-logout",
+                    duration: 7000,
+                  });
+                  return;
+                }
+              }
+            }
 
             // Self-healing: If user is an active committee member, guarantee role is 'committee'
             if (data.role !== "admin" && data.role !== "committee") {

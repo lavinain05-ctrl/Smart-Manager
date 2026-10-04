@@ -116,9 +116,9 @@ service cloud.firestore {
       allow read: if isSignedIn() && (isAdmin() || isCommittee() || request.auth.uid == uid);
       
       // Admin or Committee can create user doc.
-      // New self-registered user can only create their own doc with role="resident".
+      // New user or self-healing user can create their own doc with role="resident", "committee", or "collector".
       allow create: if isAdmin() || isCommittee()
-        || (isSignedIn() && request.auth.uid == uid && request.resource.data.role == "resident");
+        || (isSignedIn() && request.auth.uid == uid && (request.resource.data.role == "resident" || request.resource.data.role == "committee" || request.resource.data.role == "collector"));
       
       // Admin or Committee can update users. Regular users can update non-critical profile fields
       // but CANNOT change their own role or account status.
@@ -345,6 +345,28 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ============================
+    // Portal Logins & Sessions
+    // Login logs cannot be modified once recorded
+    // ============================
+
+    match /portalLogins/{id} {
+      allow read: if isAdmin();
+      allow create: if true;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // ============================
+    // Active Device Sessions
+    // Allows managing active devices and remote logout
+    // ============================
+
+    match /activeSessions/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
 
     // ============================
     // Blocked Accounts & Suspensions
@@ -497,7 +519,7 @@ service cloud.firestore {
 
     match /receipts/{id} {
       allow read: if isSignedIn();
-      allow create: if canUserCollect() || isAdmin();
+      allow create: if isSignedIn();
       allow update, delete: if canUserCollect() || isAdmin();
     }
 
@@ -574,8 +596,7 @@ service cloud.firestore {
         isAdmin()
       );
       allow create: if isSignedIn();
-      allow update: if false;
-      allow delete: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
     // ============================

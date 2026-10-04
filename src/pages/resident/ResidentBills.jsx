@@ -15,6 +15,7 @@ import {
   getAvailableBillingMonths,
   isPriorToResidentBillingStart,
   getAvailableBillingMonthsForResident,
+  getElapsedBillingCycles,
   formatDueDate,
 } from "../../utils/billingCycle";
 
@@ -124,7 +125,8 @@ export default function ResidentBills() {
         ...b,
         amount: effectiveAmount,
         status: effectiveStatus,
-        displayStatus: getDisplayStatus({ ...b, status: effectiveStatus }),
+        dueDate: formatDueDate(b.month, b.year),
+        displayStatus: getDisplayStatus({ ...b, status: effectiveStatus, dueDate: formatDueDate(b.month, b.year) }),
         paymentId: b.paymentId || matchPayment?.receiptNumber || "",
         paymentDate: b.paymentDate || matchPayment?.paymentDate || "",
         paymentMethod: b.paymentMethod || matchPayment?.paymentMethod || "",
@@ -155,7 +157,27 @@ export default function ResidentBills() {
         };
       });
 
-    return [...enrichedBills, ...synthBills]
+    // 5. Synthesize any elapsed billing cycle months that have neither a bill doc nor a payment recorded
+    const allKnownKeys = new Set([...enrichedBills, ...synthBills].map((b) => `${b.month}-${b.year}`));
+    const elapsedCycles = getElapsedBillingCycles(canonicalResident);
+    const unbilledCycleBills = elapsedCycles
+      .filter((c) => !allKnownKeys.has(`${c.month}-${c.year}`))
+      .map((c) => ({
+        id: `synth-cycle-${c.month}-${c.year}`,
+        month: c.month,
+        year: c.year,
+        amount: Number(canonicalResident?.charge || 80),
+        status: c.isOverdue ? "Overdue" : "Pending",
+        displayStatus: c.isOverdue ? "Overdue" : "Pending",
+        paymentId: "",
+        paymentDate: "",
+        paymentMethod: "",
+        dueDate: formatDueDate(c.month, c.year),
+        isAdvance: false,
+        periodLabel: "",
+      }));
+
+    return [...enrichedBills, ...synthBills, ...unbilledCycleBills]
       .filter((b) => !isPriorToCollectionStart(b.month, b.year) && !isPriorToResidentBillingStart(canonicalResident, b.month, b.year))
       .filter((b) => {
         if (monthFilter !== "All" && b.month !== monthFilter) return false;
@@ -241,7 +263,7 @@ export default function ResidentBills() {
                     {b.isAdvance ? (
                       <span className="text-emerald-700 font-semibold text-xs">Covered in Advance</span>
                     ) : (
-                      b.dueDate || "-"
+                      formatDueDate(b.month, b.year)
                     )}
                   </td>
                 </tr>

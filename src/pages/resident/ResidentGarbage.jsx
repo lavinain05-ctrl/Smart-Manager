@@ -20,7 +20,7 @@ import { useResidents } from "../../context/ResidentContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useBills } from "../../context/BillContext";
 import GarbageModuleTabs from "../../components/resident/GarbageModuleTabs";
-import { isPriorToCollectionStart, isPriorToResidentBillingStart } from "../../utils/billingCycle";
+import { isPriorToCollectionStart, isPriorToResidentBillingStart, getResidentPendingBillingCycles } from "../../utils/billingCycle";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -188,19 +188,18 @@ export default function ResidentGarbage() {
     return myPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
   }, [myPayments]);
 
-  // Outstanding calculation
-  const outstanding = useMemo(() => {
-    const paidKeys = new Set(myPayments.map((p) => `${p.month}-${p.year}`));
-    let sum = 0;
-    bills
-      .filter((b) => (b.residentId === canonicalResidentId || b.residentId === user?.uid) && !isPriorToCollectionStart(b.month, b.year) && !isPriorToResidentBillingStart(canonicalResident, b.month, b.year))
-      .forEach((b) => {
-        if (b.status === "Pending" && !paidKeys.has(`${b.month}-${b.year}`)) {
-          sum += Number(b.amount || monthlyCharge || 0);
-        }
-      });
-    return sum;
-  }, [bills, myPayments, canonicalResidentId, user, monthlyCharge, canonicalResident]);
+  const pendingBilling = useMemo(() => {
+    return getResidentPendingBillingCycles({
+      resident: canonicalResident,
+      payments: myPayments,
+      bills,
+      garbageBills,
+      monthlyCharge,
+    });
+  }, [canonicalResident, myPayments, bills, garbageBills, monthlyCharge]);
+
+  // Outstanding calculation across all elapsed cycles
+  const outstanding = pendingBilling.totalDueAmount;
 
   // Collector Name
   const collectorName =

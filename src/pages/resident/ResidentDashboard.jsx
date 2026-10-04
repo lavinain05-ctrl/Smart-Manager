@@ -39,7 +39,7 @@ import { useResidents } from "../../context/ResidentContext";
 import { useGarbage } from "../../context/GarbageContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useBills } from "../../context/BillContext";
-import { isPriorToCollectionStart, isPriorToResidentBillingStart, formatDueDate } from "../../utils/billingCycle";
+import { isPriorToCollectionStart, isPriorToResidentBillingStart, formatDueDate, getResidentPendingBillingCycles } from "../../utils/billingCycle";
 import { useBilling } from "../../context/BillingContext";
 import { useNotices } from "../../context/NoticeContext";
 import { useComplaints } from "../../context/ComplaintContext";
@@ -301,12 +301,19 @@ export default function ResidentDashboard() {
     return new Date().getFullYear();
   }, []);
 
-  const todayDate = new Date().getDate();
-  const isPastDue = todayDate > 10;
+  const pendingBilling = useMemo(() => {
+    return getResidentPendingBillingCycles({
+      resident,
+      payments: myPayments,
+      bills: myBills,
+      monthlyCharge: Number(resident?.charge) || 80,
+    });
+  }, [resident, myPayments, myBills]);
 
-  const currentMonthFee = useMemo(() => {
-    return Number(resident?.charge) || Number(currentBill?.amount) || Number(myPayments[0]?.amount) || 80;
-  }, [resident, currentBill, myPayments]);
+  const hasUnpaidBills = !pendingBilling.isAllPaid;
+  const isPastDue = pendingBilling.hasOverdue;
+
+  const currentMonthFee = pendingBilling.totalDueAmount || Number(resident?.charge) || 80;
 
   const isCoveredByPayment = (p, m, y) => {
     if (!p) return false;
@@ -357,7 +364,7 @@ export default function ResidentDashboard() {
     );
   }, [isAdvanceCovered, currentMonthPayment, myPayments, myBills, currentMonthName, currentYearNum, selectedMonth, selectedYear]);
 
-  const isCurrentMonthPaid = !!currentMonthPayment || currentMonthBillPaid || isAdvanceCovered;
+  const isCurrentMonthPaid = !hasUnpaidBills;
 
   const collectorName = useMemo(() => {
     return myPayments[0]?.collectorName || "RWA Collector / Office";
@@ -721,7 +728,7 @@ export default function ResidentDashboard() {
 
       {/* ═══════════ Billing Status / Payment Notice Card ═══════════ */}
       {isParticipating ? (
-        !isCurrentMonthPaid ? (
+        hasUnpaidBills ? (
           <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-amber-500/10 border border-amber-300/80 dark:border-amber-700/50 p-4 sm:p-6 md:p-7 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
               <div className="flex items-start gap-3 sm:gap-4">
@@ -740,30 +747,34 @@ export default function ResidentDashboard() {
                       {isPastDue ? "⚠️ Overdue Payment" : "🔔 Monthly Fee Due"}
                     </span>
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Billing Cycle: {currentMonthName} {currentYearNum}
+                      Billing Cycle: {pendingBilling.monthsLabel || `${currentMonthName} ${currentYearNum}`}
                     </span>
                   </div>
 
                   <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white leading-snug">
-                    Garbage Collection Fee for {currentMonthName} {currentYearNum} is Due
+                    Garbage Collection Fee for {pendingBilling.monthsLabel || `${currentMonthName} ${currentYearNum}`} is Due
                   </h2>
 
                   <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-2xl leading-relaxed">
-                    Please clear your monthly fee of{" "}
+                    Please clear your {pendingBilling.pendingCount > 1 ? `${pendingBilling.pendingCount} months` : "monthly"} fee of{" "}
                     <strong className="text-emerald-700 dark:text-emerald-400 font-bold">
-                      ₹{currentMonthFee}
+                      ₹{pendingBilling.totalDueAmount}
                     </strong>{" "}
                     to maintain seamless daily doorstep waste collection.
                   </p>
 
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-slate-500 dark:text-slate-400">
                     <span>
-                      Fee: <strong className="text-slate-900 dark:text-white font-bold">₹{currentMonthFee}</strong>
+                      Fee:{" "}
+                      <strong className="text-slate-900 dark:text-white font-bold">
+                        ₹{pendingBilling.totalDueAmount}
+                        {pendingBilling.pendingCount > 1 && ` (${pendingBilling.pendingCount} Months)`}
+                      </strong>
                     </span>
                     <span>
                       Due Date:{" "}
                       <strong className={isPastDue ? "text-rose-600 font-bold" : "text-slate-900 dark:text-white font-semibold"}>
-                        {currentBill?.dueDate || formatDueDate(currentMonthName, currentYearNum)}
+                        {pendingBilling.primaryDueDate}
                       </strong>
                     </span>
                     {collectorName && (

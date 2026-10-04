@@ -215,7 +215,7 @@ export default function BillTable({
             </div>
             <div>
               <div class="item-row"><span class="item-lbl">Billing Period:</span> <span class="item-val">${bill.month} ${bill.year}</span></div>
-              <div class="item-row"><span class="item-lbl">Due Date:</span> <span class="item-val">${bill.dueDate || formatDueDate(bill.month, bill.year)}</span></div>
+              <div class="item-row"><span class="item-lbl">Due Date:</span> <span class="item-val">${formatDueDate(bill.month, bill.year)}</span></div>
               <div class="item-row"><span class="item-lbl">Status:</span> <span class="item-val" style="color: ${isPaid ? '#16a34a' : '#dc2626'}">${status}</span></div>
             </div>
           </div>
@@ -246,7 +246,7 @@ export default function BillTable({
               ${
                 isPaid
                   ? `Receipt ID: <strong>${bill.paymentId || "CONFIRMED"}</strong> • Paid on: <strong>${bill.paymentDate || "Recorded"}</strong> via <strong>${bill.paymentMethod || "Cash"}</strong>.`
-                  : `Please clear dues by ${bill.dueDate || formatDueDate(bill.month, bill.year)} to ensure uninterrupted society services.`
+                  : `Please clear dues by ${formatDueDate(bill.month, bill.year)} to ensure uninterrupted society services.`
               }
             </div>
           </div>
@@ -326,7 +326,7 @@ export default function BillTable({
                       {status}
                     </span>
                   </td>
-                  <td className="p-4 font-medium text-gray-500">{bill.dueDate || "-"}</td>
+                  <td className="p-4 font-medium text-gray-500">{formatDueDate(bill.month, bill.year)}</td>
                   <td className="p-4">
                     <div className="flex justify-center gap-2">
                       {/* Collect */}

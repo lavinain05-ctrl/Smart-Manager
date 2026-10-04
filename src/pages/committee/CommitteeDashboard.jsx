@@ -35,6 +35,7 @@ import { usePayments } from "../../context/PaymentContext";
 import { useResidents } from "../../context/ResidentContext";
 import { useGarbage } from "../../context/GarbageContext";
 import { useBills } from "../../context/BillContext";
+import { getResidentPendingBillingCycles } from "../../utils/billingCycle";
 import RecentUpdatesCard from "../../components/notifications/RecentUpdatesCard";
 
 export default function CommitteeDashboard() {
@@ -188,34 +189,20 @@ export default function CommitteeDashboard() {
   const currentMonthName = useMemo(() => new Date().toLocaleString("default", { month: "long" }), []);
   const currentYearNum = useMemo(() => new Date().getFullYear(), []);
 
-  const currentMonthPersonalPayment = myPersonalPayments.find(
-    (p) => p.month === currentMonthName && Number(p.year) === currentYearNum
-  );
+  const pendingBilling = useMemo(() => {
+    return getResidentPendingBillingCycles({
+      resident: canonicalResident,
+      payments: myPersonalPayments,
+      bills,
+      garbageBills,
+      monthlyCharge: canonicalResident?.charge || 80,
+    });
+  }, [canonicalResident, myPersonalPayments, bills, garbageBills]);
 
-  const currentMonthPersonalBill = useMemo(() => {
-    return (
-      garbageBills.find(
-        (g) =>
-          (g.residentId === canonicalResidentId || g.residentId === user?.uid) &&
-          g.month === currentMonthName &&
-          Number(g.year) === currentYearNum
-      ) ||
-      bills.find(
-        (b) =>
-          (b.residentId === canonicalResidentId || b.residentId === user?.uid) &&
-          b.month === currentMonthName &&
-          Number(b.year) === currentYearNum
-      ) ||
-      null
-    );
-  }, [garbageBills, bills, canonicalResidentId, user, currentMonthName, currentYearNum]);
-
-  const isCurrentMonthPaid = Boolean(
-    currentMonthPersonalPayment ||
-    (currentMonthPersonalBill && (currentMonthPersonalBill.status === "Paid" || currentMonthPersonalBill.status === "paid"))
-  );
-
-  const monthlyCharge = canonicalResident?.charge || currentMonthPersonalBill?.amount || 100;
+  const isCurrentMonthPaid = pendingBilling.isAllPaid;
+  const dueAmount = pendingBilling.totalDueAmount;
+  const dueMonthsLabel = pendingBilling.monthsLabel || `${currentMonthName} ${currentYearNum}`;
+  const monthlyCharge = canonicalResident?.charge || 80;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -380,12 +367,14 @@ export default function CommitteeDashboard() {
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
                 isCurrentMonthPaid
                   ? "bg-emerald-200 dark:bg-emerald-900/60 text-emerald-950 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700"
+                  : pendingBilling.hasOverdue
+                  ? "bg-rose-200 dark:bg-rose-900/60 text-rose-950 dark:text-rose-200 border-rose-300 dark:border-rose-700"
                   : "bg-amber-200 dark:bg-amber-900/60 text-amber-950 dark:text-amber-200 border-amber-300 dark:border-amber-700"
               }`}>
-                {isCurrentMonthPaid ? "✅ Garbage Fee Paid" : "🔔 Garbage Fee Due"}
+                {isCurrentMonthPaid ? "✅ Garbage Fee Paid" : pendingBilling.hasOverdue ? "⚠️ Garbage Fee Due" : "🔔 Garbage Fee Due"}
               </span>
               <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                {currentMonthName} {currentYearNum}
+                {isCurrentMonthPaid ? `${currentMonthName} ${currentYearNum}` : dueMonthsLabel}
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                 • Flat {canonicalResident?.flat || user?.flat || "—"}
@@ -395,7 +384,7 @@ export default function CommitteeDashboard() {
             <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 mt-1">
               {isCurrentMonthPaid
                 ? `Doorstep garbage collection fee for ${currentMonthName} ${currentYearNum} is paid.`
-                : `Doorstep garbage collection fee for ${currentMonthName} ${currentYearNum} is pending (₹${monthlyCharge}).`}
+                : `Doorstep garbage collection fee for ${dueMonthsLabel} is pending (₹${dueAmount}).`}
             </p>
             <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {isCurrentMonthPaid
@@ -415,7 +404,7 @@ export default function CommitteeDashboard() {
             }`}
           >
             <FaRecycle className="text-xs" />
-            <span>{isCurrentMonthPaid ? "View Service & Receipts" : `Pay ₹${monthlyCharge} Now`}</span>
+            <span>{isCurrentMonthPaid ? "View Service & Receipts" : `Pay ₹${dueAmount} Now`}</span>
             <FaArrowRight className="text-[10px]" />
           </Link>
         </div>

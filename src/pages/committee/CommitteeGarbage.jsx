@@ -36,7 +36,7 @@ import { useSettings } from "../../context/SettingsContext";
 import { printPaymentReceipt } from "../../utils/printReceiptHelper";
 import PrinterQuickAction from "../../components/common/PrinterQuickAction";
 import { DEFAULT_JOIN_GC_MESSAGE, DEFAULT_LEAVE_GC_MESSAGE } from "../resident/ResidentGarbage";
-import { isPriorToCollectionStart } from "../../utils/billingCycle";
+import { isPriorToCollectionStart, getResidentPendingBillingCycles } from "../../utils/billingCycle";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -230,19 +230,19 @@ export default function CommitteeGarbage() {
     return myPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
   }, [myPayments]);
 
-  // Outstanding
-  const outstanding = useMemo(() => {
-    const paidKeys = new Set(myPayments.map((p) => `${p.month}-${p.year}`));
-    let sum = 0;
-    bills
-      .filter((b) => (b.residentId === canonicalResidentId || b.residentId === user?.uid) && !isPriorToCollectionStart(b.month, b.year))
-      .forEach((b) => {
-        if (b.status === "Pending" && !paidKeys.has(`${b.month}-${b.year}`)) {
-          sum += Number(b.amount || monthlyCharge || 0);
-        }
-      });
-    return sum;
-  }, [bills, myPayments, canonicalResidentId, user, monthlyCharge]);
+  const pendingBilling = useMemo(() => {
+    return getResidentPendingBillingCycles({
+      resident: canonicalResident,
+      payments: myPayments,
+      bills,
+      garbageBills,
+      monthlyCharge,
+    });
+  }, [canonicalResident, myPayments, bills, garbageBills, monthlyCharge]);
+
+  // Outstanding across all elapsed cycles
+  const outstanding = pendingBilling.totalDueAmount;
+  const isPersonalPaid = pendingBilling.isAllPaid;
 
   // Collector info
   const collectorName =
@@ -424,7 +424,7 @@ export default function CommitteeGarbage() {
           </div>
 
           {/* Current Month Payment Alert Banner */}
-          {currentMonthPayment || currentMonthBill?.status === "Paid" ? (
+          {isPersonalPaid ? (
             <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-start sm:items-center gap-3.5">
                 <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-lg shrink-0 shadow-md shadow-emerald-600/20">
@@ -445,7 +445,7 @@ export default function CommitteeGarbage() {
                     )}
                   </div>
                   <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 mt-1">
-                    Your garbage collection fee for {currentMonth} {currentYear} has been recorded!
+                    Your garbage collection fee is paid. Official receipt is available!
                   </p>
                 </div>
               </div>
@@ -469,21 +469,21 @@ export default function CommitteeGarbage() {
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 border border-amber-300 dark:border-amber-700">
-                      Monthly Fee Due
+                      {pendingBilling.hasOverdue ? "Fee Overdue" : "Monthly Fee Due"}
                     </span>
                     <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
-                      {currentMonth} {currentYear}
+                      {pendingBilling.monthsLabel || `${currentMonth} ${currentYear}`}
                     </span>
                   </div>
                   <p className="text-xs font-semibold text-amber-900 dark:text-amber-300 mt-1">
-                    Monthly garbage collection fee of ₹{monthlyCharge} is due for this month.
-                    {outstanding > monthlyCharge ? ` Total unpaid dues: ₹${outstanding}.` : ""}
+                    Doorstep garbage collection fee for {pendingBilling.monthsLabel || `${currentMonth} ${currentYear}`} is due: ₹{pendingBilling.totalDueAmount}.
                   </p>
                 </div>
               </div>
 
-              <div className="text-xs font-semibold text-amber-800 dark:text-amber-300 self-start sm:self-auto bg-amber-100/70 dark:bg-amber-900/40 px-3.5 py-1.5 rounded-xl border border-amber-300/50">
-                Collector: {collectorName}
+              <div className="flex flex-col sm:items-end gap-1 text-xs font-semibold text-amber-800 dark:text-amber-300 self-start sm:self-auto bg-amber-100/70 dark:bg-amber-900/40 px-3.5 py-1.5 rounded-xl border border-amber-300/50">
+                <span>Due Date: {pendingBilling.primaryDueDate}</span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">Collector: {collectorName}</span>
               </div>
             </div>
           )}

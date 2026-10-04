@@ -129,7 +129,7 @@ export function parseDateSafely(val) {
  */
 export function getResidentBillingStart(resident) {
   let startYear = COLLECTION_START_YEAR;
-  let startMonthIndex = COLLECTION_START_MONTH_INDEX;
+  let startMonthIndex = COLLECTION_START_MONTH_INDEX; // September 2026 (0-indexed 8)
 
   if (!resident) {
     return {
@@ -139,47 +139,18 @@ export function getResidentBillingStart(resident) {
     };
   }
 
-  // 1. Check resident registration date
+  // Official society collection started from September 2026.
+  // All residents registered in 2026 participate from September 2026.
+  // Only if registration/garbage joining is explicitly in a future calendar year (e.g. 2027+)
+  // does billing start in that future year.
   const regDate =
+    parseDateSafely(resident.garbageJoinedAt) ||
     parseDateSafely(resident.createdAt) ||
-    parseDateSafely(resident.approvedAt) ||
-    parseDateSafely(resident.registrationDate) ||
-    parseDateSafely(resident.date);
+    parseDateSafely(resident.approvedAt);
 
-  if (regDate) {
-    const regY = regDate.getFullYear();
-    const regM = regDate.getMonth();
-    if (regY > startYear || (regY === startYear && regM > startMonthIndex)) {
-      startYear = regY;
-      startMonthIndex = regM;
-    }
-  }
-
-  // 2. Check garbage participation start date
-  if (resident.garbageJoinedYear && resident.garbageJoinedMonth) {
-    const gjY = Number(resident.garbageJoinedYear);
-    const gjM = MONTH_NAMES.indexOf(resident.garbageJoinedMonth);
-    if (gjY && gjM !== -1) {
-      if (gjY > startYear || (gjY === startYear && gjM > startMonthIndex)) {
-        startYear = gjY;
-        startMonthIndex = gjM;
-      }
-    }
-  } else {
-    const gcDate =
-      parseDateSafely(resident.garbageJoinedAt) ||
-      parseDateSafely(resident.garbageParticipationDate) ||
-      parseDateSafely(resident.garbageStartDate) ||
-      parseDateSafely(resident.gcStartedAt);
-
-    if (gcDate) {
-      const gcY = gcDate.getFullYear();
-      const gcM = gcDate.getMonth();
-      if (gcY > startYear || (gcY === startYear && gcM > startMonthIndex)) {
-        startYear = gcY;
-        startMonthIndex = gcM;
-      }
-    }
+  if (regDate && regDate.getFullYear() > COLLECTION_START_YEAR) {
+    startYear = regDate.getFullYear();
+    startMonthIndex = regDate.getMonth();
   }
 
   return {
@@ -220,5 +191,128 @@ export function getAvailableBillingMonthsForResident(resident, year) {
     return MONTH_NAMES.slice(start.monthIndex);
   }
   return [...MONTH_NAMES];
+}
+
+/**
+ * Returns all billing cycles from the resident's start (or society start Sep 2026)
+ * up to the current calendar month & year.
+ */
+export function getElapsedBillingCycles(resident = null) {
+  const now = new Date();
+  const currentY = now.getFullYear();
+  const currentMIdx = now.getMonth();
+
+  const start = resident ? getResidentBillingStart(resident) : {
+    year: COLLECTION_START_YEAR,
+    month: COLLECTION_START_MONTH,
+    monthIndex: COLLECTION_START_MONTH_INDEX,
+  };
+
+  const cycles = [];
+  let y = start.year;
+  let m = start.monthIndex;
+
+  while (y < currentY || (y === currentY && m <= currentMIdx)) {
+    const mName = MONTH_NAMES[m];
+    const dueDateStr = formatDueDate(mName, y);
+    const parsedDue = new Date(y, m + 1, 0, 23, 59, 59, 999);
+    const isPastDueDate = parsedDue < now;
+    cycles.push({
+      month: mName,
+      year: y,
+      monthIndex: m,
+      dueDate: dueDateStr,
+      isOverdue: isPastDueDate,
+    });
+    m++;
+    if (m > 11) {
+      m = 0;
+      y++;
+    }
+  }
+
+  return cycles;
+}
+
+/**
+ * Resolves all unpaid / pending billing cycles for a resident across all elapsed periods.
+ * Accurately lists all months (e.g. "September 2026 & October 2026"), calculates total dues,
+ * and sets canonical due dates to the last day of each month.
+ */
+export function getResidentPendingBillingCycles({
+  resident,
+  payments = [],
+  bills = [],
+  garbageBills = [],
+  monthlyCharge = 80,
+}) {
+  const elapsed = getElapsedBillingCycles(resident);
+  const now = new Date();
+
+  const isCovered = (m, y) => {
+    const yNum = Number(y);
+    const hasPay = payments.some((p) => {
+      if (p.month === m && Number(p.year) === yNum) return true;
+      if (p.isAdvance && Array.isArray(p.coveredMonths)) {
+        return p.coveredMonths.some((cm) => cm.month === m && Number(cm.year) === yNum);
+      }
+      return false;
+    });
+    if (hasPay) return true;
+
+    const hasPaidBill = [...bills, ...garbageBills].some((b) => {
+      const bM = b.month;
+      const bY = Number(b.year);
+      const isPaid = b.status === "Paid" || b.status === "paid" || b.status === "Exempted" || b.displayStatus === "Paid";
+      return bM === m && bY === yNum && isPaid;
+    });
+    return hasPaidBill;
+  };
+
+  const charge = Number(resident?.charge || monthlyCharge || 80);
+
+  const unpaidCycles = [];
+  elapsed.forEach((c) => {
+    if (!isCovered(c.month, c.year)) {
+      unpaidCycles.push({
+        ...c,
+        amount: charge,
+        status: c.isOverdue ? "Overdue" : "Pending",
+      });
+    }
+  });
+
+  const pendingCount = unpaidCycles.length;
+  const isAllPaid = pendingCount === 0;
+  const totalDueAmount = unpaidCycles.reduce((sum, c) => sum + c.amount, 0);
+
+  // Month names label
+  let monthsLabel = "";
+  if (pendingCount === 1) {
+    monthsLabel = `${unpaidCycles[0].month} ${unpaidCycles[0].year}`;
+  } else if (pendingCount === 2) {
+    monthsLabel = `${unpaidCycles[0].month} ${unpaidCycles[0].year} & ${unpaidCycles[1].month} ${unpaidCycles[1].year}`;
+  } else if (pendingCount > 2) {
+    const leading = unpaidCycles.slice(0, -1).map((c) => `${c.month} ${c.year}`).join(", ");
+    const trailing = `${unpaidCycles[unpaidCycles.length - 1].month} ${unpaidCycles[unpaidCycles.length - 1].year}`;
+    monthsLabel = `${leading} & ${trailing}`;
+  }
+
+  const hasOverdue = unpaidCycles.some((c) => c.isOverdue);
+  const currentMonthName = MONTH_NAMES[now.getMonth()];
+  const currentYearNum = now.getFullYear();
+  const currentCycle = unpaidCycles.find((c) => c.month === currentMonthName && c.year === currentYearNum) || unpaidCycles[unpaidCycles.length - 1];
+  const primaryDueDate = currentCycle ? currentCycle.dueDate : formatDueDate(currentMonthName, currentYearNum);
+
+  return {
+    unpaidCycles,
+    pendingCount,
+    isAllPaid,
+    totalDueAmount,
+    monthsLabel,
+    hasOverdue,
+    primaryDueDate,
+    monthlyCharge: charge,
+  };
 }
 

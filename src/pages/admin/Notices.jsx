@@ -25,6 +25,7 @@ import { useNotices } from "../../context/NoticeContext";
 import { useAuth } from "../../context/AuthContext";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { createNotification } from "../../services/notificationService";
+import { StatCardsSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 const CATEGORIES = [
   "Notice",
@@ -84,7 +85,7 @@ function getWhatsAppText(notice) {
 
 export default function Notices() {
   // Admin uses allNotices to see everything
-  const { allNotices: notices, addNotice, updateNotice, deleteNotice } = useNotices();
+  const { allNotices: notices, addNotice, updateNotice, deleteNotice, loading: noticesLoading } = useNotices();
   const { user } = useAuth();
 
   const [showForm, setShowForm] = useState(false);
@@ -257,43 +258,47 @@ export default function Notices() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-emerald-500">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-              <FaBullhorn className="text-emerald-600 text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{totalNotices}</p>
-              <p className="text-sm text-gray-500">Total Notices</p>
+      {noticesLoading ? (
+        <StatCardsSkeleton count={3} />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-emerald-500">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <FaBullhorn className="text-emerald-600 text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{totalNotices}</p>
+                <p className="text-sm text-gray-500">Total Notices</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-red-500">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
-              <FaExclamationTriangle className="text-red-600 text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{emergencyCount}</p>
-              <p className="text-sm text-gray-500">Emergency Notices</p>
+          <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-red-500">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                <FaExclamationTriangle className="text-red-600 text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{emergencyCount}</p>
+                <p className="text-sm text-gray-500">Emergency Notices</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-blue-500">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <FaCalendarAlt className="text-blue-600 text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{thisMonthCount}</p>
-              <p className="text-sm text-gray-500">This Month</p>
+          <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-blue-500">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <FaCalendarAlt className="text-blue-600 text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{thisMonthCount}</p>
+                <p className="text-sm text-gray-500">This Month</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Search & Filters */}
       <div className="bg-white rounded-2xl shadow-sm p-4">
@@ -339,7 +344,20 @@ export default function Notices() {
       </div>
 
       {/* Notice List */}
-      {filteredNotices.length === 0 ? (
+      {noticesLoading ? (
+        <div className="space-y-4 animate-pulse">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-5 w-20 bg-slate-200 rounded-full" />
+                <div className="h-5 w-16 bg-slate-100 rounded-full" />
+              </div>
+              <div className="h-6 w-3/4 bg-slate-200 rounded-md" />
+              <div className="h-4 w-40 bg-slate-100 rounded-md" />
+            </div>
+          ))}
+        </div>
+      ) : filteredNotices.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm p-16 text-center text-gray-500">
           <FaBell className="text-6xl text-gray-300 mx-auto mb-4" />
           <h2 className="text-xl font-semibold">No Notices Found</h2>

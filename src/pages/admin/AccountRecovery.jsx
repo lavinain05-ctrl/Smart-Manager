@@ -52,6 +52,7 @@ import {
   RECOVERY_REQUEST_TYPES,
   STATUS_LABELS,
 } from "../../services/recoveryService";
+import { TableLoadingSkeleton, StatCardsSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 // =============================
 // Status UI config
@@ -91,6 +92,7 @@ function getRequestTypeLabel(type) {
 export default function AccountRecovery() {
   const { user } = useAuth();
   const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [expanded, setExpanded] = useState(null);
@@ -116,8 +118,17 @@ export default function AccountRecovery() {
 
   // Subscribe to recovery requests
   useEffect(() => {
-    const unsubscribe = subscribeRecoveryRequests(setRequests);
-    return () => unsubscribe();
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
+    const unsubscribe = subscribeRecoveryRequests((data) => {
+      clearTimeout(safetyTimer);
+      setRequests(data || []);
+      setLoading(false);
+    });
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, []);
 
   // Filtered + searched requests
@@ -614,20 +625,24 @@ export default function AccountRecovery() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {[
-          { label: "Total", count: stats.total, color: "bg-gray-100 text-gray-700" },
-          { label: "Pending", count: stats.pending, color: "bg-yellow-100 text-yellow-700" },
-          { label: "Verified", count: stats.verified, color: "bg-blue-100 text-blue-700" },
-          { label: "Completed", count: stats.completed, color: "bg-green-100 text-green-700" },
-          { label: "Rejected", count: stats.rejected, color: "bg-red-100 text-red-700" },
-        ].map((stat) => (
-          <div key={stat.label} className={`rounded-xl p-4 ${stat.color}`}>
-            <p className="text-2xl font-bold">{stat.count}</p>
-            <p className="text-xs font-medium mt-1">{stat.label}</p>
-          </div>
-        ))}
-      </div>
+      {loading ? (
+        <StatCardsSkeleton count={5} className="grid grid-cols-2 md:grid-cols-5 gap-3" />
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {[
+            { label: "Total", count: stats.total, color: "bg-gray-100 text-gray-700" },
+            { label: "Pending", count: stats.pending, color: "bg-yellow-100 text-yellow-700" },
+            { label: "Verified", count: stats.verified, color: "bg-blue-100 text-blue-700" },
+            { label: "Completed", count: stats.completed, color: "bg-green-100 text-green-700" },
+            { label: "Rejected", count: stats.rejected, color: "bg-red-100 text-red-700" },
+          ].map((stat) => (
+            <div key={stat.label} className={`rounded-xl p-4 ${stat.color}`}>
+              <p className="text-2xl font-bold">{stat.count}</p>
+              <p className="text-xs font-medium mt-1">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Search & Filter */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -658,7 +673,14 @@ export default function AccountRecovery() {
       </div>
 
       {/* Requests Table */}
-      {filteredRequests.length === 0 ? (
+      {loading ? (
+        <TableLoadingSkeleton
+          cols={8}
+          rows={5}
+          message="Loading recovery requests..."
+          subMessage="Fetching pending password & account verification tickets"
+        />
+      ) : filteredRequests.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border p-12 text-center">
           <FaKey className="text-4xl text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500">No recovery requests found.</p>

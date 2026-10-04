@@ -8,9 +8,10 @@ import { useAuth } from "../../context/AuthContext";
 import MonthSelector from "../../components/common/MonthSelector";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import Pagination from "../../components/common/Pagination";
+import { TableLoadingSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 export default function PaymentHistory() {
-  const { payments, reversePayment } = usePayments();
+  const { payments, reversePayment, loading } = usePayments();
   const { user } = useAuth();
 
   const {
@@ -109,69 +110,52 @@ export default function PaymentHistory() {
         </div>
 
         {/* Table */}
-
-        <div className="bg-white rounded-2xl shadow-sm overflow-x-auto">
-
-          <table className="w-full">
-
-            <thead className="bg-gray-100">
-
-              <tr>
-
-                <th className="p-4 text-left">
-                  Flat
-                </th>
-
-                <th className="p-4 text-left">
-                  Resident
-                </th>
-
-                <th className="p-4 text-left">
-                  Collector
-                </th>
-
-                <th className="p-4 text-left">
-                  Amount
-                </th>
-
-                <th className="p-4 text-left">
-                  Method
-                </th>
-
-                <th className="p-4 text-left">
-                  Date
-                </th>
-
-                <th className="p-4 text-left">
-                  Receipt
-                </th>
-
-                {isAdmin && (
-                  <th className="p-4 text-center">
-                    Action
-                  </th>
-                )}
-
-              </tr>
-
-            </thead>
-
-            <tbody>
-
-              {filteredPayments.length === 0 ? (
-
+        {loading ? (
+          <TableLoadingSkeleton columns={isAdmin ? 8 : 7} rows={6} />
+        ) : (
+          <div className="bg-white rounded-2xl shadow-sm overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-100">
                 <tr>
-
-                  <td
-                    colSpan={isAdmin ? "8" : "7"}
-                    className="text-center py-10 text-gray-500"
-                  >
-                    No Payments Found
-                  </td>
-
+                  <th className="p-4 text-left">
+                    Flat
+                  </th>
+                  <th className="p-4 text-left">
+                    Resident
+                  </th>
+                  <th className="p-4 text-left">
+                    Collector
+                  </th>
+                  <th className="p-4 text-left">
+                    Amount
+                  </th>
+                  <th className="p-4 text-left">
+                    Method
+                  </th>
+                  <th className="p-4 text-left">
+                    Date
+                  </th>
+                  <th className="p-4 text-left">
+                    Receipt
+                  </th>
+                  {isAdmin && (
+                    <th className="p-4 text-center">
+                      Action
+                    </th>
+                  )}
                 </tr>
-
-              ) : (
+              </thead>
+              <tbody>
+                {filteredPayments.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={isAdmin ? "8" : "7"}
+                      className="text-center py-10 text-gray-500"
+                    >
+                      No Payments Found
+                    </td>
+                  </tr>
+                ) : (
 
                 pagedPayments.map((payment) => (
 
@@ -257,6 +241,7 @@ export default function PaymentHistory() {
           )}
 
         </div>
+      )}
 
       </div>
 

@@ -22,19 +22,28 @@ const ComplaintContext = createContext();
 
 export function ComplaintProvider({ children }) {
   const [complaints, setComplaints] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
     if (!user) {
       setComplaints([]);
+      setLoading(false);
       return;
     }
 
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
     const unsubscribe = subscribeComplaints((data) => {
-      setComplaints(data);
+      clearTimeout(safetyTimer);
+      setComplaints(data || []);
+      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, [user?.uid]);
 
   async function addComplaint(data) {
@@ -99,6 +108,7 @@ export function ComplaintProvider({ children }) {
     <ComplaintContext.Provider
       value={{
         complaints,
+        loading,
         addComplaint,
         updateComplaint,
         updateComplaintStatus,
@@ -112,5 +122,14 @@ export function ComplaintProvider({ children }) {
 }
 
 export function useComplaints() {
-  return useContext(ComplaintContext);
+  const ctx = useContext(ComplaintContext);
+  return ctx || {
+    complaints: [],
+    loading: false,
+    addComplaint: async () => false,
+    updateComplaint: async () => {},
+    updateComplaintStatus: async () => {},
+    addComment: async () => {},
+    deleteComplaint: async () => {},
+  };
 }

@@ -24,6 +24,7 @@ const NoticeContext = createContext();
 
 export function NoticeProvider({ children }) {
   const [notices, setNotices] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const { residents } = useResidents();
   const { committee } = useCommittee();
@@ -31,14 +32,22 @@ export function NoticeProvider({ children }) {
   useEffect(() => {
     if (!user) {
       setNotices([]);
+      setLoading(false);
       return;
     }
 
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
     const unsubscribe = subscribeNotices((data) => {
-      setNotices(data);
+      clearTimeout(safetyTimer);
+      setNotices(data || []);
+      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, [user?.uid]);
 
   // =============================
@@ -140,6 +149,7 @@ export function NoticeProvider({ children }) {
       value={{
         notices: filteredNotices,
         allNotices: notices,
+        loading,
         addNotice,
         updateNotice,
         deleteNotice,
@@ -151,5 +161,13 @@ export function NoticeProvider({ children }) {
 }
 
 export function useNotices() {
-  return useContext(NoticeContext);
+  const ctx = useContext(NoticeContext);
+  return ctx || {
+    notices: [],
+    allNotices: [],
+    loading: false,
+    addNotice: async () => false,
+    updateNotice: async () => false,
+    deleteNotice: async () => {},
+  };
 }

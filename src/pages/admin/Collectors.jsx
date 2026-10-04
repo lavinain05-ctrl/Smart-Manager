@@ -27,6 +27,7 @@ import ConfirmDialog from "../../components/common/ConfirmDialog";
 import CollectorStatsCards from "../../components/collectors/CollectorStatsCards";
 import CollectorPerformanceTable from "../../components/collectors/CollectorPerformanceTable";
 import CollectorDetailDrawer from "../../components/collectors/CollectorDetailDrawer";
+import { TableLoadingSkeleton, StatCardsSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 import { useCollectors } from "../../context/CollectorContext";
 import { useCommittee } from "../../context/CommitteeContext";
@@ -57,6 +58,7 @@ import {
 export default function Collectors() {
   const {
     collectors,
+    loading: collectorsLoading,
     addCollector,
     updateCollector,
     deleteCollector,
@@ -981,14 +983,18 @@ export default function Collectors() {
         </div>
 
         {/* Stats Cards */}
-        <CollectorStatsCards
-          payments={activeGcPayments}
-          specialPayments={activeScPayments}
-          collectors={allCollectors}
-          collectionScope={collectionScope}
-          periodType={periodType}
-          periodLabel={periodLabel}
-        />
+        {collectorsLoading ? (
+          <StatCardsSkeleton count={4} className="grid grid-cols-2 lg:grid-cols-4 gap-4" />
+        ) : (
+          <CollectorStatsCards
+            payments={activeGcPayments}
+            specialPayments={activeScPayments}
+            collectors={allCollectors}
+            collectionScope={collectionScope}
+            periodType={periodType}
+            periodLabel={periodLabel}
+          />
+        )}
 
         {/* Search */}
         <div className="bg-white rounded-2xl shadow-sm p-5">
@@ -1005,23 +1011,32 @@ export default function Collectors() {
         </div>
 
         {/* Performance Table */}
-        <CollectorPerformanceTable
-          collectors={filteredCollectors}
-          payments={activeGcPayments}
-          allPayments={payments}
-          specialPayments={activeScPayments}
-          allSpecialPayments={specialPayments}
-          todayGcPayments={periodType === "custom" ? gcCustomPayments : gcTodayPayments}
-          todayScPayments={periodType === "custom" ? scCustomPayments : scTodayPayments}
-          collectionScope={collectionScope}
-          periodType={periodType}
-          periodLabel={periodLabel}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onView={(c) => setViewCollector(c)}
-          onResetPassword={handleOpenResetPassword}
-          onBlock={handleOpenBlock}
-        />
+        {collectorsLoading ? (
+          <TableLoadingSkeleton
+            cols={7}
+            rows={5}
+            message="Loading collector performance..."
+            subMessage="Fetching collector staff data and daily collection audits"
+          />
+        ) : (
+          <CollectorPerformanceTable
+            collectors={filteredCollectors}
+            payments={activeGcPayments}
+            allPayments={payments}
+            specialPayments={activeScPayments}
+            allSpecialPayments={specialPayments}
+            todayGcPayments={periodType === "custom" ? gcCustomPayments : gcTodayPayments}
+            todayScPayments={periodType === "custom" ? scCustomPayments : scTodayPayments}
+            collectionScope={collectionScope}
+            periodType={periodType}
+            periodLabel={periodLabel}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onView={(c) => setViewCollector(c)}
+            onResetPassword={handleOpenResetPassword}
+            onBlock={handleOpenBlock}
+          />
+        )}
 
       </div>
 

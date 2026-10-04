@@ -30,6 +30,7 @@ import PaymentReceiptSuccessModal from "../../components/collections/PaymentRece
 import ViewBillModal from "../../components/bills/ViewBillModal";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import PrintMonthlyBillsModal from "../../components/bills/PrintMonthlyBillsModal";
+import { StatCardsSkeleton, TableLoadingSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 export default function Bills() {
   const { bills, loading, generateBills } = useBills();
@@ -278,7 +279,11 @@ export default function Bills() {
         </div>
 
         <MonthSelector />
-        <BillSummaryCards bills={filteredBills} />
+        {loading ? (
+          <StatCardsSkeleton count={4} />
+        ) : (
+          <BillSummaryCards bills={filteredBills} />
+        )}
         <BillFilters
           search={search}
           setSearch={setSearch}
@@ -291,13 +296,17 @@ export default function Bills() {
           onExportPdf={handleExportPdf}
           onPrintBills={() => setShowPrintModal(true)}
         />
-        <BillTable
-          bills={filteredBills}
-          onPay={(bill) => setSelectedPayBill(bill)}
-          onView={(bill) => setSelectedViewBill(bill)}
-          onDelete={handleDeleteBill}
-          settings={societySettings}
-        />
+        {loading ? (
+          <TableLoadingSkeleton columns={6} rows={8} />
+        ) : (
+          <BillTable
+            bills={filteredBills}
+            onPay={(bill) => setSelectedPayBill(bill)}
+            onView={(bill) => setSelectedViewBill(bill)}
+            onDelete={handleDeleteBill}
+            settings={societySettings}
+          />
+        )}
       </div>
 
       <PaymentModal

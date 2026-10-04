@@ -26,6 +26,7 @@ const EventContext = createContext();
 
 export function EventProvider({ children }) {
   const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const { residents } = useResidents();
   const { committee } = useCommittee();
@@ -33,14 +34,22 @@ export function EventProvider({ children }) {
   useEffect(() => {
     if (!user) {
       setEvents([]);
+      setLoading(false);
       return;
     }
 
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
     const unsubscribe = subscribeEvents((data) => {
-      setEvents(data);
+      clearTimeout(safetyTimer);
+      setEvents(data || []);
+      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, [user?.uid]);
 
   // =============================
@@ -161,6 +170,7 @@ export function EventProvider({ children }) {
       value={{
         events: filteredEvents,
         allEvents: events,
+        loading,
         addEvent,
         updateEvent,
         deleteEvent,
@@ -174,5 +184,15 @@ export function EventProvider({ children }) {
 }
 
 export function useEvents() {
-  return useContext(EventContext);
+  const ctx = useContext(EventContext);
+  return ctx || {
+    events: [],
+    allEvents: [],
+    loading: false,
+    addEvent: async () => false,
+    updateEvent: async () => false,
+    deleteEvent: async () => {},
+    registerForEvent: async () => false,
+    unregisterFromEvent: async () => false,
+  };
 }

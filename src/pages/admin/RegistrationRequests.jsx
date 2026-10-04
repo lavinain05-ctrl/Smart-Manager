@@ -35,6 +35,7 @@ import { useSettings } from "../../context/SettingsContext";
 import { useAuth } from "../../context/AuthContext";
 import { useNotifications } from "../../context/NotificationContext";
 import Pagination from "../../components/common/Pagination";
+import { TableLoadingSkeleton, StatCardsSkeleton } from "../../components/common/TableLoadingSkeleton";
 import {
   normalizePlotNumber,
   normalizeFloor,
@@ -64,6 +65,7 @@ function formatDate(timestamp) {
 
 export default function RegistrationRequests() {
   const [allRequests, setAllRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("pending");
   const [loadingId, setLoadingId] = useState(null);
@@ -96,11 +98,21 @@ export default function RegistrationRequests() {
   useEffect(() => {
     if (!user || user.role !== "admin") {
       setAllRequests([]);
+      setLoading(false);
       return;
     }
 
-    const unsubscribe = subscribeRegistrationRequests(setAllRequests);
-    return () => unsubscribe();
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
+    const unsubscribe = subscribeRegistrationRequests((data) => {
+      clearTimeout(safetyTimer);
+      setAllRequests(data || []);
+      setLoading(false);
+    });
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, [user]);
 
   const pendingCount = allRequests.filter((r) => r.status === "pending").length;
@@ -328,35 +340,39 @@ export default function RegistrationRequests() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <button
-          onClick={() => setFilterStatus("pending")}
-          className={`rounded-2xl shadow-sm p-4 border-l-4 border-yellow-500 text-left transition ${
-            filterStatus === "pending" ? "bg-yellow-50 ring-2 ring-yellow-300" : "bg-white hover:bg-gray-50"
-          }`}
-        >
-          <p className="text-xs text-gray-500">Pending</p>
-          <p className="text-2xl font-bold">{pendingCount}</p>
-        </button>
-        <button
-          onClick={() => setFilterStatus("approved")}
-          className={`rounded-2xl shadow-sm p-4 border-l-4 border-green-500 text-left transition ${
-            filterStatus === "approved" ? "bg-green-50 ring-2 ring-green-300" : "bg-white hover:bg-gray-50"
-          }`}
-        >
-          <p className="text-xs text-gray-500">Approved</p>
-          <p className="text-2xl font-bold">{approvedCount}</p>
-        </button>
-        <button
-          onClick={() => setFilterStatus("rejected")}
-          className={`rounded-2xl shadow-sm p-4 border-l-4 border-red-500 text-left transition ${
-            filterStatus === "rejected" ? "bg-red-50 ring-2 ring-red-300" : "bg-white hover:bg-gray-50"
-          }`}
-        >
-          <p className="text-xs text-gray-500">Rejected</p>
-          <p className="text-2xl font-bold">{rejectedCount}</p>
-        </button>
-      </div>
+      {loading ? (
+        <StatCardsSkeleton count={3} className="grid grid-cols-3 gap-4" />
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          <button
+            onClick={() => setFilterStatus("pending")}
+            className={`rounded-2xl shadow-sm p-4 border-l-4 border-yellow-500 text-left transition ${
+              filterStatus === "pending" ? "bg-yellow-50 ring-2 ring-yellow-300" : "bg-white hover:bg-gray-50"
+            }`}
+          >
+            <p className="text-xs text-gray-500">Pending</p>
+            <p className="text-2xl font-bold">{pendingCount}</p>
+          </button>
+          <button
+            onClick={() => setFilterStatus("approved")}
+            className={`rounded-2xl shadow-sm p-4 border-l-4 border-green-500 text-left transition ${
+              filterStatus === "approved" ? "bg-green-50 ring-2 ring-green-300" : "bg-white hover:bg-gray-50"
+            }`}
+          >
+            <p className="text-xs text-gray-500">Approved</p>
+            <p className="text-2xl font-bold">{approvedCount}</p>
+          </button>
+          <button
+            onClick={() => setFilterStatus("rejected")}
+            className={`rounded-2xl shadow-sm p-4 border-l-4 border-red-500 text-left transition ${
+              filterStatus === "rejected" ? "bg-red-50 ring-2 ring-red-300" : "bg-white hover:bg-gray-50"
+            }`}
+          >
+            <p className="text-xs text-gray-500">Rejected</p>
+            <p className="text-2xl font-bold">{rejectedCount}</p>
+          </button>
+        </div>
+      )}
 
       {/* Search + Filter */}
       <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col sm:flex-row gap-3">
@@ -383,7 +399,9 @@ export default function RegistrationRequests() {
       </div>
 
       {/* List */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <TableLoadingSkeleton cols={5} rows={4} message="Loading registration requests..." subMessage="Fetching pending resident onboarding applications" />
+      ) : filtered.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm p-16 text-center text-gray-500">
           <FaUserPlus className="text-6xl text-gray-300 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-700">

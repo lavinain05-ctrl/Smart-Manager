@@ -20,26 +20,32 @@ const CollectorContext = createContext();
 
 export function CollectorProvider({ children }) {
   const [collectors, setCollectors] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
     // Only subscribe when the logged-in user is an admin.
-    // The Firestore rules only allow admins to read the
-    // collectors collection — subscribing as a collector
-    // would trigger a permission-denied error.
     const userRole = (user?.role || "").toLowerCase();
     const isAdminUser = userRole === "admin" || user?.uid === "92jYvGPlKMexX37WEzs7MaDuc7U2";
 
     if (!user || !isAdminUser) {
       setCollectors([]);
+      setLoading(false);
       return;
     }
 
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
     const unsubscribe = subscribeCollectors((data) => {
-      setCollectors(data);
+      clearTimeout(safetyTimer);
+      setCollectors(data || []);
+      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, [user?.uid, user?.role]);
 
   async function addCollector(data) {
@@ -113,6 +119,7 @@ export function CollectorProvider({ children }) {
     <CollectorContext.Provider
       value={{
         collectors,
+        loading,
         addCollector,
         updateCollector,
         deleteCollector,
@@ -127,6 +134,7 @@ export function useCollectors() {
   const ctx = useContext(CollectorContext);
   return ctx || {
     collectors: [],
+    loading: false,
     addCollector: async () => null,
     updateCollector: async () => false,
     deleteCollector: async () => false,

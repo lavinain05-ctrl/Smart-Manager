@@ -22,6 +22,7 @@ import {
   getAvailableBillingMonths,
   formatDueDate,
 } from "../../utils/billingCycle";
+import { StatCardsSkeleton, TableLoadingSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 export default function GarbageBills() {
   const {
@@ -248,20 +249,24 @@ export default function GarbageBills() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <p className="text-gray-500 text-sm">Total Billed</p>
-          <h3 className="text-xl font-bold text-indigo-700">₹{totalBilled.toLocaleString()}</h3>
+      {loading ? (
+        <StatCardsSkeleton count={3} />
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <p className="text-gray-500 text-sm">Total Billed</p>
+            <h3 className="text-xl font-bold text-indigo-700">₹{totalBilled.toLocaleString()}</h3>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <p className="text-gray-500 text-sm">Collected</p>
+            <h3 className="text-xl font-bold text-emerald-700">₹{totalCollected.toLocaleString()}</h3>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <p className="text-gray-500 text-sm">Pending</p>
+            <h3 className="text-xl font-bold text-red-700">₹{totalPending.toLocaleString()}</h3>
+          </div>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <p className="text-gray-500 text-sm">Collected</p>
-          <h3 className="text-xl font-bold text-emerald-700">₹{totalCollected.toLocaleString()}</h3>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <p className="text-gray-500 text-sm">Pending</p>
-          <h3 className="text-xl font-bold text-red-700">₹{totalPending.toLocaleString()}</h3>
-        </div>
-      </div>
+      )}
 
       {/* Filters & Export */}
       <div className="bg-white rounded-2xl shadow-sm p-4">
@@ -308,74 +313,78 @@ export default function GarbageBills() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b">
-                <th className="text-left px-6 py-4 font-semibold text-gray-600">Resident</th>
-                <th className="text-left px-6 py-4 font-semibold text-gray-600">Flat</th>
-                <th className="text-left px-6 py-4 font-semibold text-gray-600">Block</th>
-                <th className="text-left px-6 py-4 font-semibold text-gray-600">Amount</th>
-                <th className="text-left px-6 py-4 font-semibold text-gray-600">Status</th>
-                <th className="text-left px-6 py-4 font-semibold text-gray-600">Paid</th>
-                <th className="text-left px-6 py-4 font-semibold text-gray-600">Method</th>
-                <th className="text-center px-6 py-4 font-semibold text-gray-600">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((bill) => (
-                <tr key={bill.id} className="border-b hover:bg-gray-50 transition">
-                  <td className="px-6 py-4 font-medium">{bill.residentName}</td>
-                  <td className="px-6 py-4">{bill.flat}</td>
-                  <td className="px-6 py-4">{bill.block}</td>
-                  <td className="px-6 py-4">₹{Number(bill.amount || 0).toLocaleString()}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      bill.status === "Paid"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-yellow-100 text-yellow-700"
-                    }`}>
-                      {bill.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">{bill.paidAmount ? `₹${bill.paidAmount}` : "—"}</td>
-                  <td className="px-6 py-4">{bill.paymentMethod || "—"}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-center gap-2">
-                      {bill.status === "Pending" && (
+      {loading ? (
+        <TableLoadingSkeleton columns={8} rows={6} />
+      ) : (
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th className="text-left px-6 py-4 font-semibold text-gray-600">Resident</th>
+                  <th className="text-left px-6 py-4 font-semibold text-gray-600">Flat</th>
+                  <th className="text-left px-6 py-4 font-semibold text-gray-600">Block</th>
+                  <th className="text-left px-6 py-4 font-semibold text-gray-600">Amount</th>
+                  <th className="text-left px-6 py-4 font-semibold text-gray-600">Status</th>
+                  <th className="text-left px-6 py-4 font-semibold text-gray-600">Paid</th>
+                  <th className="text-left px-6 py-4 font-semibold text-gray-600">Method</th>
+                  <th className="text-center px-6 py-4 font-semibold text-gray-600">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((bill) => (
+                  <tr key={bill.id} className="border-b hover:bg-gray-50 transition">
+                    <td className="px-6 py-4 font-medium">{bill.residentName}</td>
+                    <td className="px-6 py-4">{bill.flat}</td>
+                    <td className="px-6 py-4">{bill.block}</td>
+                    <td className="px-6 py-4">₹{Number(bill.amount || 0).toLocaleString()}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        bill.status === "Paid"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-yellow-100 text-yellow-700"
+                      }`}>
+                        {bill.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">{bill.paidAmount ? `₹${bill.paidAmount}` : "—"}</td>
+                    <td className="px-6 py-4">{bill.paymentMethod || "—"}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        {bill.status === "Pending" && (
+                          <button
+                            onClick={() => {
+                              setPayModal(bill);
+                              setPayForm({ amount: bill.amount, paymentMethod: "Cash" });
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium transition"
+                          >
+                            Pay
+                          </button>
+                        )}
                         <button
-                          onClick={() => {
-                            setPayModal(bill);
-                            setPayForm({ amount: bill.amount, paymentMethod: "Cash" });
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium transition"
+                          onClick={() => setConfirmDelete(bill)}
+                          className="p-2 rounded-lg hover:bg-red-50 text-red-600 transition"
                         >
-                          Pay
+                          <FaTrash />
                         </button>
-                      )}
-                      <button
-                        onClick={() => setConfirmDelete(bill)}
-                        className="p-2 rounded-lg hover:bg-red-50 text-red-600 transition"
-                      >
-                        <FaTrash />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
 
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="text-center py-10 text-gray-400">
-                    No bills found. Click "Generate Bills" to create bills for active accounts.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="text-center py-10 text-gray-400">
+                      No bills found. Click "Generate Bills" to create bills for active accounts.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Payment Modal */}
       {payModal && (

@@ -56,6 +56,7 @@ import {
   REJECTION_REASONS,
 } from "../../services/specialCollectionService";
 import { generateSpecialCollectionReceipt } from "../../utils/specialCollectionReceiptGenerator";
+import { StatCardsSkeleton, CardGridSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 /**
  * Identify source channel, collector, and payment mode for any special collection payment
@@ -246,7 +247,9 @@ export default function SpecialCollections() {
 
   // 1. Subscribe to Collections & Payments
   useEffect(() => {
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
     const unsubCol = subscribeSpecialCollections((list) => {
+      clearTimeout(safetyTimer);
       setCollections(list);
       setLoading(false);
     });
@@ -256,6 +259,7 @@ export default function SpecialCollections() {
     });
 
     return () => {
+      clearTimeout(safetyTimer);
       unsubCol();
       unsubPay();
     };
@@ -813,51 +817,55 @@ export default function SpecialCollections() {
       </div>
 
       {/* Top Stats Overview */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-        <div className="bg-white border rounded-2xl p-4 shadow-sm">
-          <span className="text-xs text-gray-500 block">Total Campaigns</span>
-          <span className="text-2xl font-bold text-gray-900 mt-1 block">{stats.totalCampaigns}</span>
-          <span className="text-[11px] text-emerald-600 font-medium">{stats.activeCampaigns} Active</span>
-        </div>
+      {loading ? (
+        <StatCardsSkeleton count={6} />
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+          <div className="bg-white border rounded-2xl p-4 shadow-sm">
+            <span className="text-xs text-gray-500 block">Total Campaigns</span>
+            <span className="text-2xl font-bold text-gray-900 mt-1 block">{stats.totalCampaigns}</span>
+            <span className="text-[11px] text-emerald-600 font-medium">{stats.activeCampaigns} Active</span>
+          </div>
 
-        <div className="bg-white border rounded-2xl p-4 shadow-sm">
-          <span className="text-xs text-amber-600 font-medium block">Pending Verification</span>
-          <span className="text-2xl font-bold text-amber-600 mt-1 block">
-            ₹{stats.pendingAmount.toLocaleString("en-IN")}
-          </span>
-          <span className="text-[11px] text-gray-500">{stats.pendingCount} Submissions</span>
-        </div>
+          <div className="bg-white border rounded-2xl p-4 shadow-sm">
+            <span className="text-xs text-amber-600 font-medium block">Pending Verification</span>
+            <span className="text-2xl font-bold text-amber-600 mt-1 block">
+              ₹{stats.pendingAmount.toLocaleString("en-IN")}
+            </span>
+            <span className="text-[11px] text-gray-500">{stats.pendingCount} Submissions</span>
+          </div>
 
-        <div className="bg-white border rounded-2xl p-4 shadow-sm">
-          <span className="text-xs text-emerald-700 font-medium block">Confirmed Collection</span>
-          <span className="text-2xl font-bold text-emerald-700 mt-1 block">
-            ₹{stats.confirmedAmount.toLocaleString("en-IN")}
-          </span>
-          <span className="text-[11px] text-gray-500">{stats.confirmedCount} Verified</span>
-        </div>
+          <div className="bg-white border rounded-2xl p-4 shadow-sm">
+            <span className="text-xs text-emerald-700 font-medium block">Confirmed Collection</span>
+            <span className="text-2xl font-bold text-emerald-700 mt-1 block">
+              ₹{stats.confirmedAmount.toLocaleString("en-IN")}
+            </span>
+            <span className="text-[11px] text-gray-500">{stats.confirmedCount} Verified</span>
+          </div>
 
-        <div className="bg-white border rounded-2xl p-4 shadow-sm">
-          <span className="text-xs text-red-600 font-medium block">Rejected Payments</span>
-          <span className="text-2xl font-bold text-red-600 mt-1 block">{stats.rejectedCount}</span>
-          <span className="text-[11px] text-gray-400">Not in Total</span>
-        </div>
+          <div className="bg-white border rounded-2xl p-4 shadow-sm">
+            <span className="text-xs text-red-600 font-medium block">Rejected Payments</span>
+            <span className="text-2xl font-bold text-red-600 mt-1 block">{stats.rejectedCount}</span>
+            <span className="text-[11px] text-gray-400">Not in Total</span>
+          </div>
 
-        <div className="bg-white border rounded-2xl p-4 shadow-sm">
-          <span className="text-xs text-purple-600 font-medium block">Refunded / Void</span>
-          <span className="text-2xl font-bold text-purple-600 mt-1 block">
-            ₹{stats.refundedAmount.toLocaleString("en-IN")}
-          </span>
-          <span className="text-[11px] text-gray-400">Audited</span>
-        </div>
+          <div className="bg-white border rounded-2xl p-4 shadow-sm">
+            <span className="text-xs text-purple-600 font-medium block">Refunded / Void</span>
+            <span className="text-2xl font-bold text-purple-600 mt-1 block">
+              ₹{stats.refundedAmount.toLocaleString("en-IN")}
+            </span>
+            <span className="text-[11px] text-gray-400">Audited</span>
+          </div>
 
-        <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white rounded-2xl p-4 shadow-md col-span-2 lg:col-span-1">
-          <span className="text-xs text-emerald-100 block font-medium">Net Official Total</span>
-          <span className="text-2xl font-extrabold mt-1 block">
-            ₹{stats.netCollected.toLocaleString("en-IN")}
-          </span>
-          <span className="text-[11px] text-emerald-200">Confirmed Funds Only</span>
+          <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white rounded-2xl p-4 shadow-md col-span-2 lg:col-span-1">
+            <span className="text-xs text-emerald-100 block font-medium">Net Official Total</span>
+            <span className="text-2xl font-extrabold mt-1 block">
+              ₹{stats.netCollected.toLocaleString("en-IN")}
+            </span>
+            <span className="text-[11px] text-emerald-200">Confirmed Funds Only</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Filter & Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -889,7 +897,7 @@ export default function SpecialCollections() {
 
       {/* Campaigns Grid */}
       {loading ? (
-        <div className="p-12 text-center text-gray-500">Loading campaigns...</div>
+        <CardGridSkeleton count={6} colsClass="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5" />
       ) : filteredCollections.length === 0 ? (
         <div className="bg-white border rounded-2xl p-12 text-center text-gray-500 shadow-sm">
           <FaHandHoldingHeart className="text-4xl text-gray-300 mx-auto mb-3" />

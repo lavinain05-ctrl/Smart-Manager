@@ -25,6 +25,7 @@ import {
 } from "../../services/suggestionService";
 import { subscribeSettings, saveSettings } from "../../services/settingsService";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
+import { StatCardsSkeleton, CardGridSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 export default function Suggestions() {
   const [suggestions, setSuggestions] = useState([]);
@@ -51,11 +52,14 @@ export default function Suggestions() {
 
   // Subscribe to Suggestions
   useEffect(() => {
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
     const unsub = subscribeSuggestions((data) => {
+      clearTimeout(safetyTimer);
       setSuggestions(data || []);
       setLoading(false);
     });
     return () => {
+      clearTimeout(safetyTimer);
       if (typeof unsub === "function") unsub();
     };
   }, []);
@@ -265,51 +269,55 @@ export default function Suggestions() {
       </div>
 
       {/* ═══════════ KPI Metric Cards ═══════════ */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Ideas</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-1">{stats.total}</h3>
-            <p className="text-xs text-slate-500 mt-0.5">All received submissions</p>
+      {loading ? (
+        <StatCardsSkeleton count={4} />
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Ideas</p>
+              <h3 className="text-2xl font-black text-slate-900 mt-1">{stats.total}</h3>
+              <p className="text-xs text-slate-500 mt-0.5">All received submissions</p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
+              <FaLightbulb />
+            </div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
-            <FaLightbulb />
-          </div>
-        </div>
 
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Under Review</p>
-            <h3 className="text-2xl font-black text-amber-600 mt-1">{stats.underReview}</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Awaiting decision</p>
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Under Review</p>
+              <h3 className="text-2xl font-black text-amber-600 mt-1">{stats.underReview}</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Awaiting decision</p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">
+              <FaClock />
+            </div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">
-            <FaClock />
-          </div>
-        </div>
 
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Approved</p>
-            <h3 className="text-2xl font-black text-emerald-600 mt-1">{stats.approved}</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Accepted for society</p>
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Approved</p>
+              <h3 className="text-2xl font-black text-emerald-600 mt-1">{stats.approved}</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Accepted for society</p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+              <FaCheckCircle />
+            </div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
-            <FaCheckCircle />
-          </div>
-        </div>
 
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Implemented</p>
-            <h3 className="text-2xl font-black text-purple-600 mt-1">{stats.implemented}</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Completed improvements</p>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl">
-            <FaCheckCircle />
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Implemented</p>
+              <h3 className="text-2xl font-black text-purple-600 mt-1">{stats.implemented}</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Completed improvements</p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl">
+              <FaCheckCircle />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ═══════════ Search & Filters ═══════════ */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -362,9 +370,7 @@ export default function Suggestions() {
 
       {/* ═══════════ Suggestions Feed ═══════════ */}
       {loading ? (
-        <div className="py-16 text-center text-slate-400 text-sm">
-          Loading suggestions...
-        </div>
+        <CardGridSkeleton count={4} colsClass="grid grid-cols-1 md:grid-cols-2 gap-4" />
       ) : filteredSuggestions.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center text-slate-400 border border-slate-200 shadow-sm space-y-2">
           <FaLightbulb className="text-4xl text-slate-300 mx-auto" />

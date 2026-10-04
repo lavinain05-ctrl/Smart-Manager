@@ -20,16 +20,27 @@ const EmergencyContactContext = createContext();
 
 export function EmergencyContactProvider({ children }) {
   const [emergencyContacts, setEmergencyContacts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
     if (!user) {
       setEmergencyContacts([]);
+      setLoading(false);
       return;
     }
 
-    const unsubscribe = subscribeEmergencyContacts(setEmergencyContacts);
-    return () => unsubscribe();
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
+    const unsubscribe = subscribeEmergencyContacts((data) => {
+      clearTimeout(safetyTimer);
+      setEmergencyContacts(data || []);
+      setLoading(false);
+    });
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, [user?.uid]);
 
   async function addContact(data) {
@@ -70,6 +81,7 @@ export function EmergencyContactProvider({ children }) {
     <EmergencyContactContext.Provider
       value={{
         emergencyContacts,
+        loading,
         addContact,
         updateContact,
         deleteContact,
@@ -81,5 +93,12 @@ export function EmergencyContactProvider({ children }) {
 }
 
 export function useEmergencyContacts() {
-  return useContext(EmergencyContactContext);
+  const ctx = useContext(EmergencyContactContext);
+  return ctx || {
+    emergencyContacts: [],
+    loading: false,
+    addContact: async () => false,
+    updateContact: async () => false,
+    deleteContact: async () => {},
+  };
 }

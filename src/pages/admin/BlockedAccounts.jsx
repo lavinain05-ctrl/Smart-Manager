@@ -28,6 +28,7 @@ import { subscribeCollectors } from "../../services/collectorService";
 import { subscribeCommittee } from "../../services/committeeService";
 import { normalizeMobile } from "../../services/authService";
 import toast from "react-hot-toast";
+import { TableLoadingSkeleton, StatCardsSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 function formatDate(timestamp) {
   if (!timestamp) return "—";
@@ -73,6 +74,7 @@ const COMMON_REASONS = [
 
 export default function BlockedAccounts() {
   const [blockedList, setBlockedList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all"); // "all" | "permanent" | "temporary"
   const [filterRole, setFilterRole] = useState("all");
@@ -104,16 +106,24 @@ export default function BlockedAccounts() {
 
   // Subscribe to blocked accounts list
   useEffect(() => {
-    if (!adminUser || adminUser.role !== "admin") return;
+    if (!adminUser || adminUser.role !== "admin") {
+      setLoading(false);
+      return;
+    }
 
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
     const unsub = subscribeBlockedAccounts((data) => {
-      setBlockedList(data);
+      clearTimeout(safetyTimer);
+      setBlockedList(data || []);
+      setLoading(false);
     });
 
     const unsubCols = subscribeCollectors((cols) => setCollectors(cols));
     const unsubComm = subscribeCommittee((mems) => setCommitteeMembers(mems));
 
     return () => {
+      clearTimeout(safetyTimer);
       unsub();
       unsubCols();
       unsubComm();
@@ -357,79 +367,83 @@ export default function BlockedAccounts() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Blocked */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Total Blocked
-              </p>
-              <h3 className="text-2xl font-bold text-red-600 mt-1">
-                {metrics.total}
-              </h3>
-              <p className="text-xs text-gray-400 mt-2">Active restrictions</p>
-            </div>
-            <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center text-red-600 text-xl shrink-0">
-              <FaBan />
+      {loading ? (
+        <StatCardsSkeleton count={4} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Total Blocked */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Total Blocked
+                </p>
+                <h3 className="text-2xl font-bold text-red-600 mt-1">
+                  {metrics.total}
+                </h3>
+                <p className="text-xs text-gray-400 mt-2">Active restrictions</p>
+              </div>
+              <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center text-red-600 text-xl shrink-0">
+                <FaBan />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Temporarily Suspended */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Temporarily Suspended
-              </p>
-              <h3 className="text-2xl font-bold text-amber-600 mt-1">
-                {metrics.temporary}
-              </h3>
-              <p className="text-xs text-gray-400 mt-2">Will auto-expire on schedule</p>
-            </div>
-            <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 text-xl shrink-0">
-              <FaClock />
+          {/* Temporarily Suspended */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Temporarily Suspended
+                </p>
+                <h3 className="text-2xl font-bold text-amber-600 mt-1">
+                  {metrics.temporary}
+                </h3>
+                <p className="text-xs text-gray-400 mt-2">Will auto-expire on schedule</p>
+              </div>
+              <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 text-xl shrink-0">
+                <FaClock />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Permanently Blocked */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Permanently Blocked
-              </p>
-              <h3 className="text-2xl font-bold text-slate-800 mt-1">
-                {metrics.permanent}
-              </h3>
-              <p className="text-xs text-gray-400 mt-2">Requires manual admin lift</p>
-            </div>
-            <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-700 text-xl shrink-0">
-              <FaShieldAlt />
+          {/* Permanently Blocked */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Permanently Blocked
+                </p>
+                <h3 className="text-2xl font-bold text-slate-800 mt-1">
+                  {metrics.permanent}
+                </h3>
+                <p className="text-xs text-gray-400 mt-2">Requires manual admin lift</p>
+              </div>
+              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-700 text-xl shrink-0">
+                <FaShieldAlt />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Login Protection Status */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Portal Security
-              </p>
-              <h3 className="text-2xl font-bold text-emerald-600 mt-1">
-                Protected
-              </h3>
-              <p className="text-xs text-gray-400 mt-2">All portals enforced</p>
-            </div>
-            <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 text-xl shrink-0">
-              <FaCheckCircle />
+          {/* Login Protection Status */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Portal Security
+                </p>
+                <h3 className="text-2xl font-bold text-emerald-600 mt-1">
+                  Protected
+                </h3>
+                <p className="text-xs text-gray-400 mt-2">All portals enforced</p>
+              </div>
+              <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 text-xl shrink-0">
+                <FaCheckCircle />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Filter & Search Bar */}
       <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col md:flex-row gap-3">
@@ -471,7 +485,9 @@ export default function BlockedAccounts() {
 
       {/* Blocked Accounts Table */}
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-100">
-        {filteredBlocked.length === 0 ? (
+        {loading ? (
+          <TableLoadingSkeleton cols={6} rows={5} message="Loading blocked accounts..." subMessage="Fetching security restrictions and bans" />
+        ) : filteredBlocked.length === 0 ? (
           <div className="p-16 text-center text-gray-500">
             <FaCheckCircle className="text-6xl text-emerald-300 mx-auto mb-4" />
             <h3 className="text-lg font-bold text-gray-700">No Blocked Accounts Found</h3>

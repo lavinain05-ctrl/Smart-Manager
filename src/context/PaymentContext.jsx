@@ -33,6 +33,7 @@ const PaymentContext = createContext();
 
 export function PaymentProvider({ children }) {
   const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { selectedYear } = useBilling();
   const { user } = useAuth();
   const hasSyncedRef = useRef(false);
@@ -48,23 +49,32 @@ export function PaymentProvider({ children }) {
   useEffect(() => {
     if (!user) {
       setPayments([]);
+      setLoading(false);
       return;
     }
+
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
 
     const isResidentRole = user.role === "resident" || user.role === "family";
 
     let unsubscribe;
     if (isResidentRole && residentId) {
       unsubscribe = subscribeResidentPayments(residentId, (data) => {
-        setPayments(data);
+        clearTimeout(safetyTimer);
+        setPayments(data || []);
+        setLoading(false);
       });
     } else {
       unsubscribe = subscribePayments(selectedYear, (data) => {
-        setPayments(data);
+        clearTimeout(safetyTimer);
+        setPayments(data || []);
+        setLoading(false);
       });
     }
 
     return () => {
+      clearTimeout(safetyTimer);
       if (unsubscribe) unsubscribe();
     };
   }, [selectedYear, user, residentId]);
@@ -557,6 +567,7 @@ export function PaymentProvider({ children }) {
     <PaymentContext.Provider
       value={{
         payments,
+        loading,
         addPayment,
         reversePayment,
       }}
@@ -570,6 +581,7 @@ export function usePayments() {
   const ctx = useContext(PaymentContext);
   return ctx || {
     payments: [],
+    loading: false,
     addPayment: async () => {},
     reversePayment: async () => {},
   };

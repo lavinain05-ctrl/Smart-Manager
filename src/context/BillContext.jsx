@@ -27,7 +27,7 @@ const BillContext = createContext();
 
 export function BillProvider({ children }) {
   const [bills, setBills] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const { residents = [] } = useResidents();
   const { user } = useAuth();
@@ -48,23 +48,32 @@ export function BillProvider({ children }) {
   useEffect(() => {
     if (!user) {
       setBills([]);
+      setLoading(false);
       return;
     }
+
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
 
     const isResidentRole = user.role === "resident" || user.role === "family";
 
     let unsubscribe;
     if (isResidentRole && residentId) {
       unsubscribe = subscribeResidentBills(residentId, selectedYear, (data) => {
-        setBills(data);
+        clearTimeout(safetyTimer);
+        setBills(data || []);
+        setLoading(false);
       });
     } else {
       unsubscribe = subscribeBills(selectedYear, (data) => {
-        setBills(data);
+        clearTimeout(safetyTimer);
+        setBills(data || []);
+        setLoading(false);
       });
     }
 
     return () => {
+      clearTimeout(safetyTimer);
       if (unsubscribe) unsubscribe();
     };
   }, [selectedYear, user, residentId]);

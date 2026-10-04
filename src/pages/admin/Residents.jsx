@@ -25,6 +25,7 @@ import ResidentsTable from "../../components/residents/ResidentsTable";
 import ResidentDetailsModal from "../../components/residents/ResidentDetailsModal";
 import StatsCards from "../../components/residents/StatsCards";
 import MonthSelector from "../../components/common/MonthSelector";
+import { TableLoadingSkeleton, StatCardsSkeleton } from "../../components/common/TableLoadingSkeleton";
 import PendingDuesModal from "../../components/residents/PendingDuesModal";
 import PrintResidentsModal from "../../components/residents/PrintResidentsModal";
 import PaymentModal from "../../components/collections/PaymentModal";
@@ -53,6 +54,7 @@ import { terminateAllOtherSessions } from "../../services/sessionService";
 export default function Residents() {
   const {
     residents,
+    loading: residentsLoading,
     addResident,
     updateResident,
   } = useResidents();
@@ -615,12 +617,16 @@ export default function Residents() {
         {/* Month Selector */}
         <MonthSelector />
 
-        <StatsCards
-          residents={residents}
-          payments={currentMonthPayments}
-          gcMonthlyStats={gcMonthlyStats}
-          onOpenPendingModal={() => setShowPendingModal(true)}
-        />
+        {residentsLoading ? (
+          <StatCardsSkeleton count={4} className="grid grid-cols-2 md:grid-cols-4 gap-4" />
+        ) : (
+          <StatsCards
+            residents={residents}
+            payments={currentMonthPayments}
+            gcMonthlyStats={gcMonthlyStats}
+            onOpenPendingModal={() => setShowPendingModal(true)}
+          />
+        )}
 
         <SearchBar
           search={search}
@@ -632,17 +638,21 @@ export default function Residents() {
           addedByCommittee={addedByCommittee}
         />
 
-        <ResidentsTable
-          residents={filteredResidents}
-          payments={currentMonthPayments}
-          bills={currentMonthBills}
-          gcMonthlyStats={gcMonthlyStats}
-          onViewDetails={setViewingResident}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onResetPassword={handleOpenResetPassword}
-          onBlock={handleOpenBlock}
-        />
+        {residentsLoading ? (
+          <TableLoadingSkeleton cols={8} rows={6} message="Loading resident directory..." subMessage="Fetching registered members and flat allocations" />
+        ) : (
+          <ResidentsTable
+            residents={filteredResidents}
+            payments={currentMonthPayments}
+            bills={currentMonthBills}
+            gcMonthlyStats={gcMonthlyStats}
+            onViewDetails={setViewingResident}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onResetPassword={handleOpenResetPassword}
+            onBlock={handleOpenBlock}
+          />
+        )}
 
         {/* Complete Resident Details Modal */}
         {viewingResident && (

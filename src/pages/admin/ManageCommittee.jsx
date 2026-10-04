@@ -38,6 +38,7 @@ import toast from "react-hot-toast";
 import { useCommittee } from "../../context/CommitteeContext";
 import { useAuth } from "../../context/AuthContext";
 import { useBlockFlat } from "../../context/BlockFlatContext";
+import { TableLoadingSkeleton, StatCardsSkeleton } from "../../components/common/TableLoadingSkeleton";
 import { deleteUserAccount } from "../../services/accountDeletionService";
 import { normalizeMobile, mobileToAuthEmail, writeAuthLookup, isRealEmail } from "../../services/authService";
 import { adminResetPasswordFn, db, secondaryAuth } from "../../firebase/firebase";
@@ -138,6 +139,7 @@ export function getAdminMemberPhoto(member) {
 export default function ManageCommittee() {
   const {
     committee = [],
+    loading: committeeLoading,
     addCommitteeMember,
     updateCommitteeMember,
     removeCommitteeMember,
@@ -716,59 +718,63 @@ export default function ManageCommittee() {
       </div>
 
       {/* 2. Stats Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Total */}
-        <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-indigo-500 hover:shadow transition">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
-              <FaUsers className="text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-              <p className="text-xs font-medium text-gray-500">Committee Officials</p>
+      {committeeLoading ? (
+        <StatCardsSkeleton count={4} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Total */}
+          <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-indigo-500 hover:shadow transition">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+                <FaUsers className="text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                <p className="text-xs font-medium text-gray-500">Committee Officials</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Card 2: Executive Leadership */}
-        <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-purple-500 hover:shadow transition">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600">
-              <FaCrown className="text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.executiveCount}</p>
-              <p className="text-xs font-medium text-gray-500">Executive Officers</p>
+          {/* Card 2: Executive Leadership */}
+          <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-purple-500 hover:shadow transition">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600">
+                <FaCrown className="text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats.executiveCount}</p>
+                <p className="text-xs font-medium text-gray-500">Executive Officers</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Card 3: Active Logins */}
-        <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-emerald-500 hover:shadow transition">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
-              <FaCheckCircle className="text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.active}</p>
-              <p className="text-xs font-medium text-gray-500">Active Accounts</p>
+          {/* Card 3: Active Logins */}
+          <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-emerald-500 hover:shadow transition">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
+                <FaCheckCircle className="text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats.active}</p>
+                <p className="text-xs font-medium text-gray-500">Active Accounts</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Card 4: Suspended / Blocked */}
-        <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-amber-500 hover:shadow transition">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600">
-              <FaBan className="text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.blocked}</p>
-              <p className="text-xs font-medium text-gray-500">Suspended / Blocked</p>
+          {/* Card 4: Suspended / Blocked */}
+          <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-amber-500 hover:shadow transition">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600">
+                <FaBan className="text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats.blocked}</p>
+                <p className="text-xs font-medium text-gray-500">Suspended / Blocked</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 3. Search & Filter Bar */}
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100 space-y-3">
@@ -887,7 +893,9 @@ export default function ManageCommittee() {
       </div>
 
       {/* 4. Main Content: Empty State OR Grid/Table List */}
-      {filtered.length === 0 ? (
+      {committeeLoading ? (
+        <TableLoadingSkeleton cols={6} rows={5} message="Loading committee officers..." subMessage="Fetching executive committee appointments and roles" />
+      ) : filtered.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
           <div className="w-20 h-20 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center mx-auto mb-4 text-3xl">
             <FaUsers />

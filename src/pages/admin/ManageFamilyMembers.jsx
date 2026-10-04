@@ -45,6 +45,7 @@ import { terminateAllOtherSessions } from "../../services/sessionService";
 import { useResidents } from "../../context/ResidentContext";
 import { useBlockFlat } from "../../context/BlockFlatContext";
 import { useAuth } from "../../context/AuthContext";
+import { TableLoadingSkeleton, StatCardsSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 const RELATION_BADGES = {
   Spouse: "bg-pink-100 text-pink-700 border-pink-200",
@@ -492,59 +493,63 @@ export default function ManageFamilyMembers() {
       </div>
 
       {/* 2. Stats Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Total */}
-        <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-sky-500 hover:shadow transition">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 bg-sky-50 rounded-xl flex items-center justify-center text-sky-600">
-              <FaUsers className="text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-              <p className="text-xs font-medium text-gray-500">Total Family Members</p>
+      {loading ? (
+        <StatCardsSkeleton count={4} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Total */}
+          <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-sky-500 hover:shadow transition">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 bg-sky-50 rounded-xl flex items-center justify-center text-sky-600">
+                <FaUsers className="text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                <p className="text-xs font-medium text-gray-500">Total Family Members</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Card 2: Active */}
-        <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-emerald-500 hover:shadow transition">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
-              <FaUserCheck className="text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.active}</p>
-              <p className="text-xs font-medium text-gray-500">Active Portal Accounts</p>
+          {/* Card 2: Active */}
+          <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-emerald-500 hover:shadow transition">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
+                <FaUserCheck className="text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats.active}</p>
+                <p className="text-xs font-medium text-gray-500">Active Portal Accounts</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Card 3: Flats */}
-        <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-indigo-500 hover:shadow transition">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
-              <FaHome className="text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.flatsCovered}</p>
-              <p className="text-xs font-medium text-gray-500">Flats with Members</p>
+          {/* Card 3: Flats */}
+          <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-indigo-500 hover:shadow transition">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+                <FaHome className="text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats.flatsCovered}</p>
+                <p className="text-xs font-medium text-gray-500">Flats with Members</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Card 4: Suspended / Blocked */}
-        <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-amber-500 hover:shadow transition">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600">
-              <FaBan className="text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.blocked}</p>
-              <p className="text-xs font-medium text-gray-500">Suspended / Blocked</p>
+          {/* Card 4: Suspended / Blocked */}
+          <div className="bg-white rounded-2xl shadow-sm p-4.5 border border-slate-100 border-l-4 border-l-amber-500 hover:shadow transition">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600">
+                <FaBan className="text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats.blocked}</p>
+                <p className="text-xs font-medium text-gray-500">Suspended / Blocked</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 3. Search & Filter Bar */}
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100 space-y-3">
@@ -665,7 +670,9 @@ export default function ManageFamilyMembers() {
       </div>
 
       {/* 4. Main Content: Empty State OR Grid/Table List */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <TableLoadingSkeleton cols={6} rows={5} message="Loading family members..." subMessage="Fetching family logins and resident associations" />
+      ) : filtered.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
           <div className="w-20 h-20 rounded-full bg-sky-50 text-sky-500 flex items-center justify-center mx-auto mb-4 text-3xl">
             <FaUsers />

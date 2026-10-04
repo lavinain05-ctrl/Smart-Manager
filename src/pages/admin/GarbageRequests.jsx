@@ -10,7 +10,7 @@ import {
 import { useGarbage } from "../../context/GarbageContext";
 
 export default function GarbageRequests() {
-  const { garbageRequests, approveRequest, rejectRequest } = useGarbage();
+  const { garbageRequests, approveRequest, rejectRequest, loading } = useGarbage();
 
   const [statusFilter, setStatusFilter] = useState("pending");
   const [processingId, setProcessingId] = useState(null);
@@ -51,7 +51,7 @@ export default function GarbageRequests() {
             Garbage Requests
           </h1>
           <p className="text-gray-500 mt-1">
-            {pendingCount} pending request{pendingCount !== 1 ? "s" : ""}
+            {loading ? "Loading requests..." : `${pendingCount} pending request${pendingCount !== 1 ? "s" : ""}`}
           </p>
         </div>
 
@@ -72,86 +72,105 @@ export default function GarbageRequests() {
 
       {/* Requests */}
       <div className="space-y-4">
-        {filtered.map((req) => (
-          <div
-            key={req.id}
-            className="bg-white rounded-2xl shadow-sm p-6 hover:shadow-md transition"
-          >
-            <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <h3 className="font-bold text-lg">{req.residentName || "Resident"}</h3>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    req.requestType === "opt_in"
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-orange-100 text-orange-700"
-                  }`}>
-                    {req.requestType === "opt_in" ? "Opt-In" : "Opt-Out"}
-                  </span>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    req.status === "pending"
-                      ? "bg-yellow-100 text-yellow-700"
-                      : req.status === "approved"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-red-100 text-red-700"
-                  }`}>
-                    {req.status}
-                  </span>
+        {loading ? (
+          <div className="space-y-4 animate-pulse">
+            {[1, 2, 3].map((n) => (
+              <div
+                key={n}
+                className="bg-white rounded-2xl shadow-xs p-6 border border-slate-200 flex flex-col sm:flex-row justify-between items-start gap-4"
+              >
+                <div className="flex-1 space-y-3 w-full">
+                  <div className="flex items-center gap-3">
+                    <div className="h-6 w-36 bg-slate-200 rounded-md" />
+                    <div className="h-5 w-16 bg-slate-100 rounded-full" />
+                    <div className="h-5 w-20 bg-slate-100 rounded-full" />
+                  </div>
+                  <div className="h-4 w-44 bg-slate-100 rounded-md" />
+                  <div className="h-10 w-full bg-slate-50 rounded-lg" />
                 </div>
-
-                <p className="text-gray-600 text-sm">
-                  Flat: {req.flat || "—"} • Block: {req.block || "—"}
-                </p>
-
-                {req.reason && (
-                  <p className="text-gray-500 text-sm mt-2 bg-gray-50 rounded-lg p-3">
-                    {req.reason}
-                  </p>
-                )}
-
-                {req.processedBy && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    Processed by: {req.processedBy}
-                  </p>
-                )}
               </div>
-
-              {req.status === "pending" && (
-                <div className="flex gap-2 shrink-0">
-                  <button
-                    disabled={processingId === req.id}
-                    onClick={() => handleApprove(req.id)}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm transition disabled:opacity-50"
-                  >
-                    {processingId === req.id ? (
-                      <FaSpinner className="animate-spin" />
-                    ) : (
-                      <FaCheck />
-                    )}
-                    Approve
-                  </button>
-                  <button
-                    disabled={processingId === req.id}
-                    onClick={() => handleReject(req.id)}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium text-sm transition disabled:opacity-50"
-                  >
-                    {processingId === req.id ? (
-                      <FaSpinner className="animate-spin" />
-                    ) : (
-                      <FaTimes />
-                    )}
-                    Reject
-                  </button>
-                </div>
-              )}
-            </div>
+            ))}
           </div>
-        ))}
-
-        {filtered.length === 0 && (
+        ) : filtered.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-sm p-10 text-center text-gray-400">
             No requests found
           </div>
+        ) : (
+          filtered.map((req) => (
+            <div
+              key={req.id}
+              className="bg-white rounded-2xl shadow-sm p-6 hover:shadow-md transition"
+            >
+              <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="font-bold text-lg">{req.residentName || "Resident"}</h3>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      req.requestType === "opt_in"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-orange-100 text-orange-700"
+                    }`}>
+                      {req.requestType === "opt_in" ? "Opt-In" : "Opt-Out"}
+                    </span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      req.status === "pending"
+                        ? "bg-yellow-100 text-yellow-700"
+                        : req.status === "approved"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-red-100 text-red-700"
+                    }`}>
+                      {req.status}
+                    </span>
+                  </div>
+
+                  <p className="text-gray-600 text-sm">
+                    Flat: {req.flat || "—"} • Block: {req.block || "—"}
+                  </p>
+
+                  {req.reason && (
+                    <p className="text-gray-500 text-sm mt-2 bg-gray-50 rounded-lg p-3">
+                      {req.reason}
+                    </p>
+                  )}
+
+                  {req.processedBy && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      Processed by: {req.processedBy}
+                    </p>
+                  )}
+                </div>
+
+                {req.status === "pending" && (
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      disabled={processingId === req.id}
+                      onClick={() => handleApprove(req.id)}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm transition disabled:opacity-50"
+                    >
+                      {processingId === req.id ? (
+                        <FaSpinner className="animate-spin" />
+                      ) : (
+                        <FaCheck />
+                      )}
+                      Approve
+                    </button>
+                    <button
+                      disabled={processingId === req.id}
+                      onClick={() => handleReject(req.id)}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium text-sm transition disabled:opacity-50"
+                    >
+                      {processingId === req.id ? (
+                        <FaSpinner className="animate-spin" />
+                      ) : (
+                        <FaTimes />
+                      )}
+                      Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
         )}
       </div>
     </div>

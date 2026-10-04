@@ -24,6 +24,7 @@ import {
 import { useGarbage } from "../../context/GarbageContext";
 import { usePayments } from "../../context/PaymentContext";
 import { calcGarbageStats, getGarbageMonthlyStats } from "../../services/statisticsService";
+import { StatCardsSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
 
@@ -39,6 +40,7 @@ export default function GarbageDashboard() {
     garbageCollections,
     garbageLogs,
     residents,
+    loading,
     selectedMonth,
     selectedYear,
     setSelectedMonth,
@@ -157,20 +159,24 @@ export default function GarbageDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <div
-            key={stat.label}
-            className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition-shadow"
-          >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-3 ${stat.color}`}>
-              {stat.icon}
+      {loading ? (
+        <StatCardsSkeleton count={8} colsClass="grid grid-cols-2 md:grid-cols-4 gap-4" />
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {stats.map((stat) => (
+            <div
+              key={stat.label}
+              className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition-shadow"
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-3 ${stat.color}`}>
+                {stat.icon}
+              </div>
+              <p className="text-gray-500 text-sm">{stat.label}</p>
+              <h3 className="text-xl font-bold mt-1">{stat.value}</h3>
             </div>
-            <p className="text-gray-500 text-sm">{stat.label}</p>
-            <h3 className="text-xl font-bold mt-1">{stat.value}</h3>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Collection Progress */}
       <div className="bg-white rounded-2xl shadow-sm p-6">

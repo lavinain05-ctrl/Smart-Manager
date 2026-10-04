@@ -18,6 +18,7 @@ import {
 
 import { useAuth } from "../../context/AuthContext";
 import { subscribeDeletedAccounts } from "../../services/deletedAccountsService";
+import { TableLoadingSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 const roleColors = {
   resident: "bg-blue-100 text-blue-700",
@@ -48,6 +49,7 @@ function formatDate(timestamp) {
 
 export default function DeletedAccounts() {
   const [accounts, setAccounts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterRole, setFilterRole] = useState("all");
   const [filterType, setFilterType] = useState("all");
@@ -57,11 +59,21 @@ export default function DeletedAccounts() {
   useEffect(() => {
     if (!user || user.role !== "admin") {
       setAccounts([]);
+      setLoading(false);
       return;
     }
 
-    const unsubscribe = subscribeDeletedAccounts(setAccounts);
-    return () => unsubscribe();
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
+    const unsubscribe = subscribeDeletedAccounts((data) => {
+      clearTimeout(safetyTimer);
+      setAccounts(data || []);
+      setLoading(false);
+    });
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, [user]);
 
   const filtered = useMemo(() => {
@@ -171,7 +183,9 @@ export default function DeletedAccounts() {
       </div>
 
       {/* Account List */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <TableLoadingSkeleton cols={5} rows={4} message="Loading deleted accounts..." subMessage="Fetching archived and deactivated account records" />
+      ) : filtered.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm p-12 text-center">
           <FaUserSlash className="text-gray-300 text-5xl mx-auto mb-3" />
           <p className="text-gray-400 text-lg">No deleted accounts found</p>

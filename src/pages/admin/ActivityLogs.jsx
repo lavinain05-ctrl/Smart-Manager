@@ -41,6 +41,7 @@ import { useCollectors } from "../../context/CollectorContext";
 import { useResidents } from "../../context/ResidentContext";
 import { subscribeAllSpecialPayments } from "../../services/specialCollectionService";
 import toast from "react-hot-toast";
+import { StatCardsSkeleton, TableLoadingSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 function resolveDate(timestamp, clientTimestamp) {
   if (timestamp?.toDate) {
@@ -138,6 +139,7 @@ export default function ActivityLogs() {
   const [activeTab, setActiveTab] = useState("logins"); // "logins" | "updates" | "userWork"
   const [logs, setLogs] = useState([]);
   const [logins, setLogins] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [specialPayments, setSpecialPayments] = useState([]);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
@@ -166,16 +168,31 @@ export default function ActivityLogs() {
     if (!user || user.role !== "admin") {
       setLogs([]);
       setLogins([]);
+      setLoading(false);
       return;
     }
 
-    const unsubLogs = subscribeActivityLogs(setLogs, 300);
-    const unsubLogins = subscribeLoginHistory(setLogins, 300);
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
+
+    const unsubLogs = subscribeActivityLogs((data) => {
+      clearTimeout(safetyTimer);
+      setLogs(data || []);
+      setLoading(false);
+    }, 300);
+
+    const unsubLogins = subscribeLoginHistory((data) => {
+      clearTimeout(safetyTimer);
+      setLogins(data || []);
+      setLoading(false);
+    }, 300);
+
     const unsubSpecial = subscribeAllSpecialPayments((list) => {
       setSpecialPayments(list || []);
     });
 
     return () => {
+      clearTimeout(safetyTimer);
       unsubLogs();
       unsubLogins();
       unsubSpecial();
@@ -750,97 +767,101 @@ export default function ActivityLogs() {
       </div>
 
       {/* Top Stats Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Logins Today */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Logins Today
-              </p>
-              <h3 className="text-2xl font-bold text-slate-800 mt-1">
-                {metrics.totalLoginsToday}
-              </h3>
-              <div className="flex items-center gap-1.5 mt-2 flex-wrap text-[11px]">
-                <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">
-                  {metrics.adminLogins} Admin
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">
-                  {metrics.collectorLogins} Collector
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium">
-                  {metrics.residentLogins} Resident
-                </span>
+      {loading ? (
+        <StatCardsSkeleton count={4} />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Logins Today */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Logins Today
+                </p>
+                <h3 className="text-2xl font-bold text-slate-800 mt-1">
+                  {metrics.totalLoginsToday}
+                </h3>
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap text-[11px]">
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">
+                    {metrics.adminLogins} Admin
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">
+                    {metrics.collectorLogins} Collector
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium">
+                    {metrics.residentLogins} Resident
+                  </span>
+                </div>
+              </div>
+              <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 text-xl shrink-0">
+                <FaSignInAlt />
               </div>
             </div>
-            <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 text-xl shrink-0">
-              <FaSignInAlt />
-            </div>
           </div>
-        </div>
 
-        {/* Updates & Actions Logged */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Total Updates & Actions
-              </p>
-              <h3 className="text-2xl font-bold text-slate-800 mt-1">
-                {metrics.totalUpdates}
-              </h3>
-              <p className="text-xs text-gray-400 mt-2">
-                Operations audited in society
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 text-xl shrink-0">
-              <FaHistory />
+          {/* Updates & Actions Logged */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Total Updates & Actions
+                </p>
+                <h3 className="text-2xl font-bold text-slate-800 mt-1">
+                  {metrics.totalUpdates}
+                </h3>
+                <p className="text-xs text-gray-400 mt-2">
+                  Operations audited in society
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 text-xl shrink-0">
+                <FaHistory />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Active Staff & Users */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Active People Today
-              </p>
-              <h3 className="text-2xl font-bold text-slate-800 mt-1">
-                {metrics.activeUsersToday}
-              </h3>
-              <p className="text-xs text-gray-400 mt-2">
-                Staff & residents active
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 text-xl shrink-0">
-              <FaUserTie />
+          {/* Active Staff & Users */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Active People Today
+                </p>
+                <h3 className="text-2xl font-bold text-slate-800 mt-1">
+                  {metrics.activeUsersToday}
+                </h3>
+                <p className="text-xs text-gray-400 mt-2">
+                  Staff & residents active
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 text-xl shrink-0">
+                <FaUserTie />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Security / Failed Attempts */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Failed Attempts / Security
-              </p>
-              <h3 className={`text-2xl font-bold mt-1 ${metrics.failedLogins > 0 ? "text-amber-600" : "text-emerald-600"}`}>
-                {metrics.failedLogins}
-              </h3>
-              <p className="text-xs text-gray-400 mt-2">
-                {metrics.failedLogins === 0 ? "✅ No security anomalies" : "⚠️ Flagged login attempts"}
-              </p>
-            </div>
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0 ${
-              metrics.failedLogins > 0 ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"
-            }`}>
-              <FaShieldAlt />
+          {/* Security / Failed Attempts */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Failed Attempts / Security
+                </p>
+                <h3 className={`text-2xl font-bold mt-1 ${metrics.failedLogins > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                  {metrics.failedLogins}
+                </h3>
+                <p className="text-xs text-gray-400 mt-2">
+                  {metrics.failedLogins === 0 ? "✅ No security anomalies" : "⚠️ Flagged login attempts"}
+                </p>
+              </div>
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0 ${
+                metrics.failedLogins > 0 ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"
+              }`}>
+                <FaShieldAlt />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Tabs Navigation */}
       <div className="flex items-center gap-3 border-b border-gray-200 pb-2">
@@ -958,7 +979,9 @@ export default function ActivityLogs() {
       {/* ========================================================= */}
       {activeTab === "logins" && (
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-100">
-          {filteredLogins.length === 0 ? (
+          {loading ? (
+            <TableLoadingSkeleton columns={7} rows={6} />
+          ) : filteredLogins.length === 0 ? (
             <div className="p-16 text-center text-gray-500">
               <FaSignInAlt className="text-6xl text-gray-200 mx-auto mb-4" />
               <h3 className="text-lg font-bold text-gray-700">No Login Sessions Found</h3>
@@ -1127,7 +1150,9 @@ export default function ActivityLogs() {
       {/* ========================================================= */}
       {activeTab === "updates" && (
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-100">
-          {filteredUpdates.length === 0 ? (
+          {loading ? (
+            <TableLoadingSkeleton columns={4} rows={6} />
+          ) : filteredUpdates.length === 0 ? (
             <div className="p-16 text-center text-gray-500">
               <FaHistory className="text-6xl text-gray-200 mx-auto mb-4" />
               <h3 className="text-lg font-bold text-gray-700">No Activity Logs Found</h3>
@@ -1195,7 +1220,9 @@ export default function ActivityLogs() {
       {/* ========================================================= */}
       {activeTab === "userWork" && (
         <div className="space-y-4">
-          {userWorkSummary.length === 0 ? (
+          {loading ? (
+            <StatCardsSkeleton count={6} />
+          ) : userWorkSummary.length === 0 ? (
             <div className="bg-white rounded-2xl p-16 text-center text-gray-500 border border-slate-100">
               <FaUserTie className="text-6xl text-gray-200 mx-auto mb-4" />
               <h3 className="text-lg font-bold text-gray-700">No User Work Records Found</h3>

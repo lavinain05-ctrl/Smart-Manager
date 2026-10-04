@@ -25,6 +25,7 @@ import toast from "react-hot-toast";
 import { useEvents } from "../../context/EventContext";
 import { useAuth } from "../../context/AuthContext";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
+import { StatCardsSkeleton, CardGridSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 const CATEGORIES = [
   "Meeting",
@@ -103,7 +104,7 @@ function getWhatsAppText(event) {
 
 export default function Events() {
   // Admin uses allEvents to see everything
-  const { allEvents: events, addEvent, updateEvent, deleteEvent } = useEvents();
+  const { allEvents: events, addEvent, updateEvent, deleteEvent, loading: eventsLoading } = useEvents();
   const { user } = useAuth();
 
   const [showForm, setShowForm] = useState(false);
@@ -268,41 +269,45 @@ export default function Events() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-emerald-500">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-              <FaCalendarAlt className="text-emerald-600 text-xl" />
+      {eventsLoading ? (
+        <StatCardsSkeleton count={3} />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-emerald-500">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <FaCalendarAlt className="text-emerald-600 text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{upcoming}</p>
+                <p className="text-sm text-gray-500">Upcoming Events</p>
+              </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold">{upcoming}</p>
-              <p className="text-sm text-gray-500">Upcoming Events</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-gray-400">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
+                <FaClock className="text-gray-500 text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{past}</p>
+                <p className="text-sm text-gray-500">Past Events</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-blue-500">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <FaUsers className="text-blue-600 text-xl" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{totalRegistrations}</p>
+                <p className="text-sm text-gray-500">Total Registrations</p>
+              </div>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-gray-400">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
-              <FaClock className="text-gray-500 text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{past}</p>
-              <p className="text-sm text-gray-500">Past Events</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-blue-500">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <FaUsers className="text-blue-600 text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{totalRegistrations}</p>
-              <p className="text-sm text-gray-500">Total Registrations</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Search & Filters */}
       <div className="bg-white rounded-2xl shadow-sm p-4">
@@ -345,7 +350,9 @@ export default function Events() {
       </div>
 
       {/* Event List */}
-      {filteredEvents.length === 0 ? (
+      {eventsLoading ? (
+        <CardGridSkeleton count={4} colsClass="grid grid-cols-1 lg:grid-cols-2 gap-4" />
+      ) : filteredEvents.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm p-16 text-center text-gray-500">
           <FaCalendarAlt className="text-6xl text-gray-300 mx-auto mb-4" />
           <h2 className="text-xl font-semibold">No Events Found</h2>

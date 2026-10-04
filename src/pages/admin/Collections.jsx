@@ -17,7 +17,7 @@ import { formatResidentFloor } from "../../services/propertyService";
 import MonthSelector from "../../components/common/MonthSelector";
 
 export default function Collections() {
-  const { residents } = useResidents();
+  const { residents, loading: residentsLoading } = useResidents();
 
   const { payments, addPayment } = usePayments();
 
@@ -177,85 +177,107 @@ export default function Collections() {
         </div>
 
         <div className="grid gap-5">
+          {residentsLoading ? (
+            <div className="space-y-4 animate-pulse">
+              {[1, 2, 3, 4].map((n) => (
+                <div
+                  key={n}
+                  className="bg-white rounded-2xl shadow-sm p-6 flex flex-col lg:flex-row justify-between items-center gap-5 border border-slate-100"
+                >
+                  <div className="space-y-2 w-full max-w-xs">
+                    <div className="h-6 w-24 bg-slate-200 rounded-md" />
+                    <div className="h-4 w-40 bg-slate-100 rounded-md" />
+                  </div>
+                  <div className="h-6 w-16 bg-slate-200 rounded-md" />
+                  <div className="h-8 w-24 bg-slate-100 rounded-full" />
+                  <div className="h-10 w-28 bg-slate-200 rounded-xl" />
+                </div>
+              ))}
+            </div>
+          ) : filteredResidents.length === 0 ? (
+            <div className="bg-white rounded-2xl shadow-sm p-12 text-center text-gray-500">
+              No matching records found.
+            </div>
+          ) : (
+            filteredResidents.map((resident) => {
+              const isParticipating = isGcParticipating(resident);
+              const paid = isPaid(resident.id);
 
-          {filteredResidents.map((resident) => {
-            const isParticipating = isGcParticipating(resident);
-            const paid = isPaid(resident.id);
-
-            return (
-              <div
-                key={resident.id}
-                className="bg-white rounded-2xl shadow-sm p-6 flex flex-col lg:flex-row justify-between items-center gap-5"
-              >
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h2 className="font-bold text-xl">{resident.flat}</h2>
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/70">
-                      {formatResidentFloor(resident.floor) || "Ground Floor"}
-                    </span>
-                    {!isParticipating && (
-                      <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-gray-100 text-gray-500">
-                        Not Enrolled
+              return (
+                <div
+                  key={resident.id}
+                  className="bg-white rounded-2xl shadow-sm p-6 flex flex-col lg:flex-row justify-between items-center gap-5"
+                >
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <h2 className="font-bold text-xl">{resident.flat}</h2>
+                      <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/70">
+                        {formatResidentFloor(resident.floor) || "Ground Floor"}
                       </span>
+                      {!isParticipating && (
+                        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-gray-100 text-gray-500">
+                          Not Enrolled
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-gray-500">{resident.owner}</p>
+                    {resident.mobile && (
+                      <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5 font-mono">
+                        <FaPhone className="text-[10px] text-gray-400" />
+                        {resident.mobile}
+                      </p>
                     )}
                   </div>
-                  <p className="text-gray-500">{resident.owner}</p>
-                  {resident.mobile && (
-                    <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5 font-mono">
-                      <FaPhone className="text-[10px] text-gray-400" />
-                      {resident.mobile}
-                    </p>
+
+                  <div className="font-bold text-lg">
+                    ₹{isParticipating ? (resident.charge || 0) : 0}
+                  </div>
+
+                  {isParticipating ? (
+                    <span
+                      className={`px-4 py-2 rounded-full text-sm font-semibold ${
+                        paid
+                          ? "bg-green-100 text-green-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {paid ? "Paid" : "Pending"}
+                    </span>
+                  ) : (
+                    <span className="px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-500">
+                      Not Participating
+                    </span>
+                  )}
+
+                  {isParticipating ? (
+                    <button
+                      disabled={paid}
+                      onClick={() => {
+                        setSelectedResident(resident);
+                        setOpenModal(true);
+                      }}
+                      className={`px-5 py-3 rounded-xl text-white flex items-center gap-2 text-sm font-semibold ${
+                        paid
+                          ? "bg-gray-400"
+                          : "bg-emerald-600 hover:bg-emerald-700"
+                      }`}
+                    >
+                      <FaMoneyBillWave />
+                      {paid ? "Collected" : "Collect"}
+                    </button>
+                  ) : (
+                    <button
+                      disabled
+                      className="px-5 py-3 rounded-xl text-gray-400 bg-gray-100 flex items-center gap-2 cursor-not-allowed text-sm font-medium border"
+                    >
+                      <FaBan className="text-gray-400" />
+                      Not Enrolled
+                    </button>
                   )}
                 </div>
-
-                <div className="font-bold text-lg">
-                  ₹{isParticipating ? (resident.charge || 0) : 0}
-                </div>
-
-                {isParticipating ? (
-                  <span
-                    className={`px-4 py-2 rounded-full text-sm font-semibold ${
-                      paid
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700"
-                    }`}
-                  >
-                    {paid ? "Paid" : "Pending"}
-                  </span>
-                ) : (
-                  <span className="px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-500">
-                    Not Participating
-                  </span>
-                )}
-
-                {isParticipating ? (
-                  <button
-                    disabled={paid}
-                    onClick={() => {
-                      setSelectedResident(resident);
-                      setOpenModal(true);
-                    }}
-                    className={`px-5 py-3 rounded-xl text-white flex items-center gap-2 text-sm font-semibold ${
-                      paid
-                        ? "bg-gray-400"
-                        : "bg-emerald-600 hover:bg-emerald-700"
-                    }`}
-                  >
-                    <FaMoneyBillWave />
-                    {paid ? "Collected" : "Collect"}
-                  </button>
-                ) : (
-                  <button
-                    disabled
-                    className="px-5 py-3 rounded-xl text-gray-400 bg-gray-100 flex items-center gap-2 cursor-not-allowed text-sm font-medium border"
-                  >
-                    <FaBan className="text-gray-400" />
-                    Not Enrolled
-                  </button>
-                )}
-              </div>
-            );
-          })}
+              );
+            })
+          )}
 
         </div>
 

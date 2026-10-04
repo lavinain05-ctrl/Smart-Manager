@@ -51,7 +51,7 @@ const STATUS_OPTIONS = [
 ];
 
 export default function Activities() {
-  const { activities, addActivity, updateActivity, deleteActivity } = useActivities();
+  const { activities, addActivity, updateActivity, deleteActivity, loading: activitiesLoading } = useActivities();
 
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("All");
@@ -210,7 +210,21 @@ export default function Activities() {
       </div>
 
       {/* Activities List */}
-      {filtered.length === 0 ? (
+      {activitiesLoading ? (
+        <div className="space-y-4 animate-pulse">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="rounded-2xl p-5 border border-slate-200 bg-white shadow-xs space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 bg-slate-200 rounded-full" />
+                <div className="h-5 w-24 bg-slate-100 rounded-full" />
+                <div className="h-5 w-16 bg-slate-100 rounded-full" />
+              </div>
+              <div className="h-6 w-1/2 bg-slate-200 rounded-md" />
+              <div className="h-4 w-3/4 bg-slate-100 rounded-md" />
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm p-16 text-center text-gray-500">
           <FaCalendarAlt className="text-6xl text-gray-300 mx-auto mb-4" />
           <h2 className="text-xl font-semibold">{activities.length === 0 ? "No Activities Yet" : "No Results"}</h2>

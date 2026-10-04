@@ -22,6 +22,7 @@ import { useComplaints } from "../../context/ComplaintContext";
 import { useAuth } from "../../context/AuthContext";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { subscribeSettings, saveSettings } from "../../services/settingsService";
+import { TableLoadingSkeleton, StatCardsSkeleton } from "../../components/common/TableLoadingSkeleton";
 
 const CATEGORIES = [
   "Garbage",
@@ -95,7 +96,7 @@ function getResolutionTime(createdAt, resolvedAt) {
 }
 
 export default function Complaints() {
-  const { complaints, updateComplaintStatus, addComment, deleteComplaint } =
+  const { complaints, loading: complaintsLoading, updateComplaintStatus, addComment, deleteComplaint } =
     useComplaints();
   const { user } = useAuth();
 
@@ -282,28 +283,32 @@ export default function Complaints() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-emerald-500">
-          <p className="text-2xl font-bold">{total}</p>
-          <p className="text-sm text-gray-500">Total</p>
+      {complaintsLoading ? (
+        <StatCardsSkeleton count={5} className="grid grid-cols-2 lg:grid-cols-5 gap-4" />
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-emerald-500">
+            <p className="text-2xl font-bold">{total}</p>
+            <p className="text-sm text-gray-500">Total</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-yellow-500">
+            <p className="text-2xl font-bold">{pending}</p>
+            <p className="text-sm text-gray-500">Pending</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-blue-500">
+            <p className="text-2xl font-bold">{inProgress}</p>
+            <p className="text-sm text-gray-500">In Progress</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-green-500">
+            <p className="text-2xl font-bold">{resolved}</p>
+            <p className="text-sm text-gray-500">Resolved</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-purple-500 col-span-2 lg:col-span-1">
+            <p className="text-2xl font-bold">{avgResolutionTime}</p>
+            <p className="text-sm text-gray-500">Avg. Resolution</p>
+          </div>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-yellow-500">
-          <p className="text-2xl font-bold">{pending}</p>
-          <p className="text-sm text-gray-500">Pending</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-blue-500">
-          <p className="text-2xl font-bold">{inProgress}</p>
-          <p className="text-sm text-gray-500">In Progress</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-green-500">
-          <p className="text-2xl font-bold">{resolved}</p>
-          <p className="text-sm text-gray-500">Resolved</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-purple-500 col-span-2 lg:col-span-1">
-          <p className="text-2xl font-bold">{avgResolutionTime}</p>
-          <p className="text-sm text-gray-500">Avg. Resolution</p>
-        </div>
-      </div>
+      )}
 
       {/* Search & Filters */}
       <div className="bg-white rounded-2xl shadow-sm p-4">
@@ -360,7 +365,9 @@ export default function Complaints() {
       </div>
 
       {/* Complaint List */}
-      {filteredComplaints.length === 0 ? (
+      {complaintsLoading ? (
+        <TableLoadingSkeleton cols={6} rows={5} message="Loading complaints..." subMessage="Fetching resident support tickets and grievances" />
+      ) : filteredComplaints.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm p-16 text-center text-gray-500">
           <FaExclamationCircle className="text-6xl text-gray-300 mx-auto mb-4" />
           <h2 className="text-xl font-semibold">No Complaints Found</h2>

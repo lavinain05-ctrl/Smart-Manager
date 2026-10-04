@@ -24,18 +24,28 @@ const CommitteeContext = createContext();
 
 export function CommitteeProvider({ children }) {
   const [committee, setCommittee] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
     if (!user) {
       setCommittee([]);
+      setLoading(false);
       return;
     }
 
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
     const unsubscribe = subscribeCommittee((data) => {
-      setCommittee(data);
+      clearTimeout(safetyTimer);
+      setCommittee(data || []);
+      setLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, [user?.uid]);
 
   async function addCommitteeMember(data) {
@@ -128,6 +138,7 @@ export function CommitteeProvider({ children }) {
     <CommitteeContext.Provider
       value={{
         committee,
+        loading,
         addCommitteeMember,
         updateCommitteeMember,
         removeCommitteeMember,
@@ -146,6 +157,7 @@ export function useCommittee() {
   const ctx = useContext(CommitteeContext);
   return ctx || {
     committee: [],
+    loading: false,
     addCommitteeMember: async () => null,
     updateCommitteeMember: async () => false,
     removeCommitteeMember: async () => false,

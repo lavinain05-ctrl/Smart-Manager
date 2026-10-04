@@ -22,17 +22,28 @@ const ActivityContext = createContext();
 
 export function ActivityProvider({ children }) {
   const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const { residents } = useResidents();
 
   useEffect(() => {
     if (!user) {
       setActivities([]);
+      setLoading(false);
       return;
     }
 
-    const unsubscribe = subscribeActivities(setActivities);
-    return () => unsubscribe();
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
+    const unsubscribe = subscribeActivities((data) => {
+      clearTimeout(safetyTimer);
+      setActivities(data || []);
+      setLoading(false);
+    });
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, [user?.uid]);
 
   async function addActivity(data) {
@@ -90,6 +101,7 @@ export function ActivityProvider({ children }) {
     <ActivityContext.Provider
       value={{
         activities,
+        loading,
         addActivity,
         updateActivity,
         deleteActivity,
@@ -101,5 +113,12 @@ export function ActivityProvider({ children }) {
 }
 
 export function useActivities() {
-  return useContext(ActivityContext);
+  const ctx = useContext(ActivityContext);
+  return ctx || {
+    activities: [],
+    loading: false,
+    addActivity: async () => false,
+    updateActivity: async () => false,
+    deleteActivity: async () => {},
+  };
 }

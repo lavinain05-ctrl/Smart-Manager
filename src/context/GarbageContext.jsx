@@ -104,7 +104,7 @@ export function GarbageProvider({ children }) {
   });
   const [garbageRequests, setGarbageRequests] = useState([]);
   const [garbageLogs, setGarbageLogs] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Billing period selector
   const now = new Date();
@@ -242,18 +242,34 @@ export function GarbageProvider({ children }) {
       setGarbageRoutes([]);
       setGarbageRequests([]);
       setGarbageLogs([]);
+      setLoading(false);
       return;
     }
+
+    setLoading(true);
+    const safetyTimer = setTimeout(() => setLoading(false), 2000);
 
     const isResidentRole = user.role === "resident" || user.role === "family";
     const residentId = user.residentId || user.parentResidentId || user.uid;
 
     const unsubs = [];
     if (isResidentRole && residentId) {
-      unsubs.push(subscribeResidentGarbageAccounts(residentId, setGarbageAccounts));
+      unsubs.push(
+        subscribeResidentGarbageAccounts(residentId, (data) => {
+          clearTimeout(safetyTimer);
+          setGarbageAccounts(data);
+          setLoading(false);
+        })
+      );
       unsubs.push(subscribeGarbageSettings(setGarbageSettings));
     } else {
-      unsubs.push(subscribeGarbageAccounts(setGarbageAccounts));
+      unsubs.push(
+        subscribeGarbageAccounts((data) => {
+          clearTimeout(safetyTimer);
+          setGarbageAccounts(data);
+          setLoading(false);
+        })
+      );
       unsubs.push(subscribeGarbageCollections(setGarbageCollections));
       unsubs.push(subscribeGarbageSettings(setGarbageSettings));
       unsubs.push(subscribeGarbageRequests(setGarbageRequests));
@@ -266,7 +282,10 @@ export function GarbageProvider({ children }) {
       unsubs.push(subscribeGarbageLogs(setGarbageLogs, 200));
     }
 
-    return () => unsubs.forEach((fn) => fn());
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubs.forEach((fn) => fn());
+    };
   }, [user?.uid, user?.role, user?.residentId, user?.parentResidentId]);
 
   // Bills subscription scoped by year (and scoped by residentId if resident)

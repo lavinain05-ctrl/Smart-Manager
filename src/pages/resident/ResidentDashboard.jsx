@@ -628,7 +628,7 @@ export default function ResidentDashboard() {
       {/* ═══════════ Scenic Society Hero Banner (Matching User Reference) ═══════════ */}
       <div className="relative group overflow-hidden rounded-3xl shadow-xl border border-slate-200/60 dark:border-slate-800 bg-slate-900 transition-all duration-300">
         {/* Background Image Container with subtle hover zoom & live environmental effects */}
-        <div className="relative min-h-[250px] sm:min-h-[280px] md:h-80 w-full overflow-hidden flex flex-col justify-between">
+        <div className="relative min-h-[320px] sm:min-h-[340px] md:min-h-[360px] w-full overflow-hidden flex flex-col justify-between">
           <SocietyHeroBackground weather={weather} />
 
           {/* Top Floating Society Badge & Verified Status */}
@@ -649,7 +649,7 @@ export default function ResidentDashboard() {
           </div>
 
           {/* Center / Bottom Content: Left Greeting + Right Weather/Date Widget */}
-          <div className="relative p-5 sm:p-7 md:p-8 z-10 flex flex-col md:flex-row items-start md:items-end justify-between gap-4 sm:gap-6">
+          <div className="relative mt-auto p-5 sm:p-7 md:p-8 z-10 flex flex-col md:flex-row items-start md:items-end justify-between gap-4 sm:gap-6">
             {/* Left: Good Morning, Rahul Sharma 👋 */}
             <div className="space-y-1 sm:space-y-1.5 max-w-xl">
               <p className="text-base sm:text-lg md:text-xl font-medium text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]">

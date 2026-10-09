@@ -20,6 +20,18 @@ export const DEFAULT_HELPDESK_CONFIG = {
 export const DEFAULT_SUPPORT_FAQS = [
   // ─── GARBAGE COLLECTION ───
   {
+    id: "gc-how-to-pay",
+    category: "garbage",
+    question: "How do I pay my monthly garbage collection fee?",
+    answer:
+      "Garbage collection fees are collected directly at your doorstep by your RWA-assigned collector at the end of each completed month. The collector will visit your home, collect the fee (cash or UPI), instantly update your payment record in the society system, and provide an official receipt for your home. Please always collect your receipt as confirmation of payment.",
+    badge: "Doorstep Payment",
+    tips: "Always collect your official payment receipt from the collector. Once updated, your payment status will immediately show 'Payment Confirmed' on your resident dashboard.",
+    actionLink: "/resident/bills",
+    actionText: "View My Bills",
+    active: true,
+  },
+  {
     id: "gc-1",
     category: "garbage",
     question: "What is the Society Door-to-Door Garbage Collection service?",
@@ -137,6 +149,18 @@ export const DEFAULT_SUPPORT_FAQS = [
   },
 
   // ─── BILLING & RECEIPTS ───
+  {
+    id: "bill-how-to-pay",
+    category: "billing",
+    question: "Who collects the garbage fee and how do I receive confirmation?",
+    answer:
+      "Your monthly garbage collection fee is collected in person by your RWA-assigned collector who visits your doorstep after the month ends. The collector will update your payment in the society system on the spot and hand you an official payment receipt for your home. Please ensure you always collect your receipt as payment confirmation.",
+    badge: "Payment Confirmation",
+    tips: "You can view and download all your past payment receipts anytime under the 'Receipts' tab in your resident portal.",
+    actionLink: "/resident/receipts",
+    actionText: "View Receipts",
+    active: true,
+  },
   {
     id: "bill-1",
     category: "billing",
@@ -282,7 +306,12 @@ export function subscribeSupportFaqs(callback) {
     faqsDocRef,
     (snapshot) => {
       if (snapshot.exists() && Array.isArray(snapshot.data().faqs)) {
-        callback(snapshot.data().faqs);
+        const dbFaqs = snapshot.data().faqs;
+        // Ensure new core FAQs (e.g. gc-how-to-pay, bill-how-to-pay) are always available
+        const missingCore = DEFAULT_SUPPORT_FAQS.filter(
+          (def) => !dbFaqs.some((f) => f.id === def.id)
+        );
+        callback([...missingCore, ...dbFaqs]);
       } else {
         callback(DEFAULT_SUPPORT_FAQS);
       }

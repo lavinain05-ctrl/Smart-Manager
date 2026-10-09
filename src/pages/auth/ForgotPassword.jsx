@@ -30,14 +30,19 @@ import {
   sendPasswordResetEmail,
   confirmPasswordReset,
   verifyPasswordResetCode,
+  createUserWithEmailAndPassword,
+  signOut,
 } from "firebase/auth";
-import { auth, db } from "../../firebase/firebase";
+import { auth, db, secondaryAuth } from "../../firebase/firebase";
 
 import {
   collection,
   query,
   orderBy,
   getDocs,
+  getDoc,
+  setDoc,
+  doc,
   where,
 } from "firebase/firestore";
 
@@ -45,7 +50,7 @@ import {
   submitRecoveryRequest,
   RECOVERY_REQUEST_TYPES,
 } from "../../services/recoveryService";
-import { AVAILABLE_FLOORS } from "../../services/propertyService";
+import { AVAILABLE_FLOORS, generateFlatId, cleanUnitNumber } from "../../services/propertyService";
 
 import { createNotification } from "../../services/notificationService";
 import {
@@ -266,12 +271,16 @@ export default function ForgotPassword() {
     if (e) e.preventDefault();
     const raw = (residentIdentifier || "").trim();
     if (!raw) {
-      toast.error("Please enter your registered email address.");
+      toast.error("Please enter your registered email address or 10-digit mobile number.");
       return;
     }
 
-    if (!raw.includes("@") || !raw.includes(".")) {
-      toast.error("Please enter a valid email address (e.g. name@gmail.com).");
+    const cleanMobile = normalizeMobile(raw);
+    const isMobile = cleanMobile.length === 10;
+    const isEmail = raw.includes("@");
+
+    if (!isEmail && !isMobile) {
+      toast.error("Please enter a valid registered email address (e.g. name@gmail.com) or 10-digit mobile number.");
       return;
     }
 
@@ -279,20 +288,51 @@ export default function ForgotPassword() {
     setResidentNoEmailWarning(null);
 
     try {
-      const corrected = correctEmailTypo(raw);
-      const targetEmail = corrected.email.toLowerCase();
+      // 1. Verify existence in registered accounts
+      const result = await findPersonalEmailForIdentifier(raw);
 
-      if (corrected.wasCorrected) {
-        toast(`Autocorrected typo: "${corrected.original}" → "${targetEmail}"`, {
+      // Account NOT found in any registered account!
+      if (!result || !result.found) {
+        setResidentNoEmailWarning({
+          email: raw,
+          message: result?.error || `No registered account found matching "${raw}". If you don't have an email registered, please use "Request Admin Permission".`,
+        });
+        toast.error(result?.error || "No registered account found matching this email address.");
+        return;
+      }
+
+      // If mobile was entered and matched, but no email is linked
+      if (result.hasNoEmail || !result.email) {
+        setResidentNoEmailWarning({
+          email: raw,
+          message: result?.error || `Your account (Mobile: ${result.mobile || raw}) does not have a registered email address on file. Please use "Request Admin Permission" below to reset your password.`,
+        });
+        toast.error("No registered email linked to this account. Use Request Admin Permission.");
+        return;
+      }
+
+      const targetEmail = result.email.toLowerCase();
+
+      if (result.wasCorrected) {
+        toast(`Autocorrected typo: "${result.correctedFrom}" → "${targetEmail}"`, {
           icon: "ℹ️",
           duration: 4500,
         });
       }
 
-      // Look up resident account info for personalized confirmation
-      const result = await findPersonalEmailForIdentifier(targetEmail);
+      // 2. Ensure targetEmail is provisioned in Firebase Auth so Google sends the actual reset email
+      try {
+        const randomTemp = "RwaRst@" + Math.random().toString(36).slice(-8) + "!9";
+        await createUserWithEmailAndPassword(secondaryAuth, targetEmail, randomTemp);
+        await signOut(secondaryAuth);
+      } catch (provErr) {
+        // auth/email-already-in-use means the account is already present in Firebase Auth
+        if (provErr.code !== "auth/email-already-in-use") {
+          console.warn("[ForgotPassword] Secondary provision note:", provErr.code);
+        }
+      }
 
-      // Send password reset email via Firebase Auth
+      // 3. Send password reset email via Firebase Auth
       await sendPasswordResetEmail(auth, targetEmail);
 
       setResidentSentToEmail(targetEmail);
@@ -300,7 +340,7 @@ export default function ForgotPassword() {
         flat: result?.flat || "",
         name: result?.name || "",
         mobile: result?.mobile || "",
-        matchedBy: "email",
+        matchedBy: result?.matchedBy || "email",
       });
       setResidentEmailSent(true);
       setResidentResendCooldown(45);
@@ -397,6 +437,36 @@ export default function ForgotPassword() {
 
       await confirmPasswordReset(auth, code, newPassword);
 
+      // Link newly reset auth credentials into authLookup for seamless mobile sign-in
+      if (resetEmail) {
+        try {
+          const cleanReset = resetEmail.toLowerCase().trim();
+          const safeKey = `email_${cleanReset.replace(/\//g, "_")}`;
+          let mob = "";
+          const emailDoc = await getDoc(doc(db, "authLookup", safeKey));
+          if (emailDoc.exists() && emailDoc.data().mobile) {
+            mob = emailDoc.data().mobile;
+          } else {
+            const q = query(
+              collection(db, "authLookup"),
+              where("personalEmail", "==", cleanReset)
+            );
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+              const mobileDoc = snap.docs.find((d) => /^\d{10}$/.test(d.id)) || snap.docs[0];
+              mob = mobileDoc.data().mobile || (/^\d{10}$/.test(mobileDoc.id) ? mobileDoc.id : "");
+            }
+          }
+
+          if (mob) {
+            await setDoc(doc(db, "authLookup", mob), { email: cleanReset }, { merge: true });
+            await setDoc(doc(db, "authLookup", safeKey), { mobile: mob, email: cleanReset, personalEmail: cleanReset }, { merge: true });
+          }
+        } catch (linkErr) {
+          console.warn("[ForgotPassword] authLookup link error:", linkErr.message);
+        }
+      }
+
       // Invalidate active sessions on other devices for security
       try {
         if (resetEmail && isExactAdminEmail(resetEmail)) {
@@ -477,9 +547,12 @@ export default function ForgotPassword() {
     try {
       setLoading(true);
 
-      const computedFlat = unitNumber.trim()
-        ? `${resolvedPlot}-${unitNumber.trim()}`
-        : resolvedPlot;
+      const cleanedUnit = cleanUnitNumber(unitNumber.trim(), resolvedPlot);
+      const computedFlat = generateFlatId({
+        plotNumber: resolvedPlot,
+        floor: floor.trim(),
+        unitNumber: cleanedUnit,
+      });
 
       const id = await submitRecoveryRequest({
         mobile: mobile || "",
@@ -489,7 +562,7 @@ export default function ForgotPassword() {
         block,
         plotNumber: resolvedPlot,
         floor: floor.trim(),
-        unitNumber: unitNumber.trim(),
+        unitNumber: cleanedUnit,
         flatNumber: computedFlat,
         personType,
         alternateMobile: alternateMobile.trim(),
@@ -1086,8 +1159,8 @@ export default function ForgotPassword() {
                         <FaEnvelope className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                         <input
                           id="resident-identifier-input"
-                          type="email"
-                          placeholder="e.g. name@gmail.com"
+                          type="text"
+                          placeholder="e.g. name@gmail.com or 10-digit mobile"
                           value={residentIdentifier}
                           onChange={(e) => {
                             setResidentIdentifier(e.target.value);

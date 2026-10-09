@@ -199,6 +199,8 @@ export default function Dashboard() {
         target={gcMonthlyStats.expectedAmount}
         paidResidents={gcMonthlyStats.paidResidents}
         totalParticipants={gcMonthlyStats.participants}
+        month={selectedMonth}
+        year={selectedYear}
       />
 
       {/* ═══════════ Row 4: Module Summaries ═══════════ */}

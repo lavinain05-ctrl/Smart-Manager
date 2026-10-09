@@ -232,6 +232,11 @@ export default function FamilyMemberForm({
       return;
     }
 
+    if (!parentResidentId && !flat.trim()) {
+      toast.error("Please select a primary resident or flat to link this family member.");
+      return;
+    }
+
     if (!familyMember && (!password || password.length < 6)) {
       toast.error("Password must be at least 6 characters.");
       return;

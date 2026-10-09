@@ -42,6 +42,7 @@ import {
   subscribeSpecialCollections,
 } from "../../services/specialCollectionService";
 import { blockAccount, unblockAccount } from "../../services/blockService";
+import { deleteUserAccount } from "../../services/accountDeletionService";
 import {
   matchesCollector,
   parseDateSafe,

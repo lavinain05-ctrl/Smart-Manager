@@ -42,7 +42,7 @@ import {
   submitRegistration,
 } from "../../services/registrationService";
 import { normalizeMobile, validateMobile } from "../../services/authService";
-import { AVAILABLE_FLOORS } from "../../services/propertyService";
+import { AVAILABLE_FLOORS, generateFlatId, cleanUnitNumber } from "../../services/propertyService";
 
 // ══════════════════════════════════════════════════════════════════
 // Official D BLOCK RWA Brand Header Logo (Matching New Theme)
@@ -246,8 +246,12 @@ export default function Register() {
         fatherHusbandName: fatherHusbandName.trim(),
         plotNumber: resolvedPlot,
         floor,
-        unitNumber: unitNumber.trim(),
-        flat: unitNumber.trim() ? `${resolvedPlot}-${unitNumber.trim()}` : resolvedPlot,
+        unitNumber: cleanUnitNumber(unitNumber.trim(), resolvedPlot),
+        flat: generateFlatId({
+          plotNumber: resolvedPlot,
+          floor,
+          unitNumber: unitNumber.trim(),
+        }),
         block,
         blockId,
         personType,
@@ -679,12 +683,15 @@ export default function Register() {
               {/* Dynamic Live Property Identity Preview Pill */}
               {plotNumber && (
                 <div className="bg-blue-50/90 border border-blue-200/80 rounded-2xl p-3.5 text-xs text-blue-900 flex flex-wrap items-center justify-between gap-2 shadow-xs">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
                     <span>
                       <strong className="text-blue-950 font-bold">Property Identity:</strong>{" "}
                       {block ? `Block ${block}` : "Block Selected"}, Plot {plotNumber}, {floor}
                       {unitNumber ? `, Unit ${unitNumber}` : " (Entire Floor)"}
+                    </span>
+                    <span className="font-mono font-bold bg-white text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded text-[11px]">
+                      Flat ID: {generateFlatId({ plotNumber, floor, unitNumber: unitNumber.trim() })}
                     </span>
                   </div>
                   <span className="font-extrabold uppercase tracking-wider px-2.5 py-0.5 bg-blue-600 text-white rounded-lg text-[10px] shadow-xs">

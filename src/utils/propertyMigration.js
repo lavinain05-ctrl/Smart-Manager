@@ -18,6 +18,9 @@ import {
   normalizePlotNumber,
   normalizeFloor,
   normalizeUnitNumber,
+  generateFlatId,
+  parseFlatId,
+  cleanUnitNumber,
 } from "../services/propertyService";
 import {
   mobileToAuthEmail,
@@ -126,7 +129,7 @@ export async function runDryRunMigration() {
     const floorObj = normalizeFloor(res.floor || "Ground Floor");
 
     // 4. Resolve Unit Number
-    const normUnit = normalizeUnitNumber(res.unitNumber || "");
+    const normUnit = cleanUnitNumber(res.unitNumber || "", normPlot);
 
     // 5. Generate Canonical Property ID
     const canonicalPropId = res.propertyId || generatePropertyId({
@@ -179,6 +182,13 @@ export async function runDryRunMigration() {
       });
     }
 
+    const canonicalFlatId = generateFlatId({
+      plotNumber: normPlot,
+      floor: floorObj.label,
+      unitNumber: normUnit,
+      flat: res.flat,
+    });
+
     residentsToUpdate.push({
       residentId: res.id,
       propertyId: canonicalPropId,
@@ -187,8 +197,8 @@ export async function runDryRunMigration() {
       floorCode: floorObj.code,
       unitNumber: normUnit,
       personType,
-      flat: res.flat || (normUnit ? `${normPlot}-${normUnit}` : normPlot),
-      flatNumber: res.flatNumber || res.flat || (normUnit ? `${normPlot}-${normUnit}` : normPlot),
+      flat: canonicalFlatId,
+      flatNumber: canonicalFlatId,
     });
   }
 
@@ -502,14 +512,276 @@ export async function synchronizeAllSocietyData({ adminUserId = "admin" } = {}) 
     console.warn("[SyncAll] Garbage account reconciliation error:", gcErr);
   }
 
+  // Step 4: Ensure all existing Flat IDs match canonical Plot-FloorCode-Flat format
+  let flatIdMigration = { totalUpdated: 0 };
+  try {
+    flatIdMigration = await migrateAllExistingFlatIds({ adminUserId });
+  } catch (flatErr) {
+    console.warn("[SyncAll] Flat ID migration note:", flatErr);
+  }
+
   return {
     success: true,
     propertiesCreated: migrationRes.propertiesCreated || 0,
     residentsUpdated: migrationRes.residentsUpdated || 0,
     garbageAccountsUpdated: (migrationRes.garbageAccountsUpdated || 0) + garbageAccountsReconciled,
     authLookupsSynced,
+    flatIdsUpdated: flatIdMigration.totalUpdated || 0,
+    flatIdMigration,
     totalResidents: migrationRes.analysis?.totalResidents || 0,
     ambiguousCount: migrationRes.ambiguousRecordsReviewRequired || 0,
     ambiguousResidents: migrationRes.analysis?.ambiguousResidents || [],
+  };
+}
+
+/**
+ * Safely migrates all existed data across Firestore collections to the standard Flat ID format.
+ * Format: Plot-FloorCode-Flat (e.g. D430-2F-01, D607-GF, D683-PH)
+ * Collections updated:
+ *  1. registrationRequests (both pending and approved/rejected)
+ *  2. residents
+ *  3. users
+ *  4. properties
+ *  5. authLookup
+ */
+export async function migrateAllExistingFlatIds({ adminUserId = "admin" } = {}) {
+  const BATCH_LIMIT = 400;
+  let registrationRequestsUpdated = 0;
+  let residentsUpdated = 0;
+  let usersUpdated = 0;
+  let propertiesUpdated = 0;
+  let authLookupsUpdated = 0;
+
+  // 1. Migrate registrationRequests
+  try {
+    const reqSnap = await getDocs(collection(db, "registrationRequests"));
+    let batch = writeBatch(db);
+    let count = 0;
+
+    for (const d of reqSnap.docs) {
+      const req = d.data();
+      const canonicalFlat = generateFlatId({
+        plotNumber: req.plotNumber,
+        floor: req.floor,
+        unitNumber: req.unitNumber,
+        flat: req.flat || req.flatNumber,
+      });
+      const parsed = parseFlatId(req.flat || req.flatNumber, req.plotNumber, req.floor);
+      const cleanedUnit = cleanUnitNumber(req.unitNumber !== undefined && req.unitNumber !== null && req.unitNumber !== "" ? req.unitNumber : parsed.unitNumber, parsed.plotNumber);
+      const cleanedPlot = parsed.plotNumber || normalizePlotNumber(req.plotNumber);
+
+      const needsUpdate =
+        req.flat !== canonicalFlat ||
+        req.flatNumber !== canonicalFlat ||
+        (req.unitNumber !== undefined && req.unitNumber !== cleanedUnit) ||
+        (cleanedPlot && req.plotNumber !== cleanedPlot);
+
+      if (needsUpdate) {
+        batch.set(
+          doc(db, "registrationRequests", d.id),
+          {
+            flat: canonicalFlat,
+            flatNumber: canonicalFlat,
+            unitNumber: cleanedUnit,
+            ...(cleanedPlot ? { plotNumber: cleanedPlot } : {}),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+        count++;
+        registrationRequestsUpdated++;
+
+        if (count >= BATCH_LIMIT) {
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
+        }
+      }
+    }
+    if (count > 0) {
+      await batch.commit();
+    }
+  } catch (err) {
+    console.error("[migrateAllExistingFlatIds] registrationRequests error:", err);
+  }
+
+  // 2. Migrate residents
+  const residentUpdates = [];
+  try {
+    const resSnap = await getDocs(collection(db, "residents"));
+    let batch = writeBatch(db);
+    let count = 0;
+
+    for (const d of resSnap.docs) {
+      const res = d.data();
+      const canonicalFlat = generateFlatId({
+        plotNumber: res.plotNumber,
+        floor: res.floor,
+        unitNumber: res.unitNumber,
+        flat: res.flat || res.flatNumber,
+      });
+      const parsed = parseFlatId(res.flat || res.flatNumber, res.plotNumber, res.floor);
+      const cleanedUnit = cleanUnitNumber(res.unitNumber !== undefined && res.unitNumber !== null && res.unitNumber !== "" ? res.unitNumber : parsed.unitNumber, parsed.plotNumber);
+      const cleanedPlot = parsed.plotNumber || normalizePlotNumber(res.plotNumber);
+
+      const needsUpdate =
+        res.flat !== canonicalFlat ||
+        res.flatNumber !== canonicalFlat ||
+        (res.unitNumber !== undefined && res.unitNumber !== cleanedUnit) ||
+        (cleanedPlot && res.plotNumber !== cleanedPlot);
+
+      if (needsUpdate) {
+        batch.set(
+          doc(db, "residents", d.id),
+          {
+            flat: canonicalFlat,
+            flatNumber: canonicalFlat,
+            unitNumber: cleanedUnit,
+            ...(cleanedPlot ? { plotNumber: cleanedPlot } : {}),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+        count++;
+        residentsUpdated++;
+        residentUpdates.push({ id: d.id, ...res, flat: canonicalFlat, unitNumber: cleanedUnit });
+
+        if (count >= BATCH_LIMIT) {
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
+        }
+      }
+    }
+    if (count > 0) {
+      await batch.commit();
+    }
+  } catch (err) {
+    console.error("[migrateAllExistingFlatIds] residents error:", err);
+  }
+
+  // 3. Migrate users (role == "resident" or user docs with flat)
+  try {
+    const usersSnap = await getDocs(collection(db, "users"));
+    let batch = writeBatch(db);
+    let count = 0;
+
+    for (const d of usersSnap.docs) {
+      const u = d.data();
+      if (!u.flat && !u.plotNumber) continue;
+
+      const canonicalFlat = generateFlatId({
+        plotNumber: u.plotNumber,
+        floor: u.floor,
+        unitNumber: u.unitNumber,
+        flat: u.flat || u.flatNumber,
+      });
+      const parsed = parseFlatId(u.flat || u.flatNumber, u.plotNumber, u.floor);
+      const cleanedUnit = cleanUnitNumber(u.unitNumber !== undefined && u.unitNumber !== null && u.unitNumber !== "" ? u.unitNumber : parsed.unitNumber, parsed.plotNumber);
+      const cleanedPlot = parsed.plotNumber || normalizePlotNumber(u.plotNumber);
+
+      const needsUpdate =
+        u.flat !== canonicalFlat ||
+        u.flatNumber !== canonicalFlat ||
+        (u.unitNumber !== undefined && u.unitNumber !== cleanedUnit) ||
+        (cleanedPlot && u.plotNumber !== cleanedPlot);
+
+      if (needsUpdate) {
+        batch.set(
+          doc(db, "users", d.id),
+          {
+            flat: canonicalFlat,
+            flatNumber: canonicalFlat,
+            unitNumber: cleanedUnit,
+            ...(cleanedPlot ? { plotNumber: cleanedPlot } : {}),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+        count++;
+        usersUpdated++;
+
+        if (count >= BATCH_LIMIT) {
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
+        }
+      }
+    }
+    if (count > 0) {
+      await batch.commit();
+    }
+  } catch (err) {
+    console.error("[migrateAllExistingFlatIds] users error:", err);
+  }
+
+  // 4. Update authLookup for updated residents
+  for (const r of residentUpdates) {
+    const cleanMob = normalizeMobile(r.mobile || r.phone);
+    if (cleanMob && cleanMob.length === 10) {
+      try {
+        await writeAuthLookup(
+          cleanMob,
+          mobileToAuthEmail(cleanMob),
+          r.id,
+          (r.email || "").trim(),
+          r.flat,
+          r.owner || r.name || ""
+        );
+        authLookupsUpdated++;
+      } catch (authErr) {
+        console.warn("[migrateAllExistingFlatIds] authLookup error:", authErr.message);
+      }
+    }
+  }
+
+  // 5. Update properties flatId
+  try {
+    const propSnap = await getDocs(collection(db, "properties"));
+    let batch = writeBatch(db);
+    let count = 0;
+
+    for (const d of propSnap.docs) {
+      const p = d.data();
+      const canonicalFlat = generateFlatId({
+        plotNumber: p.plotNumber,
+        floor: p.floor,
+        unitNumber: p.unitNumber,
+      });
+
+      if (p.flatId !== canonicalFlat) {
+        batch.set(
+          doc(db, "properties", d.id),
+          {
+            flatId: canonicalFlat,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+        count++;
+        propertiesUpdated++;
+
+        if (count >= BATCH_LIMIT) {
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
+        }
+      }
+    }
+    if (count > 0) {
+      await batch.commit();
+    }
+  } catch (err) {
+    console.error("[migrateAllExistingFlatIds] properties error:", err);
+  }
+
+  return {
+    success: true,
+    registrationRequestsUpdated,
+    residentsUpdated,
+    usersUpdated,
+    propertiesUpdated,
+    authLookupsUpdated,
+    totalUpdated: registrationRequestsUpdated + residentsUpdated + usersUpdated + propertiesUpdated,
   };
 }

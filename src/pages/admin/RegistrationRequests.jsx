@@ -23,6 +23,7 @@ import {
   FaVenusMars,
   FaBriefcase,
   FaAmbulance,
+  FaSyncAlt,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -48,7 +49,11 @@ import {
   normalizeUnitNumber,
   formatPropertyDisplay,
   AVAILABLE_FLOORS,
+  generateFlatId,
+  parseFlatId,
+  cleanUnitNumber,
 } from "../../services/propertyService";
+import { migrateAllExistingFlatIds } from "../../utils/propertyMigration";
 
 import {
   addDoc,
@@ -91,6 +96,7 @@ export default function RegistrationRequests() {
   const [approveFlat, setApproveFlat] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [migratingFlatIds, setMigratingFlatIds] = useState(false);
 
   const { residents } = useResidents();
   const { blocks } = useBlockFlat();
@@ -125,6 +131,32 @@ export default function RegistrationRequests() {
   const pendingCount = allRequests.filter((r) => r.status === "pending").length;
   const approvedCount = allRequests.filter((r) => r.status === "approved").length;
   const rejectedCount = allRequests.filter((r) => r.status === "rejected").length;
+
+  const outdatedRequestsCount = useMemo(() => {
+    return allRequests.filter((req) => {
+      const canonical = generateFlatId({
+        plotNumber: req.plotNumber,
+        floor: req.floor,
+        unitNumber: req.unitNumber,
+        flat: req.flat,
+      });
+      return (req.flat || "") !== canonical;
+    }).length;
+  }, [allRequests]);
+
+  async function handleUpdateExistingFlatIds() {
+    setMigratingFlatIds(true);
+    try {
+      const res = await migrateAllExistingFlatIds({ adminUserId: user?.uid || "admin" });
+      toast.success(
+        `Flat IDs upgraded! Updated ${res.registrationRequestsUpdated} requests, ${res.residentsUpdated} residents, and ${res.usersUpdated} accounts to Plot-FloorCode-Flat format.`
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update Flat IDs: " + err.message);
+    }
+    setMigratingFlatIds(false);
+  }
 
   // Canonical Property duplicate & occupancy detection
   function getDuplicateWarnings(req) {
@@ -250,7 +282,12 @@ export default function RegistrationRequests() {
           unitNumber: approveUnit !== undefined ? approveUnit : (approveModal.unitNumber || ""),
           personType: approvePersonType || approveModal.personType || "OWNER",
           garbageParticipation: approveGarbageParticipation || approveModal.garbageParticipation || "not_participating",
-          flat: approveFlat || approveModal.flat,
+          flat: generateFlatId({
+            plotNumber: approvePlot || approveModal.plotNumber,
+            floor: approveFloor || approveModal.floor,
+            unitNumber: approveUnit !== undefined ? approveUnit : approveModal.unitNumber,
+            flat: approveFlat || approveModal.flat,
+          }),
         },
         {
           uid: user?.uid || "",
@@ -350,11 +387,25 @@ export default function RegistrationRequests() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <FaUserPlus className="text-emerald-600" /> Registration Requests
-        </h1>
-        <p className="text-gray-500">Review and approve new resident registrations</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <FaUserPlus className="text-emerald-600" /> Registration Requests
+          </h1>
+          <p className="text-gray-500">Review and approve new resident registrations</p>
+        </div>
+
+        {outdatedRequestsCount > 0 && (
+          <button
+            onClick={handleUpdateExistingFlatIds}
+            disabled={migratingFlatIds}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-xl shadow-xs text-xs font-semibold transition active:scale-95 disabled:opacity-60 shrink-0 self-start sm:self-auto"
+            title="Update legacy flat IDs to canonical format (Plot-FloorCode-Flat)"
+          >
+            <FaSyncAlt className={`text-amber-600 ${migratingFlatIds ? "animate-spin" : ""}`} />
+            <span>{migratingFlatIds ? "Updating Flat IDs..." : `Update Legacy Flat IDs (${outdatedRequestsCount})`}</span>
+          </button>
+        )}
       </div>
 
       {/* Stats */}
@@ -440,9 +491,15 @@ export default function RegistrationRequests() {
             const warnings = isPending ? getDuplicateWarnings(req) : [];
             const isTenant = (req.personType || "").toUpperCase() === "TENANT" || (req.personType || "").toUpperCase() === "RENTED";
             const isGC = req.garbageParticipation === "participating";
-            const plotDisplay = req.plotNumber || (req.flat ? req.flat.split("-")[0] : "—");
-            const unitDisplay = req.unitNumber || (req.flat && req.flat.includes("-") ? req.flat.split("-").slice(1).join("-") : "");
-            const fullFlatCode = req.flat || (unitDisplay ? `${plotDisplay}-${unitDisplay}` : plotDisplay);
+            const parsed = parseFlatId(req.flat, req.plotNumber, req.floor);
+            const plotDisplay = parsed.plotNumber || normalizePlotNumber(req.plotNumber) || (req.flat || "—");
+            const unitDisplay = cleanUnitNumber(req.unitNumber !== undefined && req.unitNumber !== null && req.unitNumber !== "" ? req.unitNumber : parsed.unitNumber, plotDisplay);
+            const fullFlatCode = generateFlatId({
+              plotNumber: plotDisplay !== "—" ? plotDisplay : "",
+              floor: req.floor,
+              unitNumber: unitDisplay,
+              flat: req.flat,
+            });
 
             return (
               <div
@@ -518,12 +575,13 @@ export default function RegistrationRequests() {
                               const matched = blocks.find((b) => b.id === req.blockId || b.name === req.block);
                               setApproveBlockId(matched?.id || req.blockId || "");
                               setApproveBlock(matched?.name || req.block || "");
-                              setApprovePlot(req.plotNumber || req.flat || "");
+                              const pNum = plotDisplay !== "—" ? plotDisplay : normalizePlotNumber(req.plotNumber || "");
+                              setApprovePlot(pNum);
                               setApproveFloor(req.floor || "Ground Floor");
-                              setApproveUnit(req.unitNumber || "");
+                              setApproveUnit(unitDisplay || "");
                               setApprovePersonType(req.personType || "OWNER");
                               setApproveGarbageParticipation(req.garbageParticipation || "participating");
-                              setApproveFlat(req.flat || "");
+                              setApproveFlat(fullFlatCode);
                             }}
                             disabled={loadingId === req.id}
                             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 font-semibold transition text-sm disabled:opacity-50 shadow-sm"
@@ -900,10 +958,15 @@ export default function RegistrationRequests() {
                 </div>
 
                 {/* Address Hierarchy Preview Pill */}
-                <div className="bg-white border border-blue-200/80 rounded-lg p-2.5 text-xs text-blue-900 flex items-center justify-between">
-                  <span className="text-slate-500 font-medium">Hierarchy Preview:</span>
-                  <span className="font-bold text-emerald-800 font-mono">
-                    {approveBlock || approveModal.block || "Block"} ➔ Plot {approvePlot || "—"} ➔ {approveFloor} ➔ {approveUnit ? `Unit ${approveUnit}` : "Full Floor"}
+                <div className="bg-white border border-blue-200/80 rounded-lg p-2.5 text-xs text-blue-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-slate-500 font-medium">Hierarchy Preview:</span>
+                    <span className="font-semibold text-slate-800">
+                      {approveBlock || approveModal.block || "Block"} ➔ Plot {approvePlot || "—"} ➔ {approveFloor} ➔ {approveUnit ? `Unit ${approveUnit}` : "Full Floor"}
+                    </span>
+                  </div>
+                  <span className="font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 rounded text-[11px] shrink-0">
+                    Flat ID: {generateFlatId({ plotNumber: approvePlot, floor: approveFloor, unitNumber: approveUnit })}
                   </span>
                 </div>
               </div>

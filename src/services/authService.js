@@ -154,15 +154,41 @@ export async function writeAuthLookup(mobile, email, uid, personalEmail = "", fl
         }, { merge: true });
       }
     }
+
+    // Also write email lookup for fast recovery & existence verification
+    const cleanPersonal = (personalEmail || "").toLowerCase().trim();
+    if (cleanPersonal && isRealEmail(cleanPersonal)) {
+      const safeEmailKey = `email_${cleanPersonal.replace(/\//g, "_")}`;
+      await setDoc(doc(db, "authLookup", safeEmailKey), {
+        ...updateData,
+        emailKey: safeEmailKey,
+      }, { merge: true });
+      if (!cleanPersonal.includes("/")) {
+        await setDoc(doc(db, "authLookup", cleanPersonal), {
+          ...updateData,
+          emailKey: cleanPersonal,
+        }, { merge: true }).catch(() => {});
+      }
+    }
+
+    // If main auth email is a real email (e.g. admin or custom email)
+    const cleanMainEmail = (email || "").toLowerCase().trim();
+    if (cleanMainEmail && isRealEmail(cleanMainEmail) && cleanMainEmail !== cleanPersonal) {
+      const safeMainKey = `email_${cleanMainEmail.replace(/\//g, "_")}`;
+      await setDoc(doc(db, "authLookup", safeMainKey), {
+        ...updateData,
+        emailKey: safeMainKey,
+      }, { merge: true }).catch(() => {});
+    }
   } catch (err) {
     console.warn("[Auth] Failed to write authLookup:", err.message);
   }
 }
 
 /**
- * Delete a mobile mapping from authLookup/{mobile} and optional flat mapping.
+ * Delete a mobile mapping from authLookup/{mobile} and optional flat/email mapping.
  */
-export async function deleteAuthLookup(mobile, flat = "") {
+export async function deleteAuthLookup(mobile, flat = "", personalEmail = "") {
   const clean = normalizeMobile(mobile);
   if (!clean) return;
 
@@ -172,6 +198,13 @@ export async function deleteAuthLookup(mobile, flat = "") {
       const cleanFlat = String(flat).replace(/[\s-]/g, "").replaceAll("/", "_").replaceAll("\\", "_").toUpperCase();
       if (cleanFlat) {
         await deleteDoc(doc(db, "authLookup", `flat_${cleanFlat}`));
+      }
+    }
+    if (personalEmail && isRealEmail(personalEmail)) {
+      const cleanEm = personalEmail.toLowerCase().trim();
+      await deleteDoc(doc(db, "authLookup", `email_${cleanEm.replace(/\//g, "_")}`)).catch(() => {});
+      if (!cleanEm.includes("/")) {
+        await deleteDoc(doc(db, "authLookup", cleanEm)).catch(() => {});
       }
     }
     console.log("[Auth] authLookup deleted for mobile:", clean);
@@ -265,30 +298,198 @@ export function correctEmailTypo(email) {
 /**
  * Look up whether a resident or user has a registered personal email
  * by their 10-digit mobile number, flat number (e.g. D571), or direct email address.
- * Filters out internal Firebase pseudo-emails.
+ * Filters out internal Firebase pseudo-emails and verifies existence in registered accounts.
  */
 export async function findPersonalEmailForIdentifier(identifier) {
   const raw = String(identifier || "").trim();
-  if (!raw) return { found: false, error: "Please enter your email, 10-digit mobile, or flat number." };
+  if (!raw) return { found: false, error: "Please enter your registered email address or 10-digit mobile number." };
 
   // 1. Direct Email entered
   if (raw.includes("@")) {
     const typoCheck = correctEmailTypo(raw);
-    const emailCandidate = typoCheck.email;
+    const emailCandidate = typoCheck.email.toLowerCase().trim();
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailCandidate)) {
-      return { found: false, error: "Please enter a valid email address format." };
+      return { found: false, error: "Please enter a valid email address format (e.g. name@gmail.com)." };
     }
     if (
       emailCandidate.includes(`@${AUTH_EMAIL_DOMAIN}`) ||
       emailCandidate.includes("firebaseapp.com")
     ) {
-      return { found: false, error: "Please enter a valid personal email address." };
+      return { found: false, error: "Internal pseudo-emails cannot be used for recovery. Please enter your registered personal email." };
     }
+
+    // 1a. Master Admin email
+    if (isExactAdminEmail(emailCandidate)) {
+      return {
+        found: true,
+        email: emailCandidate,
+        name: "Administrator",
+        role: "admin",
+        matchedBy: "admin_email",
+        isDirectEmail: true,
+        wasCorrected: typoCheck.wasCorrected,
+        correctedFrom: typoCheck.wasCorrected ? typoCheck.original : null,
+      };
+    }
+
+    // 1b. Check authLookup collection (publicly readable document by key)
+    const safeEmailKey = `email_${emailCandidate.replace(/\//g, "_")}`;
+    try {
+      const emailDoc = await getDoc(doc(db, "authLookup", safeEmailKey));
+      if (emailDoc.exists()) {
+        const data = emailDoc.data();
+        return {
+          found: true,
+          email: emailCandidate,
+          mobile: data.mobile || "",
+          flat: data.flat || "",
+          name: data.name || "",
+          uid: data.uid || "",
+          matchedBy: "email",
+          isDirectEmail: true,
+          wasCorrected: typoCheck.wasCorrected,
+          correctedFrom: typoCheck.wasCorrected ? typoCheck.original : null,
+        };
+      }
+    } catch (err) {
+      console.warn("[Auth] authLookup email lookup error:", err.message);
+    }
+
+    try {
+      const directDoc = await getDoc(doc(db, "authLookup", emailCandidate));
+      if (directDoc.exists()) {
+        const data = directDoc.data();
+        return {
+          found: true,
+          email: emailCandidate,
+          mobile: data.mobile || "",
+          flat: data.flat || "",
+          name: data.name || "",
+          uid: data.uid || "",
+          matchedBy: "email",
+          isDirectEmail: true,
+          wasCorrected: typoCheck.wasCorrected,
+          correctedFrom: typoCheck.wasCorrected ? typoCheck.original : null,
+        };
+      }
+    } catch (err) {
+      console.warn("[Auth] direct authLookup lookup error:", err.message);
+    }
+
+    // 1b-2. Query authLookup collection by personalEmail (with auto-healing)
+    try {
+      const q = query(
+        collection(db, "authLookup"),
+        where("personalEmail", "==", emailCandidate)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const mobileDoc = snap.docs.find((d) => /^\d{10}$/.test(d.id)) || snap.docs[0];
+        const data = mobileDoc.data();
+        const mob = data.mobile || (/^\d{10}$/.test(mobileDoc.id) ? mobileDoc.id : "");
+
+        // Auto-heal safe email key in authLookup for ultra-fast subsequent lookups
+        try {
+          await setDoc(doc(db, "authLookup", safeEmailKey), {
+            ...data,
+            mobile: mob,
+            emailKey: safeEmailKey,
+          }, { merge: true });
+        } catch {}
+
+        return {
+          found: true,
+          email: emailCandidate,
+          mobile: mob,
+          flat: data.flat || "",
+          name: data.name || "",
+          uid: data.uid || "",
+          matchedBy: "email",
+          isDirectEmail: true,
+          wasCorrected: typoCheck.wasCorrected,
+          correctedFrom: typoCheck.wasCorrected ? typoCheck.original : null,
+        };
+      }
+    } catch (err) {
+      console.warn("[Auth] authLookup personalEmail query error:", err.message);
+    }
+
+    // 1b-3. Query authLookup collection by email (main auth email if real)
+    try {
+      const qAuth = query(
+        collection(db, "authLookup"),
+        where("email", "==", emailCandidate)
+      );
+      const snapAuth = await getDocs(qAuth);
+      if (!snapAuth.empty) {
+        const mobileDoc = snapAuth.docs.find((d) => /^\d{10}$/.test(d.id)) || snapAuth.docs[0];
+        const data = mobileDoc.data();
+        const mob = data.mobile || (/^\d{10}$/.test(mobileDoc.id) ? mobileDoc.id : "");
+        return {
+          found: true,
+          email: emailCandidate,
+          mobile: mob,
+          flat: data.flat || "",
+          name: data.name || "",
+          uid: data.uid || "",
+          matchedBy: "email",
+          isDirectEmail: true,
+          wasCorrected: typoCheck.wasCorrected,
+          correctedFrom: typoCheck.wasCorrected ? typoCheck.original : null,
+        };
+      }
+    } catch (err) {
+      console.warn("[Auth] authLookup email query error:", err.message);
+    }
+
+    // 1c. Check users / residents collections as fallback if readable
+    try {
+      const usersQ = query(collection(db, "users"), where("email", "==", emailCandidate));
+      const usersSnap = await getDocs(usersQ);
+      if (!usersSnap.empty) {
+        const uData = usersSnap.docs[0].data();
+        return {
+          found: true,
+          email: emailCandidate,
+          mobile: uData.phone || uData.mobile || "",
+          flat: uData.flat || uData.flatNumber || "",
+          uid: usersSnap.docs[0].id,
+          name: uData.name || "",
+          matchedBy: "users",
+          isDirectEmail: true,
+          wasCorrected: typoCheck.wasCorrected,
+          correctedFrom: typoCheck.wasCorrected ? typoCheck.original : null,
+        };
+      }
+    } catch {}
+
+    try {
+      const resQ = query(collection(db, "residents"), where("email", "==", emailCandidate));
+      const resSnap = await getDocs(resQ);
+      if (!resSnap.empty) {
+        const rData = resSnap.docs[0].data();
+        return {
+          found: true,
+          email: emailCandidate,
+          mobile: rData.mobile || "",
+          flat: rData.flat || rData.flatNumber || "",
+          uid: resSnap.docs[0].id,
+          name: rData.owner || "",
+          matchedBy: "residents",
+          isDirectEmail: true,
+          wasCorrected: typoCheck.wasCorrected,
+          correctedFrom: typoCheck.wasCorrected ? typoCheck.original : null,
+        };
+      }
+    } catch {}
+
+    // Not found in any registered account!
     return {
-      found: true,
+      found: false,
       email: emailCandidate,
-      isDirectEmail: true,
+      error: `No registered account found with email "${emailCandidate}".`,
+      tip: "Please enter the registered email address linked to your account, or use 'Request Admin Permission'.",
       wasCorrected: typoCheck.wasCorrected,
       correctedFrom: typoCheck.wasCorrected ? typoCheck.original : null,
     };
@@ -838,6 +1039,19 @@ export async function login(identifier, password) {
         if (pseudo.toLowerCase() !== (authEmail || "").toLowerCase()) {
           candidates.push(pseudo);
         }
+        // Also check if user has a registered personal email in authLookup
+        try {
+          const lookupDoc = await getDoc(doc(db, "authLookup", normalized));
+          if (lookupDoc.exists()) {
+            const lData = lookupDoc.data();
+            const pEmail = (lData.personalEmail || "").trim().toLowerCase();
+            if (pEmail && isRealEmail(pEmail) && pEmail !== (authEmail || "").toLowerCase()) {
+              candidates.push(pEmail);
+            }
+          }
+        } catch (lookupErr) {
+          console.warn("[Auth] Fallback personalEmail lookup failed:", lookupErr.message);
+        }
       } else if (raw.includes("@")) {
         // If resident entered their personal email, look up their linked mobile number
         try {
@@ -1125,6 +1339,8 @@ export function getHomeRouteForRole(role) {
       return "/resident/dashboard";
     case "family":
       return "/family/dashboard";
+    case "pending_registration":
+      return "/pending-approval";
     default:
       return "/";
   }

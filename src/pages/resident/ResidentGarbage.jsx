@@ -328,6 +328,32 @@ export default function ResidentGarbage() {
         </div>
       </div>
 
+      {/* Doorstep Payment & Receipt Guidance */}
+      <div className="rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 border border-emerald-200/80 p-5 shadow-xs flex items-start gap-3.5">
+        <div className="p-2.5 rounded-xl bg-emerald-100 text-emerald-700 shrink-0 mt-0.5">
+          <FaInfoCircle className="text-lg" />
+        </div>
+        <div className="min-w-0 flex-1 leading-relaxed text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+            <h3 className="font-bold text-emerald-950 text-sm flex items-center gap-1.5">
+              <span>How Garbage Collection Payment Works</span>
+            </h3>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-200 text-emerald-900 border border-emerald-300">
+              Doorstep Collection
+            </span>
+          </div>
+          <p className="text-slate-700">
+            Monthly garbage collection fees are collected directly at your doorstep by your RWA-assigned collector at the end of each completed month. The collector visits your home to collect payment (via cash or UPI), instantly updates your payment record in the society system, and hands you an official payment receipt.
+          </p>
+          <div className="mt-2.5 pt-2 border-t border-emerald-200/70 flex flex-wrap items-center gap-3 text-emerald-900 font-semibold">
+            <span className="flex items-center gap-1.5">
+              <FaReceipt className="text-emerald-600" />
+              <strong>Important:</strong> Please always collect your official receipt from the collector as confirmation of payment.
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Opt-in/Opt-out Request Section */}
       <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
         <div className="flex items-center justify-between">

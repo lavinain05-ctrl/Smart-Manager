@@ -4,6 +4,7 @@ import {
   addDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   onSnapshot,
   serverTimestamp,
   query,
@@ -229,3 +230,15 @@ export async function markAllNotificationsRead(userId) {
 
   await batch.commit();
 }
+
+export async function deleteNotification(id) {
+  if (!id) return;
+  try {
+    const docRef = doc(db, "notifications", id);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.warn("Could not delete notification:", err);
+  }
+}
+
+

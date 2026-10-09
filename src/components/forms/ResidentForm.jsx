@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import { useBlockFlat } from "../../context/BlockFlatContext";
-import { normalizeMobile } from "../../services/authService";
+import { normalizeMobile, validateMobile } from "../../services/authService";
 import {
   normalizePlotNumber,
   normalizeFloor,
   normalizeUnitNumber,
   generatePropertyId,
+  generateFlatId,
+  cleanUnitNumber,
   AVAILABLE_FLOORS,
   formatResidentFloor,
 } from "../../services/propertyService";
@@ -135,11 +138,36 @@ export default function ResidentForm({
 
     try {
       const cleanMainMobile = normalizeMobile(form.mobile);
+      const mobErr = validateMobile(cleanMainMobile);
+      if (mobErr) {
+        toast.error(mobErr);
+        setSubmitting(false);
+        return;
+      }
+
       const cleanPortalMobile = normalizeMobile(portalMobile || form.mobile);
+      if (enablePortalLogin) {
+        const portalMobErr = validateMobile(cleanPortalMobile);
+        if (portalMobErr) {
+          toast.error("Portal login: " + portalMobErr);
+          setSubmitting(false);
+          return;
+        }
+        if (!resident && (!form.password || form.password.length < 6)) {
+          toast.error("Portal password must be at least 6 characters.");
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const resolvedPlot = (form.plotNumber || form.flat || "").trim();
       const floorObj = normalizeFloor(form.floor);
-      const normUnit = normalizeUnitNumber(form.unitNumber || "");
-      const displayFlat = normUnit ? `${resolvedPlot}-${normUnit}` : resolvedPlot;
+      const normUnit = cleanUnitNumber(form.unitNumber || "", resolvedPlot);
+      const displayFlat = generateFlatId({
+        plotNumber: resolvedPlot,
+        floor: floorObj.label,
+        unitNumber: normUnit,
+      });
       const canonicalPropertyId = form.propertyId || (form.blockId && resolvedPlot ? generatePropertyId({
         blockId: form.blockId,
         plotNumber: resolvedPlot,

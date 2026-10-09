@@ -14,7 +14,9 @@ import {
   subscribeNotifications,
   markNotificationRead as markReadService,
   markAllNotificationsRead as markAllReadService,
+  deleteNotification,
 } from "../services/notificationService";
+import { MONTH_NAMES } from "../utils/billingCycle";
 
 import {
   isNotificationSupported,
@@ -262,6 +264,37 @@ export function NotificationProvider({ children }) {
           (notif.title && notif.title.toLowerCase().includes("payment")) ||
           (notif.title && notif.title.toLowerCase().includes("fee paid"));
         return !isPayment;
+      });
+    }
+
+    // Suppress and purge obsolete "Due" notifications if payment confirmed exists for that cycle
+    const confirmedCycles = new Set();
+    list.forEach((notif) => {
+      const titleLower = (notif.title || "").toLowerCase();
+      if (
+        (titleLower.includes("payment confirmed") || titleLower.includes("fee paid") || titleLower.includes("fee payment confirmed")) &&
+        titleLower.includes("garbage")
+      ) {
+        MONTH_NAMES.forEach((m) => {
+          if (titleLower.includes(m.toLowerCase())) {
+            confirmedCycles.add(m.toLowerCase());
+          }
+        });
+      }
+    });
+
+    if (confirmedCycles.size > 0) {
+      list = list.filter((notif) => {
+        const titleLower = (notif.title || "").toLowerCase();
+        if (titleLower.includes("due") && titleLower.includes("garbage")) {
+          for (const m of confirmedCycles) {
+            if (titleLower.includes(m)) {
+              deleteNotification(notif.id);
+              return false;
+            }
+          }
+        }
+        return true;
       });
     }
 

@@ -23,7 +23,7 @@ import toast from "react-hot-toast";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../../firebase/firebase";
 import { isGcParticipating } from "../../services/statisticsService";
-import { isPriorToResidentBillingStart } from "../../utils/billingCycle";
+import { isPriorToResidentBillingStart, hasMonthCollectionStarted } from "../../utils/billingCycle";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -235,6 +235,9 @@ export default function PendingDuesModal({
 
         billedMonths.forEach((m) => {
           if (isPriorToResidentBillingStart(r, m, activeYear)) {
+            return;
+          }
+          if (!hasMonthCollectionStarted(m, activeYear)) {
             return;
           }
 

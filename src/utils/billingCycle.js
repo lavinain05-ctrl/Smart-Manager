@@ -80,14 +80,8 @@ export function getLastDateOfMonth(month, year) {
  */
 export function formatDueDate(month, year) {
   const y = Number(year) || new Date().getFullYear();
-  let mName = month;
-  let mIndex = -1;
-  if (typeof month === "number") {
-    mIndex = month;
-    mName = MONTH_NAMES[month] || "September";
-  } else {
-    mIndex = MONTH_NAMES.indexOf(month);
-  }
+  const mIndex = typeof month === "number" ? month : MONTH_NAMES.indexOf(month);
+  const mName = typeof month === "number" ? (MONTH_NAMES[month] || "September") : month;
   const dueDay = getLastDateOfMonth(mIndex !== -1 ? mIndex : mName, y);
   return `${dueDay} ${mName || "September"} ${y}`;
 }
@@ -194,10 +188,6 @@ export function getAvailableBillingMonthsForResident(resident, year) {
 }
 
 /**
- * Returns all billing cycles from the resident's start (or society start Sep 2026)
- * up to the current calendar month & year.
- */
-/**
  * Checks whether the collection period for a given month and year has officially started.
  * The collection of a month is NOT taken in advance or at the start/during the month.
  * It strictly starts at the end of that month (after the 30th) or starting of next month.
@@ -210,6 +200,50 @@ export function hasMonthCollectionStarted(month, year) {
   const dueDay = getLastDateOfMonth(mIndex, y);
   const cycleEnd = new Date(y, mIndex, dueDay, 23, 59, 59, 999);
   return new Date() > cycleEnd;
+}
+
+/**
+ * Returns the currently active collection cycle { month, year, monthIndex }.
+ * Rule: Collection of a month strictly starts after the 30th of that month (or starting of next month).
+ * Therefore, during a calendar month before the 30th has passed, the collection being conducted
+ * is for the previous month (starting from September 2026 launch).
+ */
+export function getActiveCollectionPeriod(date = new Date()) {
+  const now = date instanceof Date ? date : new Date(date);
+  const currentY = now.getFullYear();
+  const currentMIdx = now.getMonth();
+
+  // If current month has ended (after 30th), then current month's collection has officially started.
+  if (hasMonthCollectionStarted(currentMIdx, currentY)) {
+    return {
+      month: MONTH_NAMES[currentMIdx],
+      year: currentY,
+      monthIndex: currentMIdx,
+    };
+  }
+
+  // Otherwise, collection for the previous month is currently active.
+  let prevMIdx = currentMIdx - 1;
+  let prevYear = currentY;
+  if (prevMIdx < 0) {
+    prevMIdx = 11;
+    prevYear = currentY - 1;
+  }
+
+  // If previous month is prior to September 2026 launch, baseline is September 2026
+  if (isPriorToCollectionStart(prevMIdx, prevYear)) {
+    return {
+      month: COLLECTION_START_MONTH,
+      year: COLLECTION_START_YEAR,
+      monthIndex: COLLECTION_START_MONTH_INDEX,
+    };
+  }
+
+  return {
+    month: MONTH_NAMES[prevMIdx],
+    year: prevYear,
+    monthIndex: prevMIdx,
+  };
 }
 
 export function getElapsedBillingCycles(resident = null) {
@@ -337,6 +371,8 @@ export function getResidentPendingBillingCycles({
     isCurrentCycleOverdue,
     primaryDueDate,
     monthlyCharge: charge,
+    activeCollectionPeriod: getActiveCollectionPeriod(now),
+    latestElapsedCycle: elapsed.length > 0 ? elapsed[elapsed.length - 1] : null,
   };
 }
 

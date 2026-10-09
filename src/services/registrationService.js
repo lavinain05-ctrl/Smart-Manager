@@ -36,6 +36,8 @@ import {
   normalizeFloor,
   normalizePlotNumber,
   normalizeUnitNumber,
+  generateFlatId,
+  cleanUnitNumber,
   createProperty,
   linkOccupantToProperty,
   formatPropertyDisplay,
@@ -215,10 +217,12 @@ export async function submitRegistration({
   // --- Step 6: Normalize unit number ---
   const normalizedUnit = normalizeUnitNumber(unitNumber || "");
 
-  // Legacy flat string for backward compatibility
-  const normalizedFlatDisplay = normalizedUnit
-    ? `${normalizedPlot}-${normalizedUnit}`
-    : normalizedPlot;
+  // Canonical Flat ID: Plot-FloorCode-Flat (e.g. D430-2F-01, D607-GF, D683-PH)
+  const canonicalFlatId = generateFlatId({
+    plotNumber: normalizedPlot,
+    floor: normalizedFloorObj.label,
+    unitNumber: normalizedUnit,
+  });
 
   // Canonical property identity
   const canonicalPropertyId = propertyId || generatePropertyId({
@@ -229,7 +233,7 @@ export async function submitRegistration({
   });
 
   // --- Step 7: Check availability via Cloud Function (with graceful Spark fallback) ---
-  const availability = await checkAvailability(normalizedMobile, blockId, normalizedFlatDisplay, normalizedFloorObj.label);
+  const availability = await checkAvailability(normalizedMobile, blockId, canonicalFlatId, normalizedFloorObj.label);
 
   if (!availability.available) {
     throw new Error(getAvailabilityErrorMessage(availability.reason));
@@ -279,9 +283,9 @@ export async function submitRegistration({
       floorCode: normalizedFloorObj.code,
       unitNumber: normalizedUnit,
       personType: (personType || "OWNER").toUpperCase(),
-      // Legacy fields for backward compatibility
-      flat: normalizedFlatDisplay,
-      flatNumber: normalizedFlatDisplay,
+      // Standardized Flat ID (Plot-FloorCode-Flat)
+      flat: canonicalFlatId,
+      flatNumber: canonicalFlatId,
       block: block || "",
       blockId: blockId || "",
       dob: dob || "",
@@ -300,7 +304,7 @@ export async function submitRegistration({
     try {
       await notifyAdmin({
         title: "New Resident Registration 👤",
-        message: `${name?.trim() || "New resident"} has submitted a registration for Flat ${normalizedFlatDisplay || flat || "—"} (${block || "—"}).`,
+        message: `${name?.trim() || "New resident"} has submitted a registration for Flat ${canonicalFlatId || "—"} (${block || "—"}).`,
         type: "registration",
         link: "/admin/registrations",
       });
@@ -354,7 +358,11 @@ export async function submitCollectorRegistrationRequest({
 
   const floorObj = normalizeFloor(floor);
   const normUnit = normalizeUnitNumber(unitNumber);
-  const displayFlat = normUnit ? `${normPlot}-${normUnit}` : normPlot;
+  const canonicalFlatId = generateFlatId({
+    plotNumber: normPlot,
+    floor: floorObj.label,
+    unitNumber: normUnit,
+  });
 
   const canonicalPropertyId = propertyId || generatePropertyId({
     blockId,
@@ -375,8 +383,8 @@ export async function submitCollectorRegistrationRequest({
     floorCode: floorObj.code,
     unitNumber: normUnit,
     personType: (personType || "OWNER").toUpperCase(),
-    flat: displayFlat,
-    flatNumber: displayFlat,
+    flat: canonicalFlatId,
+    flatNumber: canonicalFlatId,
     block: block || "",
     blockId: blockId || "",
     garbageParticipation: garbageParticipation || "participating",
@@ -391,7 +399,7 @@ export async function submitCollectorRegistrationRequest({
   try {
     await notifyAdmin({
       title: "New Registration (by Collector) 👤",
-      message: `${collectorName || "Collector"} submitted registration for ${name?.trim() || "Resident"} (Flat ${displayFlat}).`,
+      message: `${collectorName || "Collector"} submitted registration for ${name?.trim() || "Resident"} (Flat ${canonicalFlatId}).`,
       type: "registration",
       link: "/admin/registrations",
     });
@@ -459,14 +467,20 @@ export async function approveRegistration(requestId, request, charge, overrides 
   const finalBlockId = overrides.blockId || request.blockId || "";
   const finalPlot = normalizePlotNumber(overrides.plotNumber || request.plotNumber || request.flat || "");
   const finalFloorObj = normalizeFloor(overrides.floor || request.floor || "");
-  const finalUnit = normalizeUnitNumber(overrides.unitNumber !== undefined ? overrides.unitNumber : (request.unitNumber || ""));
+  const finalUnit = cleanUnitNumber(
+    overrides.unitNumber !== undefined ? overrides.unitNumber : (request.unitNumber || ""),
+    finalPlot
+  );
   const finalPersonType = (overrides.personType || request.personType || "OWNER").toUpperCase();
 
-  const finalDisplayFlat = finalUnit
-    ? `${finalPlot}-${finalUnit}`
-    : finalPlot || (request.flat || "").toUpperCase();
+  const finalDisplayFlat = generateFlatId({
+    plotNumber: finalPlot,
+    floor: finalFloorObj.label,
+    unitNumber: finalUnit,
+    flat: overrides.flat || request.flat,
+  });
 
-  const finalFlat = overrides.flat || finalDisplayFlat;
+  const finalFlat = finalDisplayFlat;
 
   // Canonical property identity
   const canonicalPropertyId = overrides.propertyId || generatePropertyId({
@@ -487,9 +501,9 @@ export async function approveRegistration(requestId, request, charge, overrides 
         plotNumber: finalPlot,
         floor: finalFloorObj.label,
         unitNumber: finalUnit,
-        occupancyStatus: finalPersonType === "TENANT" ? "TENANT_OCCUPIED" : "OWNER_OCCUPIED",
-        ownerResidentId: finalPersonType === "OWNER" ? uid : "",
-        ownerName: finalPersonType === "OWNER" ? (request.name || "") : "",
+        occupancyStatus: (finalPersonType === "TENANT" || finalPersonType === "RENTED") ? "TENANT_OCCUPIED" : "OWNER_OCCUPIED",
+        ownerResidentId: (finalPersonType === "TENANT" || finalPersonType === "RENTED") ? "" : uid,
+        ownerName: (finalPersonType === "TENANT" || finalPersonType === "RENTED") ? "" : (request.name || ""),
         currentOccupantResidentId: uid,
         currentOccupantName: request.name || "",
         occupantType: finalPersonType,

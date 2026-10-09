@@ -10,6 +10,9 @@ import {
   normalizeUnitNumber,
   generatePropertyId,
   validatePropertyUniqueness,
+  getFloorCode,
+  generateFlatId,
+  parseFlatId,
 } from "../services/propertyService.js";
 
 let passed = 0;
@@ -174,6 +177,87 @@ const res8 = validatePropertyUniqueness({
   existingProperties: mockExistingProperties,
 });
 assert(!res8.valid && res8.code === "DUPLICATE_PROPERTY", "Rule 8: 'unit 1' duplicate against '1' is REJECTED");
+
+console.log("\n5. Flat ID Generation Tests (Plot-FloorCode-Flat):");
+assert(getFloorCode("Ground Floor") === "GF", "Ground Floor -> GF");
+assert(getFloorCode("ground") === "GF", "ground -> GF");
+assert(getFloorCode("1st Floor") === "1F", "1st Floor -> 1F");
+assert(getFloorCode("2nd Floor") === "2F", "2nd Floor -> 2F");
+assert(getFloorCode("3rd Floor") === "3F", "3rd Floor -> 3F");
+assert(getFloorCode("Penthouse") === "PH", "Penthouse -> PH");
+assert(getFloorCode("Basement") === "B", "Basement -> B");
+assert(getFloorCode("Lower Basement") === "LB", "Lower Basement -> LB");
+assert(getFloorCode("Stilt Floor / Parking") === "ST", "Stilt Floor / Parking -> ST");
+assert(getFloorCode("Terrace / Rooftop") === "TR", "Terrace / Rooftop -> TR");
+
+// Test combination cases
+assert(
+  generateFlatId({ plotNumber: "D430", floor: "2nd Floor", unitNumber: "01" }) === "D430-2F-01",
+  "D430 + 2nd Floor + 01 -> D430-2F-01"
+);
+assert(
+  generateFlatId({ plotNumber: "D607", floor: "Ground Floor", unitNumber: "Single / Full Floor" }) === "D607-GF",
+  "D607 + Ground Floor + Single/Full Floor -> D607-GF"
+);
+assert(
+  generateFlatId({ plotNumber: "D683", floor: "Penthouse", unitNumber: "" }) === "D683-PH",
+  "D683 + Penthouse + empty unit -> D683-PH"
+);
+assert(
+  generateFlatId({ plotNumber: "D389", floor: "3rd Floor", unitNumber: "3" }) === "D389-3F-3",
+  "D389 + 3rd Floor + 3 -> D389-3F-3"
+);
+assert(
+  generateFlatId({ plotNumber: "12", floor: "1st Floor", unitNumber: "Unit 1" }) === "12-1F-1",
+  "12 + 1st Floor + Unit 1 -> 12-1F-1"
+);
+assert(
+  generateFlatId({ flat: "D430-01", floor: "2nd Floor" }) === "D430-2F-01",
+  "Resolves unit from legacy flat D430-01"
+);
+
+// Hyphenated plot tests (e.g. D-562, D-607) & Corrupted Flat ID Healing
+assert(
+  generateFlatId({ plotNumber: "D-562", floor: "1st Floor" }) === "D-562-1F",
+  "D-562 + 1st Floor (no unit) -> D-562-1F"
+);
+assert(
+  generateFlatId({ plotNumber: "D-562", floor: "1st Floor", unitNumber: "1" }) === "D-562-1F-1",
+  "D-562 + 1st Floor + Unit 1 -> D-562-1F-1"
+);
+assert(
+  generateFlatId({ plotNumber: "D-562", floor: "1st Floor", flat: "D-562-1F-1F-1F-1F-1F-1F-1F-1F-1F-1F-1F-1F-1F-1F-1F-562" }) === "D-562-1F",
+  "Recovers clean D-562-1F from corrupt repeated '-1F' and plot suffix flat string"
+);
+assert(
+  generateFlatId({ plotNumber: "D-562", floor: "1st Floor", unitNumber: "1F-1F-1F-562" }) === "D-562-1F",
+  "Cleans corrupt unitNumber containing repeated floor codes and plot suffix"
+);
+assert(
+  generateFlatId({ plotNumber: "D-562", floor: "1st Floor", unitNumber: "562" }) === "D-562-1F",
+  "Ignores mistaken unitNumber that matches plot numeric digits"
+);
+
+// Idempotence test across multiple cycles
+const c1 = generateFlatId({ plotNumber: "D-562", floor: "1st Floor", flat: "D-562" });
+const c2 = generateFlatId({ plotNumber: "D-562", floor: "1st Floor", flat: c1 });
+const c3 = generateFlatId({ plotNumber: "D-562", floor: "1st Floor", flat: c2 });
+assert(
+  c1 === "D-562-1F" && c2 === "D-562-1F" && c3 === "D-562-1F",
+  "Flat ID generation is strictly idempotent across repeated cycles"
+);
+
+const parsedCorrupt = parseFlatId("D-562-1F-1F-1F-1F-562");
+assert(
+  parsedCorrupt.plotNumber === "D-562" && parsedCorrupt.floorCode === "1F" && parsedCorrupt.unitNumber === "",
+  "parseFlatId decomposes corrupt flat string into plot 'D-562', floor '1F', unit ''"
+);
+
+const parsedNormal = parseFlatId("D-562-1F-02");
+assert(
+  parsedNormal.plotNumber === "D-562" && parsedNormal.floorCode === "1F" && parsedNormal.unitNumber === "02",
+  "parseFlatId correctly extracts unit '02' from 'D-562-1F-02'"
+);
 
 console.log("\n=================================================");
 console.log(`TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);

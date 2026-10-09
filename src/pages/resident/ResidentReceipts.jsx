@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { FaReceipt, FaFilePdf, FaPrint } from "react-icons/fa";
+import { FaReceipt, FaFilePdf, FaPrint, FaInfoCircle } from "react-icons/fa";
 import { useAuth } from "../../context/AuthContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useResidents } from "../../context/ResidentContext";
@@ -171,6 +171,27 @@ export default function ResidentReceipts() {
         </div>
         <div>
           <PrinterQuickAction />
+        </div>
+      </div>
+
+      {/* Doorstep Collection & Receipt Guidance */}
+      <div className="rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 border border-emerald-200/80 p-4 text-xs text-emerald-950 shadow-xs flex items-start gap-3">
+        <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700 shrink-0 mt-0.5">
+          <FaInfoCircle className="text-base" />
+        </div>
+        <div className="min-w-0 flex-1 leading-relaxed">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <h3 className="font-extrabold text-emerald-950 text-sm">Doorstep Collection & Receipt Confirmation</h3>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800">
+              Payment Verification
+            </span>
+          </div>
+          <p className="text-slate-700 text-xs">
+            Monthly garbage collection fees are collected directly at your doorstep by your RWA-assigned collector after the month completes. The collector will update your payment in the system on the spot and hand you an official payment receipt for your home.
+          </p>
+          <p className="mt-1 font-semibold text-emerald-800">
+            🧾 Please always collect your official receipt from the collector as confirmation of payment.
+          </p>
         </div>
       </div>
 

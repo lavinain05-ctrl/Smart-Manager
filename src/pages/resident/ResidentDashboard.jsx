@@ -27,6 +27,7 @@ import {
   FaShieldAlt,
   FaLightbulb,
   FaChevronRight,
+  FaChevronDown,
   FaBell,
   FaFileAlt,
   FaSlidersH,
@@ -39,7 +40,7 @@ import { useResidents } from "../../context/ResidentContext";
 import { useGarbage } from "../../context/GarbageContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useBills } from "../../context/BillContext";
-import { isPriorToCollectionStart, isPriorToResidentBillingStart, formatDueDate, getResidentPendingBillingCycles } from "../../utils/billingCycle";
+import { isPriorToCollectionStart, isPriorToResidentBillingStart, formatDueDate, getResidentPendingBillingCycles, getActiveCollectionPeriod } from "../../utils/billingCycle";
 import { useBilling } from "../../context/BillingContext";
 import { useNotices } from "../../context/NoticeContext";
 import { useComplaints } from "../../context/ComplaintContext";
@@ -47,7 +48,7 @@ import { useEvents } from "../../context/EventContext";
 import { useCommittee } from "../../context/CommitteeContext";
 import { useActivities } from "../../context/ActivityContext";
 import { useNotifications } from "../../context/NotificationContext";
-import { createNotification } from "../../services/notificationService";
+import { createNotification, deleteNotification } from "../../services/notificationService";
 import { getDisplayStatus } from "../../utils/billStatus";
 import { isGcParticipating } from "../../services/statisticsService";
 import { subscribeSpecialCollections } from "../../services/specialCollectionService";
@@ -55,6 +56,7 @@ import { DEFAULT_JOIN_GC_MESSAGE } from "./ResidentGarbage";
 import RecentUpdatesCard from "../../components/notifications/RecentUpdatesCard";
 import { useSettings } from "../../context/SettingsContext";
 import { fetchSocietyWeather, formatCurrentDate } from "../../services/weatherService";
+import SocietyHeroBackground from "../../components/dashboard/SocietyHeroBackground";
 
 const GC_CONFIG = {
   participating: {
@@ -82,8 +84,8 @@ const GC_CONFIG = {
 export default function ResidentDashboard() {
   const { user } = useAuth();
   const { residents, loading: residentsLoading } = useResidents();
-  const { payments } = usePayments();
-  const { bills } = useBills();
+  const { payments, loading: paymentsLoading } = usePayments();
+  const { bills, loading: billsLoading } = useBills();
   const { selectedMonth, selectedYear } = useBilling();
   const { notices } = useNotices();
   const { complaints } = useComplaints();
@@ -96,6 +98,7 @@ export default function ResidentDashboard() {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinReason, setJoinReason] = useState(DEFAULT_JOIN_GC_MESSAGE);
   const [submittingJoin, setSubmittingJoin] = useState(false);
+  const [showPaymentInfo, setShowPaymentInfo] = useState(false);
 
   // Live special collection drives
   const [specialDrives, setSpecialDrives] = useState([]);
@@ -301,6 +304,8 @@ export default function ResidentDashboard() {
     return new Date().getFullYear();
   }, []);
 
+  const activeCollectionPeriod = useMemo(() => getActiveCollectionPeriod(), []);
+
   const pendingBilling = useMemo(() => {
     return getResidentPendingBillingCycles({
       resident,
@@ -364,24 +369,88 @@ export default function ResidentDashboard() {
     );
   }, [isAdvanceCovered, currentMonthPayment, myPayments, myBills, currentMonthName, currentYearNum, selectedMonth, selectedYear]);
 
+  // Determine the verified paid payment & cycle to display in banner
+  const confirmedPayment = useMemo(() => {
+    if (isAdvanceCovered) return advanceDetails;
+    // Look for payment covering active collection cycle (e.g. September 2026)
+    const activeCyclePayment = myPayments.find((p) =>
+      isCoveredByPayment(p, activeCollectionPeriod.month, activeCollectionPeriod.year)
+    );
+    if (activeCyclePayment) return activeCyclePayment;
+    return lastPayment || null;
+  }, [isAdvanceCovered, advanceDetails, myPayments, activeCollectionPeriod, lastPayment]);
+
+  const confirmedCycleLabel = useMemo(() => {
+    if (isAdvanceCovered) {
+      return advanceDetails?.periodLabel || `${currentMonthName} ${currentYearNum}`;
+    }
+    if (confirmedPayment?.month && confirmedPayment?.year) {
+      return `${confirmedPayment.month} ${confirmedPayment.year}`;
+    }
+    return `${activeCollectionPeriod.month} ${activeCollectionPeriod.year}`;
+  }, [isAdvanceCovered, advanceDetails, confirmedPayment, activeCollectionPeriod, currentMonthName, currentYearNum]);
+
   const isCurrentMonthPaid = !hasUnpaidBills;
 
   const collectorName = useMemo(() => {
     return myPayments[0]?.collectorName || "RWA Collector / Office";
   }, [myPayments]);
 
-  // Auto-dispatch in-app Notification when a new month starts and fee is unpaid
+  // Auto-cleanup obsolete "Due" notifications when resident has paid
   useEffect(() => {
-    if (!user?.uid || !isParticipating || isCurrentMonthPaid || isPriorToResidentBillingStart(resident, currentMonthName, currentYearNum)) return;
+    if (!user?.uid || paymentsLoading || billsLoading) return;
 
-    const notifKey = `rwa_gc_due_notif_${user.uid}_${currentMonthName}_${currentYearNum}`;
+    (notifications || []).forEach((n) => {
+      if (
+        n.type === "payment" &&
+        n.title?.toLowerCase().includes("due") &&
+        n.title?.toLowerCase().includes("garbage")
+      ) {
+        const isPaid = myPayments.some((p) => {
+          if (!p.month || !p.year) return false;
+          const cycleStr = `${p.month} ${p.year}`.toLowerCase();
+          return (
+            n.title?.toLowerCase().includes(cycleStr) ||
+            n.message?.toLowerCase().includes(cycleStr)
+          );
+        });
+
+        if (isPaid || !hasUnpaidBills) {
+          deleteNotification(n.id);
+        }
+      }
+    });
+
+    if (!hasUnpaidBills && activeCollectionPeriod) {
+      const activeCycleStr = `${activeCollectionPeriod.month}_${activeCollectionPeriod.year}`.toLowerCase();
+      const deterministicId = `gc_due_${user.uid}_${activeCycleStr}`.replace(/[^a-z0-9_]/g, "_");
+      deleteNotification(deterministicId);
+    }
+  }, [user?.uid, notifications, myPayments, paymentsLoading, billsLoading, hasUnpaidBills, activeCollectionPeriod]);
+
+  // Auto-dispatch in-app Notification ONLY when data has loaded and cycles are truly unpaid
+  useEffect(() => {
+    // Wait until all data finishes loading to prevent initial race condition!
+    if (paymentsLoading || billsLoading || residentsLoading) return;
+    if (!user?.uid || !isParticipating || !hasUnpaidBills) return;
+
+    const notifTargetCycle = pendingBilling.monthsLabel;
+    if (!notifTargetCycle) return;
+
+    // Never dispatch if payment exists for this cycle!
+    const alreadyPaid = myPayments.some((p) => {
+      if (!p.month || !p.year) return false;
+      return notifTargetCycle.toLowerCase().includes(`${p.month} ${p.year}`.toLowerCase());
+    });
+    if (alreadyPaid) return;
+
+    const notifKey = `rwa_gc_due_notif_${user.uid}_${notifTargetCycle.replace(/[^a-zA-Z0-9]/g, "_")}`;
     if (localStorage.getItem(notifKey)) return;
 
     const alreadyExists = (notifications || []).some(
       (n) =>
         n.type === "payment" &&
-        n.title?.includes(currentMonthName) &&
-        n.title?.includes(String(currentYearNum)) &&
+        n.title?.includes(notifTargetCycle) &&
         n.title?.toLowerCase().includes("garbage")
     );
 
@@ -390,24 +459,23 @@ export default function ResidentDashboard() {
       return;
     }
 
-    // Set lock synchronously before network call to prevent StrictMode / re-render duplicates
     localStorage.setItem(notifKey, "true");
 
-    const deterministicId = `gc_due_${user.uid}_${currentMonthName}_${currentYearNum}`
+    const deterministicId = `gc_due_${user.uid}_${notifTargetCycle}`
       .toLowerCase()
       .replace(/[^a-z0-9_]/g, "_");
 
     createNotification({
       id: deterministicId,
       userId: user.uid,
-      title: `🔔 Garbage Fee Due: ${currentMonthName} ${currentYearNum}`,
-      message: `Your monthly garbage collection fee of ₹${currentMonthFee} for ${currentMonthName} ${currentYearNum} is due. Please pay to ensure continuous daily door-to-door waste collection.`,
+      title: `🔔 Garbage Fee Due: ${notifTargetCycle}`,
+      message: `Your monthly garbage collection fee of ₹${pendingBilling.totalDueAmount} for ${notifTargetCycle} is due. Please pay to ensure continuous daily door-to-door waste collection.`,
       type: "payment",
       link: "/resident/bills",
     }).catch((err) => {
       console.warn("Could not dispatch monthly garbage due notification:", err);
     });
-  }, [user?.uid, isParticipating, isCurrentMonthPaid, currentMonthName, currentYearNum, currentMonthFee, notifications]);
+  }, [user?.uid, isParticipating, hasUnpaidBills, pendingBilling, notifications, paymentsLoading, billsLoading, residentsLoading, myPayments]);
 
   const [weather, setWeather] = useState({
     temp: 28,
@@ -432,7 +500,8 @@ export default function ResidentDashboard() {
     const hour = new Date().getHours();
     if (hour >= 4 && hour < 12) return "Good Morning,";
     if (hour >= 12 && hour < 17) return "Good Afternoon,";
-    return "Good Evening,";
+    if (hour >= 17 && hour < 21) return "Good Evening,";
+    return "Good Night,";
   }, []);
 
   const formattedDate = useMemo(() => {
@@ -558,17 +627,9 @@ export default function ResidentDashboard() {
 
       {/* ═══════════ Scenic Society Hero Banner (Matching User Reference) ═══════════ */}
       <div className="relative group overflow-hidden rounded-3xl shadow-xl border border-slate-200/60 dark:border-slate-800 bg-slate-900 transition-all duration-300">
-        {/* Background Image Container with subtle hover zoom */}
+        {/* Background Image Container with subtle hover zoom & live environmental effects */}
         <div className="relative min-h-[250px] sm:min-h-[280px] md:h-80 w-full overflow-hidden flex flex-col justify-between">
-          <img
-            src="/society-banner.jpg"
-            alt="D Block RWA Society"
-            className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-1000 ease-out"
-          />
-
-          {/* Subtle natural shading to preserve photo colors while keeping text readable */}
-          <div className="absolute inset-0 bg-gradient-to-r from-black/45 via-black/15 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-black/15" />
+          <SocietyHeroBackground weather={weather} />
 
           {/* Top Floating Society Badge & Verified Status */}
           <div className="relative top-0 left-0 right-0 p-4 sm:p-5 flex items-center justify-between gap-2 z-10 flex-wrap">
@@ -729,75 +790,125 @@ export default function ResidentDashboard() {
       {/* ═══════════ Billing Status / Payment Notice Card ═══════════ */}
       {isParticipating ? (
         hasUnpaidBills ? (
-          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-amber-500/10 border border-amber-300/80 dark:border-amber-700/50 p-4 sm:p-6 md:p-7 shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
-              <div className="flex items-start gap-3 sm:gap-4">
-                <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-xl sm:text-2xl shrink-0 shadow-lg shadow-amber-500/30">
-                  <FaMoneyBillWave />
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-                        pendingBilling.hasOverdue
-                          ? "bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300"
-                          : "bg-amber-100 text-amber-900 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300"
-                      }`}
-                    >
-                      {pendingBilling.hasOverdue
-                        ? pendingBilling.pendingCount > 1
-                          ? `⚠️ ${pendingBilling.pendingCount} Months Due`
-                          : "⚠️ Overdue Payment"
-                        : "🔔 Monthly Fee Due"}
-                    </span>
-                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Billing Cycle: {pendingBilling.monthsLabel}
-                    </span>
+          <div>
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-amber-500/10 border border-amber-300/80 dark:border-amber-700/50 p-3.5 sm:p-4.5 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg shrink-0 shadow-md shadow-amber-500/25">
+                    <FaMoneyBillWave />
                   </div>
-
-                  <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white leading-snug">
-                    Garbage Collection Fee for {pendingBilling.monthsLabel} is Due
-                  </h2>
-
-                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-2xl leading-relaxed">
-                    Please clear your {pendingBilling.pendingCount > 1 ? `${pendingBilling.pendingCount} months` : "monthly"} fee of{" "}
-                    <strong className="text-emerald-700 dark:text-emerald-400 font-bold">
-                      ₹{pendingBilling.totalDueAmount}
-                    </strong>{" "}
-                    to maintain seamless daily doorstep waste collection.
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-slate-500 dark:text-slate-400">
-                    <span>
-                      Fee:{" "}
-                      <strong className="text-slate-900 dark:text-white font-bold">
-                        ₹{pendingBilling.totalDueAmount}
-                        {pendingBilling.pendingCount > 1 && ` (${pendingBilling.pendingCount} Months)`}
-                      </strong>
-                    </span>
-                    <span>
-                      Due Date:{" "}
-                      <strong className={pendingBilling.hasOverdue ? "text-rose-600 font-bold" : "text-slate-900 dark:text-white font-semibold"}>
-                        {pendingBilling.primaryDueDate}
-                      </strong>
-                    </span>
-                    {collectorName && (
-                      <span>
-                        Assigned Collector: <strong className="text-slate-800 dark:text-slate-200">{collectorName}</strong>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                          pendingBilling.hasOverdue
+                            ? "bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300"
+                            : "bg-amber-100 text-amber-900 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300"
+                        }`}
+                      >
+                        {pendingBilling.hasOverdue
+                          ? pendingBilling.pendingCount > 1
+                            ? `⚠️ ${pendingBilling.pendingCount} Months Due`
+                            : "⚠️ Overdue Payment"
+                          : "🔔 Monthly Fee Due"}
                       </span>
-                    )}
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                        {pendingBilling.monthsLabel}
+                      </span>
+                    </div>
+
+                    <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mt-1">
+                      Garbage Collection Fee:{" "}
+                      <span className="text-rose-600 dark:text-rose-400 font-extrabold">
+                        ₹{pendingBilling.totalDueAmount}
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 ml-2">
+                        (Due Date: {pendingBilling.primaryDueDate})
+                      </span>
+                    </p>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex sm:flex-col items-center sm:items-end justify-end gap-2.5 shrink-0 pt-2 md:pt-0">
-                <Link
-                  to="/resident/bills"
-                  className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                >
-                  View Bill Details <FaArrowRight className="text-xs" />
-                </Link>
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <Link
+                    to="/resident/bills"
+                    className="px-3.5 py-1.5 sm:py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-emerald-500/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap"
+                  >
+                    <span>View Bill Details</span>
+                    <FaArrowRight className="text-[10px]" />
+                  </Link>
+                </div>
               </div>
+            </div>
+
+            {/* Simple Clickable Question: How to Pay */}
+            <div className="mt-2.5 overflow-hidden rounded-2xl border border-amber-200/90 dark:border-amber-800/60 bg-white/95 dark:bg-slate-900/95 shadow-xs">
+              <button
+                type="button"
+                onClick={() => setShowPaymentInfo((prev) => !prev)}
+                className="w-full px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 text-left transition hover:bg-amber-50/70 dark:hover:bg-amber-950/30 cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 text-xs font-black shrink-0">
+                    ?
+                  </span>
+                  <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
+                    How do I pay for garbage collection?
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0 text-amber-800 dark:text-amber-400">
+                  <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                    {showPaymentInfo ? "Hide" : "Click to view"}
+                  </span>
+                  <FaChevronDown
+                    className={`text-xs transition-transform duration-200 ${
+                      showPaymentInfo ? "rotate-180" : ""
+                    }`}
+                  />
+                </div>
+              </button>
+
+              {showPaymentInfo && (
+                <div className="px-3.5 pb-3.5 pt-1 sm:px-4 sm:pb-4 border-t border-amber-100 dark:border-amber-900/50 bg-amber-50/30 dark:bg-amber-950/10 text-xs text-slate-700 dark:text-slate-300 leading-relaxed animate-in fade-in duration-200">
+                  <div className="space-y-2 pt-1.5">
+                    <p className="text-xs text-slate-700 dark:text-slate-300">
+                      Garbage collection fees are collected directly at your doorstep by your RWA-assigned collector at the end of each completed month.
+                    </p>
+
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white dark:bg-slate-800/90 border border-amber-100 dark:border-amber-900/40">
+                        <span className="text-base shrink-0 mt-0.5">🚪</span>
+                        <div className="min-w-0">
+                          <strong className="text-slate-900 dark:text-white">Doorstep Collection:</strong>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                            The collector visits your home to collect payment via cash or UPI.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white dark:bg-slate-800/90 border border-amber-100 dark:border-amber-900/40">
+                        <span className="text-base shrink-0 mt-0.5">⚡</span>
+                        <div className="min-w-0">
+                          <strong className="text-slate-900 dark:text-white">Instant System Update:</strong>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                            The collector updates your payment record in the society system on the spot.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/40 text-emerald-900 dark:text-emerald-300">
+                        <FaReceipt className="text-emerald-600 dark:text-emerald-400 shrink-0 text-base mt-0.5" />
+                        <div className="min-w-0">
+                          <strong className="text-emerald-950 dark:text-emerald-200">Receipt Confirmation:</strong>
+                          <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5 font-medium">
+                            Please always collect your official payment receipt from the collector as confirmation.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -812,19 +923,19 @@ export default function ResidentDashboard() {
                     {isAdvanceCovered ? "🎉 Paid in Advance" : "✅ Payment Confirmed"}
                   </span>
                   <span className="text-xs font-bold text-emerald-950 dark:text-emerald-200">
-                    {currentMonthName} {currentYearNum}
+                    {confirmedCycleLabel}
                   </span>
-                  {advanceDetails?.receiptNumber && (
+                  {(confirmedPayment?.receiptNumber || advanceDetails?.receiptNumber) && (
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white dark:bg-slate-800 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700">
-                      {advanceDetails.receiptNumber}
+                      {confirmedPayment?.receiptNumber || advanceDetails?.receiptNumber}
                     </span>
                   )}
                 </div>
 
                 <p className="text-xs sm:text-sm font-bold text-emerald-950 dark:text-emerald-200 mt-1">
                   {isAdvanceCovered
-                    ? `Garbage Collection Fee Paid in Advance for ${currentMonthName} ${currentYearNum}`
-                    : `Garbage Collection Fee for ${currentMonthName} ${currentYearNum} is Paid`}
+                    ? `Garbage Collection Fee Paid in Advance for ${confirmedCycleLabel}`
+                    : `Garbage Collection Fee for ${confirmedCycleLabel} is Paid`}
                 </p>
 
                 <p className="text-[11px] sm:text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">

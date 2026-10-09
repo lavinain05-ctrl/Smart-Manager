@@ -15,7 +15,7 @@ import {
 import toast from "react-hot-toast";
 
 import { useBlockFlat } from "../../context/BlockFlatContext";
-import { normalizeMobile } from "../../services/authService";
+import { normalizeMobile, validateMobile } from "../../services/authService";
 import { subscribeSpecialCollections } from "../../services/specialCollectionService";
 
 const VEHICLE_PRESETS = [
@@ -160,9 +160,9 @@ export default function CollectorForm({
 
     try {
       const cleanMobile = normalizeMobile(form.mobile);
-
-      if (cleanMobile.length !== 10) {
-        toast.error("Mobile number must be exactly 10 digits.");
+      const mobError = validateMobile(cleanMobile);
+      if (mobError) {
+        toast.error(mobError);
         setSubmitting(false);
         return;
       }

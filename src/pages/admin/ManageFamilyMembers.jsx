@@ -38,6 +38,7 @@ import {
 } from "../../services/residentService";
 
 import { deleteUserAccount } from "../../services/accountDeletionService";
+import { blockAccount, unblockAccount } from "../../services/blockService";
 import { adminResetPasswordFn, db } from "../../firebase/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { terminateAllOtherSessions } from "../../services/sessionService";

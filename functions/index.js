@@ -295,10 +295,10 @@ exports.checkRegistrationAvailability = onCall({ cors: true }, async (request) =
     );
   }
 
-  if (!flatNumber || typeof flatNumber !== "string" || !/^[A-Z]\d+$/.test(flatNumber)) {
+  if (!flatNumber || typeof flatNumber !== "string" || !/^[A-Za-z0-9][A-Za-z0-9\s\-./]*$/.test(flatNumber.trim())) {
     throw new HttpsError(
       "invalid-argument",
-      "A valid flat number is required (e.g. A101)."
+      "A valid flat number is required (e.g. D430-2F-01, D607-GF, A101)."
     );
   }
 

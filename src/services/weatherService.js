@@ -1,6 +1,6 @@
-// Weather service for D Block RWA Indraprastha (Ghaziabad / Delhi NCR coordinates)
-const LATITUDE = 28.67;
-const LONGITUDE = 77.34;
+// Weather service for D Block RWA, Indraprastha Awasiya Yojna, Ghaziabad (Tila Mod / Loni coordinates)
+const LATITUDE = 28.73;
+const LONGITUDE = 77.28;
 const CACHE_KEY = "rwa_weather_data";
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -54,10 +54,19 @@ export async function fetchSocietyWeather() {
     const temp = Math.round(current?.temperature ?? 28);
     const isDay = current?.is_day === 1;
 
+    let condition = codeInfo.condition;
+    let icon = isDay ? codeInfo.icon : "🌙";
+
+    // Matching real Indian summer hot daylight presentation
+    if (isDay && temp >= 38 && codeInfo.isSunny) {
+      condition = "Hot & Sunny";
+      icon = "☀️🌡️";
+    }
+
     const weatherData = {
       temp,
-      condition: codeInfo.condition,
-      icon: isDay ? codeInfo.icon : "🌙",
+      condition,
+      icon,
       isDay,
     };
 

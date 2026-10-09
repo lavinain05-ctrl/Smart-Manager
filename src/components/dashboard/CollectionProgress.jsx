@@ -3,6 +3,8 @@ export default function CollectionProgress({
   target,
   paidResidents = 0,
   totalParticipants = 0,
+  month,
+  year,
 }) {
   const percentage =
     target === 0
@@ -20,11 +22,11 @@ export default function CollectionProgress({
 
         <div>
           <h2 className="text-xl font-bold text-gray-800">
-            GC Collection Progress
+            GC Collection Progress {month ? `— ${month} ${year || ""}` : ""}
           </h2>
 
           <p className="text-gray-500 text-sm">
-            Current month's garbage fee collection
+            {month && year ? `${month} ${year} garbage fee collection` : "Monthly garbage fee collection"}
           </p>
         </div>
 

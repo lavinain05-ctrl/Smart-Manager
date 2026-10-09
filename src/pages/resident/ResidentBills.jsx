@@ -7,7 +7,7 @@ import { usePayments } from "../../context/PaymentContext";
 import { useResidents } from "../../context/ResidentContext";
 import { useSettings } from "../../context/SettingsContext";
 import { getDisplayStatus } from "../../utils/billStatus";
-import { FaFileInvoiceDollar } from "react-icons/fa";
+import { FaFileInvoiceDollar, FaInfoCircle } from "react-icons/fa";
 import GarbageModuleTabs from "../../components/resident/GarbageModuleTabs";
 import {
   MONTH_NAMES,
@@ -203,6 +203,27 @@ export default function ResidentBills() {
       <div>
         <h1 className="text-3xl font-bold">My Bills</h1>
         <p className="text-gray-500">Year {selectedYear}</p>
+      </div>
+
+      {/* How to Pay Notice */}
+      <div className="rounded-2xl bg-gradient-to-r from-blue-50/90 via-sky-50/70 to-blue-50/90 border border-blue-200/80 p-4 text-xs text-blue-950 shadow-xs flex items-start gap-3">
+        <div className="p-2 rounded-xl bg-blue-100 text-blue-700 shrink-0 mt-0.5">
+          <FaInfoCircle className="text-base" />
+        </div>
+        <div className="min-w-0 flex-1 leading-relaxed">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <h3 className="font-extrabold text-blue-950 text-sm">How to Pay Garbage Collection Fees</h3>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+              Doorstep Collection
+            </span>
+          </div>
+          <p className="text-slate-600 text-xs">
+            Monthly garbage collection fees are collected directly at your doorstep by your RWA-assigned collector after the completion of each month. The collector will collect the fee (cash or UPI), immediately update your payment record in the society system, and provide an official payment receipt for your home.
+          </p>
+          <p className="mt-1 font-semibold text-emerald-800 flex items-center gap-1.5">
+            <span>🧾 Please always collect your official receipt from the collector as payment confirmation.</span>
+          </p>
+        </div>
       </div>
 
       {/* Filters */}

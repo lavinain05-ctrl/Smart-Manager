@@ -354,6 +354,61 @@ export default function ResidentSupport() {
         </div>
       </div>
 
+      {/* ═══════════ Step-by-Step Guidance Box: How to Pay Garbage Collection ═══════════ */}
+      <div className="rounded-3xl bg-gradient-to-br from-emerald-950 via-teal-950 to-slate-900 text-white p-6 sm:p-8 shadow-md border border-emerald-800/60">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold uppercase tracking-wider border border-emerald-500/30">
+              <FaRecycle /> Doorstep Collection Guide
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
+              How to Pay Your Monthly Garbage Collection Fee
+            </h2>
+            <p className="text-slate-300 text-sm leading-relaxed">
+              Garbage collection fees are collected directly at your doorstep by your RWA-assigned collector at the end of each month in 3 simple steps:
+            </p>
+          </div>
+          <Link
+            to="/resident/bills"
+            className="px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-sm shadow-lg transition active:scale-95 shrink-0 inline-flex items-center gap-2"
+          >
+            <FaFileInvoiceDollar /> Check My Bills
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+          <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm mb-3">
+              1
+            </div>
+            <h4 className="font-bold text-sm text-white">Doorstep Collector Visit</h4>
+            <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+              Your RWA-assigned collector visits your home at the end of each completed month to collect the monthly fee (in cash or UPI).
+            </p>
+          </div>
+
+          <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm mb-3">
+              2
+            </div>
+            <h4 className="font-bold text-sm text-white">Instant System Update</h4>
+            <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+              The collector immediately updates your payment record in the RWA society system, changing your status to "Payment Confirmed".
+            </p>
+          </div>
+
+          <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm mb-3">
+              3
+            </div>
+            <h4 className="font-bold text-sm text-white">Collect Official Receipt</h4>
+            <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+              Please always collect your official receipt from the collector as confirmation. You can also view and download digital receipts in your portal.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* ═══════════ Step-by-Step Guidance Box: How to Contribute ═══════════ */}
       <div className="rounded-3xl bg-gradient-to-br from-slate-900 to-blue-950 text-white p-6 sm:p-8 shadow-md border border-slate-800">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">

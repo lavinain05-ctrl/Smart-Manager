@@ -35,7 +35,7 @@ import { usePayments } from "../../context/PaymentContext";
 import { useResidents } from "../../context/ResidentContext";
 import { useGarbage } from "../../context/GarbageContext";
 import { useBills } from "../../context/BillContext";
-import { getResidentPendingBillingCycles } from "../../utils/billingCycle";
+import { getResidentPendingBillingCycles, getActiveCollectionPeriod } from "../../utils/billingCycle";
 import RecentUpdatesCard from "../../components/notifications/RecentUpdatesCard";
 
 export default function CommitteeDashboard() {
@@ -188,6 +188,7 @@ export default function CommitteeDashboard() {
 
   const currentMonthName = useMemo(() => new Date().toLocaleString("default", { month: "long" }), []);
   const currentYearNum = useMemo(() => new Date().getFullYear(), []);
+  const activeCollectionCycle = useMemo(() => getActiveCollectionPeriod(), []);
 
   const pendingBilling = useMemo(() => {
     return getResidentPendingBillingCycles({
@@ -201,8 +202,20 @@ export default function CommitteeDashboard() {
 
   const isCurrentMonthPaid = pendingBilling.isAllPaid;
   const dueAmount = pendingBilling.totalDueAmount;
-  const dueMonthsLabel = pendingBilling.monthsLabel || `${currentMonthName} ${currentYearNum}`;
+  const dueMonthsLabel = pendingBilling.monthsLabel || `${activeCollectionCycle.month} ${activeCollectionCycle.year}`;
   const monthlyCharge = canonicalResident?.charge || 80;
+
+  const confirmedPayment = useMemo(() => {
+    const match = (myPersonalPayments || []).find(
+      (p) => p.month === activeCollectionCycle.month && Number(p.year) === activeCollectionCycle.year
+    );
+    if (match) return match;
+    return myPersonalPayments?.[0] || null;
+  }, [myPersonalPayments, activeCollectionCycle]);
+
+  const confirmedPaidCycleLabel = confirmedPayment
+    ? `${confirmedPayment.month} ${confirmedPayment.year}`
+    : `${activeCollectionCycle.month} ${activeCollectionCycle.year}`;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -380,7 +393,7 @@ export default function CommitteeDashboard() {
                   : "🔔 Garbage Fee Due"}
               </span>
               <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                {isCurrentMonthPaid ? `${currentMonthName} ${currentYearNum}` : dueMonthsLabel}
+                {isCurrentMonthPaid ? confirmedPaidCycleLabel : dueMonthsLabel}
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                 • Flat {canonicalResident?.flat || user?.flat || "—"}
@@ -389,7 +402,7 @@ export default function CommitteeDashboard() {
 
             <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 mt-1">
               {isCurrentMonthPaid
-                ? `Doorstep garbage collection fee for ${currentMonthName} ${currentYearNum} is paid.`
+                ? `Doorstep garbage collection fee for ${confirmedPaidCycleLabel} is paid.`
                 : `Doorstep garbage collection fee for ${dueMonthsLabel} is pending (₹${dueAmount}).`}
             </p>
             <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">

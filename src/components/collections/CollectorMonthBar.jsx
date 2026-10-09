@@ -14,6 +14,7 @@ import {
   isPriorToCollectionStart,
   getAvailableBillingYears,
   getAvailableBillingMonths,
+  getActiveCollectionPeriod,
 } from "../../utils/billingCycle";
 
 export default function CollectorMonthBar({
@@ -35,19 +36,17 @@ export default function CollectorMonthBar({
   const setSelectedMonth = customOnMonthChange || billing?.setSelectedMonth || (() => {});
   const setSelectedYear = customOnYearChange || billing?.setSelectedYear || (() => {});
 
-  const now = new Date();
-  const currentMonthName = now.toLocaleString("default", { month: "long" });
-  const currentYearNum = now.getFullYear();
+  const activeCycle = useMemo(() => getActiveCollectionPeriod(), []);
 
   const isCurrentMonth =
-    selectedMonth === currentMonthName && Number(selectedYear) === currentYearNum;
+    selectedMonth === activeCycle.month && Number(selectedYear) === activeCycle.year;
 
-  const currentMonthIndex = MONTH_NAMES.indexOf(currentMonthName);
+  const activeMonthIndex = MONTH_NAMES.indexOf(activeCycle.month);
   const selectedMonthIndex = MONTH_NAMES.indexOf(selectedMonth);
 
   const isPastMonth =
-    Number(selectedYear) < currentYearNum ||
-    (Number(selectedYear) === currentYearNum && selectedMonthIndex < currentMonthIndex);
+    Number(selectedYear) < activeCycle.year ||
+    (Number(selectedYear) === activeCycle.year && selectedMonthIndex < activeMonthIndex);
 
   const years = useMemo(() => getAvailableBillingYears(3), []);
   const availableMonths = useMemo(() => getAvailableBillingMonths(selectedYear), [selectedYear]);
@@ -84,13 +83,8 @@ export default function CollectorMonthBar({
   }
 
   function handleResetCurrent() {
-    if (isPriorToCollectionStart(currentMonthName, currentYearNum)) {
-      setSelectedMonth(COLLECTION_START_MONTH);
-      setSelectedYear(COLLECTION_START_YEAR);
-    } else {
-      setSelectedMonth(currentMonthName);
-      setSelectedYear(currentYearNum);
-    }
+    setSelectedMonth(activeCycle.month);
+    setSelectedYear(activeCycle.year);
   }
 
   if (compact) {

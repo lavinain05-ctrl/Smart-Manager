@@ -32,6 +32,8 @@ import {
   normalizePlotNumber,
   normalizeFloor,
   normalizeUnitNumber,
+  generateFlatId,
+  cleanUnitNumber,
   createProperty,
   linkOccupantToProperty,
   formatPropertyDisplay,
@@ -113,9 +115,14 @@ export async function addResidentWithAccount({
 
   const normPlot = normalizePlotNumber(plotNumber || flat || "");
   const floorObj = normalizeFloor(floor);
-  const normUnit = normalizeUnitNumber(unitNumber || "");
+  const normUnit = cleanUnitNumber(unitNumber || "", normPlot);
   const normPersonType = (personType || "OWNER").toUpperCase();
-  const displayFlat = normUnit ? `${normPlot}-${normUnit}` : normPlot || (flat || "").toUpperCase();
+  const displayFlat = generateFlatId({
+    plotNumber: normPlot,
+    floor: floorObj.label,
+    unitNumber: normUnit,
+    flat,
+  });
 
   const canonicalPropertyId = propertyId || (blockId && normPlot ? generatePropertyId({
     blockId,
@@ -157,9 +164,9 @@ export async function addResidentWithAccount({
           plotNumber: normPlot,
           floor: floorObj.label,
           unitNumber: normUnit,
-          occupancyStatus: normPersonType === "TENANT" ? "TENANT_OCCUPIED" : "OWNER_OCCUPIED",
-          ownerResidentId: normPersonType === "OWNER" ? uid : "",
-          ownerName: normPersonType === "OWNER" ? owner : "",
+          occupancyStatus: (normPersonType === "TENANT" || normPersonType === "RENTED") ? "TENANT_OCCUPIED" : "OWNER_OCCUPIED",
+          ownerResidentId: (normPersonType === "TENANT" || normPersonType === "RENTED") ? "" : uid,
+          ownerName: (normPersonType === "TENANT" || normPersonType === "RENTED") ? "" : owner,
           currentOccupantResidentId: uid,
           currentOccupantName: owner,
           occupantType: normPersonType,

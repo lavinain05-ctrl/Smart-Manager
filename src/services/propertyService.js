@@ -193,6 +193,240 @@ export function normalizeUnitNumber(unitInput) {
 }
 
 /**
+ * Returns a concise standard floor code for Flat ID generation.
+ * e.g. Ground Floor -> GF, 1st Floor -> 1F, 2nd Floor -> 2F, Penthouse -> PH, Basement -> B, etc.
+ */
+export function getFloorCode(floorInput) {
+  if (floorInput === undefined || floorInput === null) return "GF";
+  const raw = String(floorInput).trim().toLowerCase();
+  if (!raw) return "GF";
+
+  // Lower Basement
+  if (raw.includes("lower") && (raw.includes("base") || raw.includes("b2") || raw.includes("-2"))) {
+    return "LB";
+  }
+  // Basement
+  if (raw === "b" || raw === "b1" || raw === "basement" || raw === "-1" || raw.includes("base")) {
+    return "B";
+  }
+  // Stilt Floor / Parking
+  if (raw.includes("stilt") || raw.includes("parking")) {
+    return "ST";
+  }
+  // Penthouse
+  if (raw.includes("penthouse") || raw === "ph") {
+    return "PH";
+  }
+  // Terrace / Rooftop
+  if (raw.includes("terrace") || raw.includes("roof") || raw.includes("top")) {
+    return "TR";
+  }
+  // Ground floor
+  if (raw === "0" || raw === "g" || raw === "gf" || raw === "ground" || raw.includes("ground")) {
+    return "GF";
+  }
+
+  // Numbered floor: e.g. "1st Floor", "1", "1st", "Floor 1", "2nd Floor", "2", "2F"
+  const numMatch = raw.match(/\d+/);
+  if (numMatch) {
+    const n = parseInt(numMatch[0], 10);
+    if (n === 0) return "GF";
+    return `${n}F`;
+  }
+
+  // Word numbers
+  if (raw.includes("first")) return "1F";
+  if (raw.includes("second")) return "2F";
+  if (raw.includes("third")) return "3F";
+  if (raw.includes("fourth")) return "4F";
+  if (raw.includes("fifth")) return "5F";
+  if (raw.includes("sixth")) return "6F";
+  if (raw.includes("seventh")) return "7F";
+  if (raw.includes("eighth")) return "8F";
+  if (raw.includes("ninth")) return "9F";
+  if (raw.includes("tenth")) return "10F";
+
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4) || "GF";
+}
+
+export const FLOOR_CODE_REGEX = /^(GF|PH|LB|ST|TR|B|\d+F)$/i;
+
+/**
+ * Extracts numeric digits from a plot string (e.g. "D-562" -> "562", "12" -> "12", "D430" -> "430")
+ */
+export function getPlotNumericSuffix(plotStr) {
+  if (!plotStr) return "";
+  const match = String(plotStr).match(/\d+/);
+  return match ? match[0] : "";
+}
+
+/**
+ * Cleans a unit number candidate, removing accidental floor codes, corrupted repeated tokens,
+ * or plot numbers mistakenly treated as units.
+ */
+export function cleanUnitNumber(unitInput, plotNumber = "") {
+  if (!unitInput) return "";
+  let unit = normalizeUnitNumber(unitInput);
+  if (!unit) return "";
+
+  const unitUpper = unit.toUpperCase();
+  if (
+    unitUpper === "SINGLE" ||
+    unitUpper === "FULL" ||
+    unitUpper === "SINGLE / FULL FLOOR" ||
+    unitUpper === "SINGLE/FULL FLOOR" ||
+    unitUpper === "NONE" ||
+    unitUpper === "-" ||
+    unitUpper === SINGLE_UNIT_SENTINEL
+  ) {
+    return "";
+  }
+
+  // Strip repeated / leading floor codes (e.g. "1F-1F-1F-01" -> "01", "1F-562" -> "562", "1F" -> "")
+  const tokens = unit.split(/[-_/]+/).filter(Boolean);
+  const nonFloorTokens = [];
+  for (const t of tokens) {
+    if (!FLOOR_CODE_REGEX.test(t)) {
+      nonFloorTokens.push(t);
+    }
+  }
+
+  if (nonFloorTokens.length === 0) {
+    return "";
+  }
+
+  const cleaned = nonFloorTokens.join("-");
+
+  // Check if remaining token is identical to plot or the numeric portion of the plot
+  // e.g. plot is "D-562", cleaned is "562" -> it's the plot number, not a unit!
+  const normPlot = normalizePlotNumber(plotNumber || "");
+  const plotDigits = getPlotNumericSuffix(normPlot);
+
+  if (normPlot && (cleaned.toUpperCase() === normPlot.toUpperCase() || cleaned === plotDigits)) {
+    return "";
+  }
+
+  return cleaned;
+}
+
+/**
+ * Parses any flat string into canonical { plotNumber, floorCode, unitNumber }.
+ * Handles hyphenated plots (e.g. D-562), repeated floor tokens (e.g. D-562-1F-1F-...-562),
+ * legacy formats (D430-01), and standard formats (D430-2F-01, D-562-1F).
+ */
+export function parseFlatId(flat, knownPlot = "", knownFloor = "") {
+  const rawFlat = String(flat || "").trim();
+  let resolvedPlot = normalizePlotNumber(knownPlot || "");
+  let resolvedFloorCode = knownFloor ? getFloorCode(knownFloor) : "";
+  let resolvedUnit = "";
+
+  if (!rawFlat) {
+    return {
+      plotNumber: resolvedPlot,
+      floorCode: resolvedFloorCode,
+      unitNumber: resolvedUnit,
+    };
+  }
+
+  // Split flat by hyphens or underscores
+  const tokens = rawFlat.split(/[-_]+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return {
+      plotNumber: resolvedPlot,
+      floorCode: resolvedFloorCode,
+      unitNumber: resolvedUnit,
+    };
+  }
+
+  // Find index of first floor token (GF, PH, 1F, 2F, etc.)
+  const firstFloorIdx = tokens.findIndex((t) => FLOOR_CODE_REGEX.test(t));
+
+  if (firstFloorIdx !== -1) {
+    // Floor token was found!
+    // Everything BEFORE the first floor token is the plot (e.g. ["D", "562"] -> "D-562", or ["D430"] -> "D-430")
+    if (!resolvedPlot && firstFloorIdx > 0) {
+      resolvedPlot = normalizePlotNumber(tokens.slice(0, firstFloorIdx).join("-"));
+    }
+
+    if (!resolvedFloorCode) {
+      resolvedFloorCode = getFloorCode(tokens[firstFloorIdx]);
+    }
+
+    // Collect all tokens after the floor token sequence (skips repeated/consecutive floor tokens)
+    let postFloorIdx = firstFloorIdx;
+    while (postFloorIdx < tokens.length && FLOOR_CODE_REGEX.test(tokens[postFloorIdx])) {
+      postFloorIdx++;
+    }
+
+    if (postFloorIdx < tokens.length) {
+      const candidateUnit = tokens.slice(postFloorIdx).join("-");
+      resolvedUnit = cleanUnitNumber(candidateUnit, resolvedPlot);
+    }
+  } else {
+    // No floor token found in flat (e.g. "D-562", "D430-01", "12")
+    if (!resolvedPlot) {
+      if (tokens.length === 2 && /^[A-Z]$/i.test(tokens[0]) && /^\d+$/.test(tokens[1])) {
+        // e.g. ["D", "562"] -> Plot is "D-562", not a unit
+        resolvedPlot = normalizePlotNumber(tokens.join("-"));
+      } else if (tokens.length >= 2) {
+        // e.g. ["D430", "01"] -> plot "D430", candidate unit "01"
+        resolvedPlot = normalizePlotNumber(tokens[0]);
+        resolvedUnit = cleanUnitNumber(tokens.slice(1).join("-"), resolvedPlot);
+      } else {
+        resolvedPlot = normalizePlotNumber(tokens[0]);
+      }
+    } else {
+      // resolvedPlot was already known
+      // Check if flat had unit suffix: "D430-01" with known plot "D430"
+      const normFlat = normalizePlotNumber(rawFlat);
+      if (normFlat !== resolvedPlot) {
+        const cleanFlat = rawFlat.replace(new RegExp(`^${resolvedPlot}[-_]*`, "i"), "");
+        if (cleanFlat) {
+          resolvedUnit = cleanUnitNumber(cleanFlat, resolvedPlot);
+        }
+      }
+    }
+  }
+
+  return {
+    plotNumber: resolvedPlot,
+    floorCode: resolvedFloorCode || getFloorCode(knownFloor),
+    unitNumber: resolvedUnit,
+  };
+}
+
+/**
+ * Generates canonical Flat ID by combining Plot Number, Floor Code, and Flat/Unit Number.
+ * Format: Plot-FloorCode-Flat (e.g. D430-2F-01, D-562-1F, D683-PH)
+ * If Flat/Unit Number is omitted or Single/Full Floor: Plot-FloorCode (e.g. D-562-1F)
+ */
+export function generateFlatId({ plotNumber, floor, unitNumber, flat } = {}) {
+  // If flat string was provided, parse it first to safely decompose any legacy or corrupted parts
+  const parsed = flat ? parseFlatId(flat, plotNumber, floor) : null;
+
+  // 1. Resolve & normalize plot number
+  let resolvedPlot = normalizePlotNumber(plotNumber || (parsed ? parsed.plotNumber : ""));
+  if (!resolvedPlot) resolvedPlot = "PLOT";
+
+  // 2. Resolve floor code
+  const floorCode = floor ? getFloorCode(floor) : (parsed?.floorCode || "GF");
+
+  // 3. Resolve unit number
+  let normUnit = "";
+  if (unitNumber !== undefined && unitNumber !== null && String(unitNumber).trim() !== "") {
+    normUnit = cleanUnitNumber(unitNumber, resolvedPlot);
+  } else if (parsed?.unitNumber) {
+    normUnit = parsed.unitNumber;
+  }
+
+  // 4. Combine Plot-FloorCode[-Flat]
+  if (normUnit) {
+    return `${resolvedPlot}-${floorCode}-${normUnit}`;
+  }
+  return `${resolvedPlot}-${floorCode}`;
+}
+
+/**
  * Generates a stable, deterministic, Spark-compatible document ID for a property.
  * Format: prop_{blockId}_{normPlot}_{normFloorCode}_{normUnitOrSingle}
  */

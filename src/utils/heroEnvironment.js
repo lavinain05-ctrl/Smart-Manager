@@ -91,7 +91,7 @@ const HERO_IMAGES = {
   evening: "/assets/hero/hero-evening.webp",
   night: "/assets/hero/hero-night.webp",
   rain: "/assets/hero/hero-rain.webp",
-  fallback: "/public/society-banner.jpg",
+  fallback: "/society-banner.jpg",
 };
 
 /**
@@ -114,7 +114,7 @@ export function getHeroEnvironment({
   const isFoggy = weather === "fog" || weather === "mist";
 
   // Select base image according to priority
-  let heroImage = HERO_IMAGES.day;
+  let heroImage;
   let heroState = `${timePeriod}-${weather}`;
 
   if (isRainy) {

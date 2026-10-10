@@ -24,7 +24,7 @@ import { usePayments } from "../../context/PaymentContext";
 import { useBills } from "../../context/BillContext";
 import { useSettings } from "../../context/SettingsContext";
 
-import { collectResidentPayment } from "../../utils/collectPayment";
+import { collectResidentPayment, createPendingBill } from "../../utils/collectPayment";
 import { isGcParticipating } from "../../services/statisticsService";
 import { formatResidentFloor } from "../../services/propertyService";
 import { isPriorToResidentBillingStart } from "../../utils/billingCycle";
@@ -109,30 +109,103 @@ export default function CommitteeCollect({ defaultModule }) {
   }
 
   async function handleAddResident(formData) {
-    const result = await addResident({
-      ...formData,
-      status: "Active",
-      garbageStatus: "participating",
-      collectorId: user?.uid || "",
-      collectorName: user?.name || user?.email || "Committee Member",
-      createdBy: "Committee",
-      createdById: user?.uid,
-      createdByName: `${user?.name || "Committee"} (${user?.designation || "Executive Member"})`,
-      charge: Number(formData.charge) || Number(settings?.monthlyCharge) || 80,
-      createdAt: new Date().toISOString(),
-      accessProvenance: {
-        grantedByUid: user?.uid || "",
-        grantedByName: user?.name || "Committee Official",
-        grantedByRole: "committee",
-        grantedByDesignation: user?.designation || "Executive Member",
-        grantedAt: new Date().toISOString(),
-        channel: "committee_portal",
-      },
-    });
+    try {
+      const charge = Number(formData.charge) || Number(settings?.monthlyCharge) || 80;
+      const result = await addResident({
+        ...formData,
+        status: "Active",
+        garbageStatus: formData.garbageStatus || "participating",
+        collectorId: user?.uid || "",
+        collectorName: user?.name || user?.email || "Committee Member",
+        createdBy: "Committee",
+        createdById: user?.uid,
+        createdByName: `${user?.name || "Committee"} (${user?.designation || "Executive Member"})`,
+        charge,
+        createdAt: new Date().toISOString(),
+        accessProvenance: {
+          grantedByUid: user?.uid || "",
+          grantedByName: user?.name || "Committee Official",
+          grantedByRole: "committee",
+          grantedByDesignation: user?.designation || "Executive Member",
+          grantedAt: new Date().toISOString(),
+          channel: "committee_portal",
+        },
+      });
 
-    if (result) {
+      if (!result) return false;
+
+      const createdResidentId = result.id || (typeof result === "string" ? result : "");
+      const createdResident = {
+        id: createdResidentId,
+        ...formData,
+        charge,
+      };
+
+      // 1. If Payment is marked as "Paid", immediately record collection & generate receipt
+      if (formData.paymentStatus === "Paid" && formData.garbageStatus !== "not_participating") {
+        const payMonth = formData.billingMonth || currentMonth;
+        const payYear = Number(formData.billingYear || currentYear);
+        const payAmount = Number(formData.paymentAmount) || charge;
+        const payMethod = formData.paymentMethod || "Cash";
+
+        const receipt = await collectResidentPayment({
+          resident: createdResident,
+          month: payMonth,
+          year: payYear,
+          paymentData: {
+            amount: payAmount,
+            method: payMethod,
+            referenceNumber: formData.paymentReference || "",
+            remarks: formData.paymentRemarks || "Initial collection by Committee upon onboarding",
+            date: new Date().toLocaleDateString("en-IN"),
+            time: new Date().toLocaleTimeString("en-IN", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            }),
+            collectorName: user?.name || "Committee Official",
+            collectorRole: "committee",
+          },
+          bills: bills || [],
+          collector: user?.name || "Committee Official",
+          collectorId: user?.uid,
+        });
+
+        setShowAddResident(false);
+        if (receipt) {
+          setSuccessReceipt(receipt);
+          toast.success(`Resident added & payment recorded! Receipt ${receipt.receiptNumber} issued.`);
+        } else {
+          toast.success("Resident added! Ready for collection.");
+        }
+        return true;
+      }
+
+      // 2. If Payment is marked as "Pending", create pending bill record for that month/year
+      if (formData.paymentStatus === "Pending" && formData.garbageStatus !== "not_participating") {
+        const billMonth = formData.billingMonth || currentMonth;
+        const billYear = Number(formData.billingYear || currentYear);
+
+        await createPendingBill({
+          resident: createdResident,
+          month: billMonth,
+          year: billYear,
+          amount: charge,
+          collectorId: user?.uid,
+          collectorName: user?.name || "Committee Official",
+        });
+
+        setShowAddResident(false);
+        toast.success(`Resident added! Bill for ${billMonth} ${billYear} marked as Pending.`);
+        return true;
+      }
+
       setShowAddResident(false);
       toast.success("Resident added! Ready for collection.");
+      return true;
+    } catch (err) {
+      toast.error(err.message || "Failed to add resident");
+      return false;
     }
   }
 
@@ -1141,6 +1214,9 @@ export default function CommitteeCollect({ defaultModule }) {
                 onClose={() => setShowAddResident(false)}
                 defaultCharge={settings?.monthlyCharge || ""}
                 hidePortalFields
+                showCollectionPaymentFields={true}
+                defaultMonth={currentMonth}
+                defaultYear={currentYear}
               />
             </div>
           </div>

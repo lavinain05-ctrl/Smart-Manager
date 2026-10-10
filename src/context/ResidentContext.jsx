@@ -279,6 +279,12 @@ export function ResidentProvider({ children }) {
 
 
         toast.success("Resident Added with Portal Login");
+        return {
+          id: uid,
+          ...data,
+          status: "Active",
+          garbageStatus: finalGarbageStatus,
+        };
       } else {
         // Standard Firestore record without portal login credentials
         const normPlot = normalizePlotNumber(data.plotNumber || data.flat);
@@ -350,9 +356,11 @@ export function ResidentProvider({ children }) {
         }
 
         toast.success("Resident Added Successfully");
+        return {
+          id: newDocRef.id,
+          ...docData,
+        };
       }
-
-      return true;
     } catch (error) {
       console.error(error);
       toast.error(error.message || "Failed to add resident");

@@ -12,6 +12,17 @@ import {
   AVAILABLE_FLOORS,
   formatResidentFloor,
 } from "../../services/propertyService";
+import {
+  FaMoneyBillWave,
+  FaCheckCircle,
+  FaClock,
+  FaReceipt,
+  FaCalendarAlt,
+} from "react-icons/fa";
+import {
+  getAvailableBillingMonths,
+  getAvailableBillingYears,
+} from "../../utils/billingCycle";
 
 export default function ResidentForm({
   resident,
@@ -19,6 +30,9 @@ export default function ResidentForm({
   onClose,
   defaultCharge,
   hidePortalFields,
+  showCollectionPaymentFields = false,
+  defaultMonth = "",
+  defaultYear = "",
 }) {
   const { blocks } = useBlockFlat();
 
@@ -48,6 +62,41 @@ export default function ResidentForm({
   const [portalMobileCustom, setPortalMobileCustom] = useState(false);
   const [garbageEnrolled, setGarbageEnrolled] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Initial Payment & Billing State (for Collector / Committee Onboarding)
+  const now = new Date();
+  const currentMonthName = now.toLocaleString("default", { month: "long" });
+  const currentYearNum = now.getFullYear();
+
+  const [paymentStatus, setPaymentStatus] = useState("Paid");
+  const [billingMonth, setBillingMonth] = useState(defaultMonth || currentMonthName);
+  const [billingYear, setBillingYear] = useState(Number(defaultYear) || currentYearNum);
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [paymentAmount, setPaymentAmount] = useState(defaultCharge || "80");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentRemarks, setPaymentRemarks] = useState("");
+
+  const availableMonths = getAvailableBillingMonths(billingYear);
+  const availableYears = getAvailableBillingYears();
+
+  useEffect(() => {
+    if (defaultMonth) setBillingMonth(defaultMonth);
+    if (defaultYear) setBillingYear(Number(defaultYear));
+  }, [defaultMonth, defaultYear]);
+
+  useEffect(() => {
+    if (form.charge) {
+      setPaymentAmount(String(form.charge));
+    } else if (defaultCharge) {
+      setPaymentAmount(String(defaultCharge));
+    }
+  }, [form.charge, defaultCharge]);
+
+  useEffect(() => {
+    if (availableMonths.length > 0 && !availableMonths.includes(billingMonth)) {
+      setBillingMonth(availableMonths[0]);
+    }
+  }, [billingYear, availableMonths, billingMonth]);
 
   useEffect(() => {
     if (resident) {
@@ -190,6 +239,13 @@ export default function ResidentForm({
         enablePortalLogin,
         portalMobile: cleanPortalMobile,
         garbageStatus: garbageEnrolled ? "participating" : "not_participating",
+        paymentStatus: (showCollectionPaymentFields && !resident && garbageEnrolled) ? paymentStatus : null,
+        billingMonth: (showCollectionPaymentFields && !resident && garbageEnrolled) ? billingMonth : null,
+        billingYear: (showCollectionPaymentFields && !resident && garbageEnrolled) ? Number(billingYear) : null,
+        paymentMethod: (showCollectionPaymentFields && !resident && garbageEnrolled) ? paymentMethod : "Cash",
+        paymentAmount: (showCollectionPaymentFields && !resident && garbageEnrolled) ? (Number(paymentAmount) || Number(form.charge) || 80) : 0,
+        paymentReference: (showCollectionPaymentFields && !resident && garbageEnrolled) ? paymentReference.trim() : "",
+        paymentRemarks: (showCollectionPaymentFields && !resident && garbageEnrolled) ? paymentRemarks.trim() : "",
       };
 
       const success = await onSave(payload);
@@ -567,6 +623,206 @@ export default function ResidentForm({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Initial Payment & Billing Status Section (Shown on Collector / Committee Onboarding) */}
+      {showCollectionPaymentFields && !resident && garbageEnrolled && (
+        <div className="border-2 border-emerald-500/30 bg-gradient-to-br from-emerald-50/80 via-white to-teal-50/60 rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm animate-in fade-in duration-200">
+          <div className="flex items-center justify-between border-b border-emerald-200/70 pb-3">
+            <div className="flex items-center gap-2.5 text-emerald-900">
+              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-sm shadow-xs">
+                <FaMoneyBillWave />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-gray-900">Payment & Billing Status</h4>
+                <p className="text-[11px] text-gray-500">Record immediate collection or mark as pending for this billing month</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+              Collector Option
+            </span>
+          </div>
+
+          {/* Payment Status Choice (Paid vs Pending) */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+              Payment Status <span className="text-red-500">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setPaymentStatus("Paid")}
+                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl border-2 text-xs font-bold transition cursor-pointer active:scale-95 ${
+                  paymentStatus === "Paid"
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-500/20"
+                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                <FaCheckCircle className={paymentStatus === "Paid" ? "text-white" : "text-emerald-600 text-sm"} />
+                <span>Paid (Issue Receipt)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPaymentStatus("Pending")}
+                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl border-2 text-xs font-bold transition cursor-pointer active:scale-95 ${
+                  paymentStatus === "Pending"
+                    ? "bg-amber-500 text-white border-amber-500 shadow-md ring-2 ring-amber-500/20"
+                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                <FaClock className={paymentStatus === "Pending" ? "text-white" : "text-amber-500 text-sm"} />
+                <span>Pending (Unpaid)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Month and Year Selection */}
+          <div className="grid grid-cols-2 gap-2.5 bg-white p-3 rounded-xl border border-emerald-100 shadow-xs">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
+                <FaCalendarAlt className="text-emerald-600 text-[11px]" /> Billing Month
+              </label>
+              <select
+                value={billingMonth}
+                onChange={(e) => setBillingMonth(e.target.value)}
+                className="w-full border bg-emerald-50/30 rounded-xl p-2.5 text-xs font-bold text-gray-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                disabled={submitting}
+              >
+                {availableMonths.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Billing Year
+              </label>
+              <select
+                value={billingYear}
+                onChange={(e) => setBillingYear(Number(e.target.value))}
+                className="w-full border bg-emerald-50/30 rounded-xl p-2.5 text-xs font-bold text-gray-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                disabled={submitting}
+              >
+                {availableYears.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Fields when "Paid" is selected */}
+          {paymentStatus === "Paid" && (
+            <div className="bg-white border border-emerald-200 rounded-xl p-3.5 space-y-3 shadow-xs">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Payment Method
+                  </label>
+                  <div className="grid grid-cols-2 gap-1 bg-gray-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("Cash")}
+                      className={`py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                        paymentMethod === "Cash"
+                          ? "bg-white text-emerald-700 shadow-xs"
+                          : "text-gray-600 hover:text-gray-900"
+                      }`}
+                    >
+                      Cash
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("UPI")}
+                      className={`py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                        paymentMethod === "UPI"
+                          ? "bg-white text-emerald-700 shadow-xs"
+                          : "text-gray-600 hover:text-gray-900"
+                      }`}
+                    >
+                      UPI
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Amount Collected (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    placeholder="e.g. 80"
+                    className="w-full border bg-white rounded-xl p-2 text-xs font-bold text-emerald-700 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    disabled={submitting}
+                    required
+                  />
+                </div>
+              </div>
+
+              {paymentMethod === "UPI" && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    UPI Reference / UTR Number (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentReference}
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                    placeholder="e.g. UPI/429812345678"
+                    className="w-full border bg-white rounded-xl p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    disabled={submitting}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Collection Remarks (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={paymentRemarks}
+                  onChange={(e) => setPaymentRemarks(e.target.value)}
+                  placeholder="e.g. Collected at door upon adding resident"
+                  className="w-full border bg-white rounded-xl p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                  disabled={submitting}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-medium">
+                <FaReceipt className="text-emerald-600 text-sm shrink-0" />
+                <span>
+                  Official receipt will be generated and opened immediately for <strong>Thermal Print (58mm)</strong>, <strong>PDF</strong>, and <strong>WhatsApp Share</strong>.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Info card when "Pending" is selected */}
+          {paymentStatus === "Pending" && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200/90 text-xs text-amber-900 space-y-1.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold flex items-center gap-1.5 text-amber-900">
+                  <FaClock className="text-amber-600" /> Bill marked as Pending
+                </span>
+                <span className="font-black text-amber-800 text-sm">
+                  ₹{Number(paymentAmount) || Number(form.charge) || 80}
+                </span>
+              </div>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                A bill of ₹{Number(paymentAmount) || Number(form.charge) || 80} will be created as <strong>Pending</strong> for <strong>{billingMonth} {billingYear}</strong>. The resident will immediately appear in your Pending Collection list across all portals.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

@@ -351,3 +351,130 @@ export async function collectResidentPayment({
     return false;
   }
 }
+
+// =============================
+// createPendingBill
+// =============================
+// Creates a pending bill for a resident for a given month and year.
+// Ensures bills, garbageBills, and garbageAccounts are in sync.
+export async function createPendingBill({
+  resident,
+  month,
+  year,
+  amount,
+  collectorId,
+  collectorName,
+}) {
+  try {
+    const yNum = Number(year);
+    const mName = month;
+    const charge = Number(amount) > 0 ? Number(amount) : (Number(resident?.charge) > 0 ? Number(resident.charge) : 80);
+    const dueDateStr = formatDueDate(mName, yNum);
+    const periodLabelStr = `${mName} ${yNum}`;
+
+    // 1. Check or add in bills collection
+    const q = query(
+      collection(db, "bills"),
+      where("residentId", "==", resident.id),
+      where("month", "==", mName),
+      where("year", "==", yNum)
+    );
+    const snap = await getDocs(q);
+
+    let billId;
+    if (snap.empty) {
+      const newBillRef = await addBill({
+        residentId: resident.id || "",
+        residentName: resident.owner || resident.name || "Resident",
+        flat: resident.flat || resident.flatNumber || "",
+        block: resident.block || "",
+        plotNumber: resident.plotNumber || resident.plot || "",
+        floor: resident.floor || "",
+        floorCode: resident.floorCode || "",
+        unitNumber: resident.unitNumber || "",
+        personType: resident.personType || "",
+        propertyId: resident.propertyId || "",
+        amount: charge,
+        paidAmount: 0,
+        month: mName,
+        year: yNum,
+        status: "Pending",
+        paymentId: "",
+        paymentDate: "",
+        paymentMethod: "",
+        dueDate: dueDateStr,
+        periodLabel: periodLabelStr,
+        collectorId: collectorId || "",
+        collectorName: collectorName || "",
+      });
+      billId = newBillRef.id;
+    } else {
+      billId = snap.docs[0].id;
+    }
+
+    // 2. Ensure garbageAccount exists
+    let accountId = "";
+    try {
+      const accQuery = query(collection(db, "garbageAccounts"), where("residentId", "==", resident.id));
+      const accSnap = await getDocs(accQuery);
+      if (!accSnap.empty) {
+        accountId = accSnap.docs[0].id;
+      } else {
+        const newAcc = await addDoc(collection(db, "garbageAccounts"), {
+          residentId: resident.id,
+          residentName: resident.owner || resident.name || "Resident",
+          flat: resident.flat || resident.flatNumber || "",
+          block: resident.block || "",
+          mobile: resident.mobile || "",
+          monthlyCharge: charge,
+          collectorId: collectorId || "",
+          collectorName: collectorName || "",
+          status: "active",
+          joinedDate: new Date().toISOString().split("T")[0],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        accountId = newAcc.id;
+      }
+    } catch (accErr) {
+      console.warn("Could not sync garbageAccount for pending bill:", accErr.message);
+    }
+
+    // 3. Ensure matching garbageBills record exists
+    try {
+      const gQ = query(
+        collection(db, "garbageBills"),
+        where("residentId", "==", resident.id),
+        where("month", "==", mName),
+        where("year", "==", yNum)
+      );
+      const gSnap = await getDocs(gQ);
+      if (gSnap.empty) {
+        await addDoc(collection(db, "garbageBills"), {
+          accountId: accountId || "",
+          residentId: resident.id,
+          month: mName,
+          year: yNum,
+          amount: charge,
+          paidAmount: 0,
+          status: "Pending",
+          paymentDate: "",
+          paymentMethod: "",
+          collectedById: collectorId || "",
+          dueDate: dueDateStr,
+          periodLabel: periodLabelStr,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (gErr) {
+      console.warn("Could not sync garbageBills for pending bill:", gErr.message);
+    }
+
+    return { id: billId, status: "Pending", amount: charge, month: mName, year: yNum };
+  } catch (error) {
+    console.error("createPendingBill error:", error);
+    toast.error(error?.message || "Failed to create pending bill record.");
+    return false;
+  }
+}

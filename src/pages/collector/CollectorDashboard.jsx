@@ -30,8 +30,10 @@ import { printPaymentReceipt } from "../../utils/printReceiptHelper";
 import ResidentForm from "../../components/forms/ResidentForm";
 import CollectorMonthBar from "../../components/collections/CollectorMonthBar";
 import PrinterQuickAction from "../../components/common/PrinterQuickAction";
+import PaymentReceiptSuccessModal from "../../components/collections/PaymentReceiptSuccessModal";
 import { isGcParticipating } from "../../services/statisticsService";
 import { subscribeAllSpecialPayments } from "../../services/specialCollectionService";
+import { collectResidentPayment, createPendingBill } from "../../utils/collectPayment";
 
 export default function CollectorDashboard() {
   const { user } = useAuth();
@@ -42,6 +44,7 @@ export default function CollectorDashboard() {
   const { selectedMonth, setSelectedMonth, selectedYear, setSelectedYear } = useBilling();
 
   const [showAddResident, setShowAddResident] = useState(false);
+  const [successReceipt, setSuccessReceipt] = useState(null);
   const [specialPayments, setSpecialPayments] = useState([]);
   const [historyTab, setHistoryTab] = useState("month"); // "month" or "today"
   const [recordsSearch, setRecordsSearch] = useState("");
@@ -348,6 +351,7 @@ export default function CollectorDashboard() {
 
   async function handleAddResident(formData) {
     try {
+      const charge = Number(formData.charge) || Number(settings?.monthlyCharge) || 80;
       const result = await addResident({
         ...formData,
         status: "Active",
@@ -357,16 +361,81 @@ export default function CollectorDashboard() {
         createdBy: "Collector",
         createdById: user?.uid,
         createdByName: user?.name || user?.email,
-        charge: Number(formData.charge) || Number(settings?.monthlyCharge) || 80,
+        charge,
         createdAt: new Date().toISOString(),
       });
 
-      if (result) {
+      if (!result) return false;
+
+      const createdResidentId = result.id || (typeof result === "string" ? result : "");
+      const createdResident = {
+        id: createdResidentId,
+        ...formData,
+        charge,
+      };
+
+      // 1. If Payment is marked as "Paid", immediately record collection & generate receipt
+      if (formData.paymentStatus === "Paid" && formData.garbageStatus !== "not_participating") {
+        const payMonth = formData.billingMonth || selectedMonth;
+        const payYear = Number(formData.billingYear || selectedYear);
+        const payAmount = Number(formData.paymentAmount) || charge;
+        const payMethod = formData.paymentMethod || "Cash";
+
+        const receipt = await collectResidentPayment({
+          resident: createdResident,
+          month: payMonth,
+          year: payYear,
+          paymentData: {
+            amount: payAmount,
+            method: payMethod,
+            referenceNumber: formData.paymentReference || "",
+            remarks: formData.paymentRemarks || "Initial collection upon resident onboarding",
+            date: new Date().toLocaleDateString("en-IN"),
+            time: new Date().toLocaleTimeString("en-IN", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            }),
+            collectorName: user?.name || "Collector",
+            collectorRole: "collector",
+          },
+          bills: bills || [],
+          collector: user?.name || "Collector",
+          collectorId: user?.uid,
+        });
+
         setShowAddResident(false);
-        toast.success("Resident added! Ready for collection.");
+        if (receipt) {
+          setSuccessReceipt(receipt);
+          toast.success(`Resident added & payment recorded! Receipt ${receipt.receiptNumber} issued.`);
+        } else {
+          toast.success("Resident added! Ready for collection.");
+        }
         return true;
       }
-      return false;
+
+      // 2. If Payment is marked as "Pending", create pending bill record for that month/year
+      if (formData.paymentStatus === "Pending" && formData.garbageStatus !== "not_participating") {
+        const billMonth = formData.billingMonth || selectedMonth;
+        const billYear = Number(formData.billingYear || selectedYear);
+
+        await createPendingBill({
+          resident: createdResident,
+          month: billMonth,
+          year: billYear,
+          amount: charge,
+          collectorId: user?.uid,
+          collectorName: user?.name || "Collector",
+        });
+
+        setShowAddResident(false);
+        toast.success(`Resident added! Bill for ${billMonth} ${billYear} marked as Pending.`);
+        return true;
+      }
+
+      setShowAddResident(false);
+      toast.success("Resident added! Ready for collection.");
+      return true;
     } catch (err) {
       toast.error(err.message || "Failed to add resident");
       return false;
@@ -653,11 +722,21 @@ export default function CollectorDashboard() {
                 onClose={() => setShowAddResident(false)}
                 defaultCharge={settings?.monthlyCharge || ""}
                 hidePortalFields
+                showCollectionPaymentFields={true}
+                defaultMonth={selectedMonth}
+                defaultYear={selectedYear}
               />
             </div>
           </div>
         </div>
       )}
+
+      {/* Official Receipt Success Modal (with Direct Thermal Print, PDF & WhatsApp) */}
+      <PaymentReceiptSuccessModal
+        open={Boolean(successReceipt)}
+        receipt={successReceipt}
+        onClose={() => setSuccessReceipt(null)}
+      />
     </div>
   );
 }

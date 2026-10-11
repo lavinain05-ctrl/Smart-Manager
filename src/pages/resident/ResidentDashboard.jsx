@@ -1564,7 +1564,7 @@ export default function ResidentDashboard() {
                             photo = "/committee/treasurer.jpg";
                           } else if (member.designation?.toLowerCase() === "vice treasurer" || member.name?.toLowerCase().includes("vinod")) {
                             photo = "/committee/vinod-kumar.jpg";
-                          } else if (member.designation?.toLowerCase() === "advisor" || member.name?.toLowerCase().includes("dinesh")) {
+                          } else if (((member.designation?.toLowerCase() === "advisor" || (member.name?.toLowerCase().includes("dinesh") && member.name?.toLowerCase().includes("kumar"))) && !member.name?.toLowerCase().includes("kapri") && !member.name?.toLowerCase().includes("chandra")) || member.phone === "9211592644") {
                             photo = "/committee/dinesh-kumar.png";
                           } else if (member.designation?.toLowerCase() === "vice secretary" || member.name?.toLowerCase().includes("manoj") || member.name?.toLowerCase().includes("tomar")) {
                             photo = "/committee/manoj-tomar.jpg";

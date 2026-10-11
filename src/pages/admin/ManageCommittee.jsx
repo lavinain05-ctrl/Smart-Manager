@@ -120,8 +120,11 @@ export function getAdminMemberPhoto(member) {
     member?.name?.toLowerCase().includes("dhama");
   if (isNarendra) return "/committee/narendra-dhama.png";
   const isDinesh =
-    member?.designation?.toLowerCase() === "advisor" ||
-    member?.name?.toLowerCase().includes("dinesh");
+    ((member?.designation?.toLowerCase() === "advisor" ||
+      (member?.name?.toLowerCase().includes("dinesh") && member?.name?.toLowerCase().includes("kumar"))) &&
+      !member?.name?.toLowerCase().includes("kapri") &&
+      !member?.name?.toLowerCase().includes("chandra")) ||
+    member?.phone === "9211592644";
   if (isDinesh) return "/committee/dinesh-kumar.png";
   const isManoj =
     member?.designation?.toLowerCase() === "vice secretary" ||

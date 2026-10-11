@@ -737,7 +737,7 @@ export default function CommitteeDashboard() {
                     ? "/committee/vinod-kumar.jpg"
                     : (member.designation === "Spokesperson" || member.name?.toLowerCase().includes("narendra") || member.name?.toLowerCase().includes("dhama"))
                     ? "/committee/narendra-dhama.png"
-                    : (member.designation === "Advisor" || member.name?.toLowerCase().includes("dinesh"))
+                    : (((member.designation === "Advisor" || (member.name?.toLowerCase().includes("dinesh") && member.name?.toLowerCase().includes("kumar"))) && !member.name?.toLowerCase().includes("kapri") && !member.name?.toLowerCase().includes("chandra")) || member.phone === "9211592644")
                     ? "/committee/dinesh-kumar.png"
                     : (member.designation === "Vice Secretary" || member.name?.toLowerCase().includes("manoj") || member.name?.toLowerCase().includes("tomar"))
                     ? "/committee/manoj-tomar.jpg"

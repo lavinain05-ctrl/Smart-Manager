@@ -1532,6 +1532,8 @@ export default function ResidentDashboard() {
                   ? "bg-teal-100 text-teal-900 dark:bg-teal-950/60 dark:text-teal-300 border-teal-200"
                   : member.designation === "Spokesperson"
                   ? "bg-cyan-100 text-cyan-900 dark:bg-cyan-950/60 dark:text-cyan-300 border-cyan-200"
+                  : member.designation === "Coordinator"
+                  ? "bg-teal-100 text-teal-900 dark:bg-teal-950/60 dark:text-teal-300 border-teal-200"
                   : member.designation === "Advisor"
                   ? "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200"
                   : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-200";

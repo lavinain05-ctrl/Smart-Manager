@@ -135,6 +135,13 @@ const DESIGNATION_STYLES = {
     icon: FaBullhorn,
     iconColor: "text-cyan-500",
   },
+  Coordinator: {
+    badge: "bg-teal-100 text-teal-900 border-teal-300 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-800",
+    gradient: "from-teal-500/20 via-emerald-500/10 to-transparent",
+    ring: "ring-teal-400/60",
+    icon: FaUsers,
+    iconColor: "text-teal-500",
+  },
   Advisor: {
     badge: "bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800",
     gradient: "from-blue-500/20 via-indigo-500/10 to-transparent",

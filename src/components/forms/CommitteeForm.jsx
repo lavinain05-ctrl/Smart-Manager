@@ -45,6 +45,7 @@ const DESIGNATIONS = [
   "Treasurer",
   "Vice Treasurer",
   "General Secretary",
+  "Coordinator",
   "Spokesperson",
   "Advisor",
   "Legal Advisor",

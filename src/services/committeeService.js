@@ -52,6 +52,7 @@ const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
  */
 export function validateProfilePhoto(file) {
   if (!file) return "No file selected.";
+  if (typeof file === "string") return null;
   if (!ACCEPTED_TYPES.includes(file.type)) {
     return "Invalid file type. Only JPG, PNG, and WebP are accepted.";
   }
@@ -59,6 +60,69 @@ export function validateProfilePhoto(file) {
     return "File is too large. Maximum size is 5 MB.";
   }
   return null;
+}
+
+/**
+ * Automatically compress and resize an avatar image into a lightweight,
+ * high-resolution JPEG Data URL (~20KB - 35KB) for instant rendering across all portals.
+ */
+export async function compressProfilePhoto(file, maxDimension = 400, quality = 0.85) {
+  if (!file) return null;
+  if (typeof file === "string") return file;
+  if (typeof window === "undefined" || typeof document === "undefined") return file;
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Failed to read image file."));
+    reader.onload = (e) => {
+      const dataUri = e.target?.result;
+      if (!dataUri || typeof dataUri !== "string") return resolve(null);
+
+      const img = new Image();
+      img.onerror = () => {
+        if (dataUri.startsWith("data:image/") && dataUri.length < 1000000) {
+          resolve(dataUri);
+        } else {
+          reject(new Error("Invalid image format."));
+        }
+      };
+
+      img.onload = () => {
+        try {
+          let { width, height } = img;
+          if (!width || !height) return resolve(dataUri);
+
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+
+          // Fill clean background to avoid transparency rendering black in JPEG
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const compressed = canvas.toDataURL("image/jpeg", quality);
+          resolve(compressed || dataUri);
+        } catch {
+          resolve(dataUri);
+        }
+      };
+
+      img.src = dataUri;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 /**
@@ -70,7 +134,7 @@ function getPhotoStoragePath(memberId) {
 
 /**
  * Upload a committee member's profile photo.
- * Returns the download URL.
+ * Returns the download URL or optimized data URL.
  */
 export async function uploadCommitteePhoto(memberId, file) {
   if (!memberId || typeof memberId !== "string") {
@@ -80,28 +144,52 @@ export async function uploadCommitteePhoto(memberId, file) {
   const validationError = validateProfilePhoto(file);
   if (validationError) throw new Error(validationError);
 
-  const storagePath = getPhotoStoragePath(memberId);
-  const storageRef = ref(storage, storagePath);
+  // 1. Prepare high-speed optimized image data
+  const optimizedDataUrl = await compressProfilePhoto(file, 400, 0.85);
+  let finalUrl = optimizedDataUrl;
 
-  // Upload with 15s timeout
-  const uploadPromise = uploadBytes(storageRef, file);
-  const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(
-      () => reject(new Error("Photo upload timed out. Check network or storage rules.")),
-      15000
-    )
-  );
+  // 2. Best-effort Firebase Storage upload with quick timeout (3.5s)
+  // If Storage bucket is unavailable (e.g. Spark plan or CORS restriction),
+  // seamlessly fall back to optimizedDataUrl without blocking the user.
+  if (file && typeof file === "object" && file.size) {
+    try {
+      const storagePath = getPhotoStoragePath(memberId);
+      const storageRef = ref(storage, storagePath);
 
-  const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
-  const downloadUrl = await getDownloadURL(snapshot.ref);
+      const uploadPromise = uploadBytes(storageRef, file);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Storage upload timed out")), 3500)
+      );
 
-  // Update Firestore doc with the new URL
+      const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
+      const downloadUrl = await getDownloadURL(snapshot.ref);
+      if (downloadUrl) {
+        finalUrl = downloadUrl;
+      }
+    } catch (storageErr) {
+      console.warn(
+        "[uploadCommitteePhoto] Storage upload bypassed or failed, syncing optimized photo directly:",
+        storageErr?.message || storageErr
+      );
+    }
+  }
+
+  // 3. Update Firestore docs with the reliable photo URL
   await updateDoc(doc(db, "committee", memberId), {
-    profilePhotoUrl: downloadUrl,
+    profilePhotoUrl: finalUrl,
     updatedAt: serverTimestamp(),
   });
 
-  return downloadUrl;
+  try {
+    await updateDoc(doc(db, "users", memberId), {
+      profilePhotoUrl: finalUrl,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    // Non-critical if user document is not yet linked
+  }
+
+  return finalUrl;
 }
 
 /**
@@ -115,16 +203,25 @@ export async function deleteCommitteePhoto(memberId) {
     const storageRef = ref(storage, storagePath);
     await deleteObject(storageRef);
   } catch (error) {
-    if (error.code !== "storage/object-not-found") {
-      console.warn("[Storage] delete failed:", error.message);
+    if (error?.code !== "storage/object-not-found") {
+      console.warn("[Storage] delete failed:", error?.message);
     }
   }
 
-  // Clear Firestore field
+  // Clear Firestore fields in committee and users
   await updateDoc(doc(db, "committee", memberId), {
     profilePhotoUrl: "",
     updatedAt: serverTimestamp(),
   });
+
+  try {
+    await updateDoc(doc(db, "users", memberId), {
+      profilePhotoUrl: "",
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    // Non-critical
+  }
 }
 
 /**
@@ -132,13 +229,7 @@ export async function deleteCommitteePhoto(memberId) {
  * Uploads new photo first, then deletes old one only after success.
  */
 export async function replaceCommitteePhoto(memberId, newFile) {
-  // Upload new photo first (also updates Firestore)
-  const newUrl = await uploadCommitteePhoto(memberId, newFile);
-
-  // Old photo at the same Storage path is automatically overwritten
-  // by uploadBytes, so no separate delete needed for the same path.
-
-  return newUrl;
+  return await uploadCommitteePhoto(memberId, newFile);
 }
 
 // =============================

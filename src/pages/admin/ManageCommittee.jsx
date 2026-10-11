@@ -1910,7 +1910,7 @@ export default function ManageCommittee() {
                     )}
                   </div>
                   <p className="text-[11px] text-gray-500">
-                    JPG, PNG, or WebP. Max 5MB. Uploads to Firebase Storage.
+                    JPG, PNG, or WebP. Max 5MB. Auto-optimized for instant loading across society portals.
                   </p>
                 </div>
               ) : (

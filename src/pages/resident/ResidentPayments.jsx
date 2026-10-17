@@ -89,7 +89,23 @@ export default function ResidentPayments() {
       return sortBy === "newest" ? tsB - tsA : tsA - tsB;
     });
 
-    return result;
+    // Deduplicate by billing cycle so payments for the same month are consolidated
+    const cycleMap = new Map();
+    result.forEach((p) => {
+      const cycleKey = p.month && p.year ? `${p.month}_${p.year}` : (p.receiptNumber || p.id);
+      if (!cycleMap.has(cycleKey)) {
+        cycleMap.set(cycleKey, p);
+      } else {
+        const existing = cycleMap.get(cycleKey);
+        const existingNum = Number((existing.receiptNumber || "").replace(/\D/g, "")) || 0;
+        const currentNum = Number((p.receiptNumber || "").replace(/\D/g, "")) || 0;
+        if (currentNum >= existingNum) {
+          cycleMap.set(cycleKey, p);
+        }
+      }
+    });
+
+    return Array.from(cycleMap.values());
   }, [payments, canonicalResidentId, canonicalResident, user, cleanPhone, search, modeFilter, sortBy]);
 
   return (

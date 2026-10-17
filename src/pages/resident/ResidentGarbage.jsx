@@ -96,7 +96,7 @@ export default function ResidentGarbage() {
 
   // My Payments from payments collection
   const myPayments = useMemo(() => {
-    return payments
+    const raw = payments
       .filter((p) => {
         if (p.residentId === canonicalResidentId || p.residentId === user?.residentId || p.residentId === user?.uid) {
           return true;
@@ -123,6 +123,25 @@ export default function ResidentGarbage() {
         const tsB = Number((b.receiptNumber || "").replace("REC-", "")) || 0;
         return tsB - tsA;
       });
+
+    // Deduplicate: If multiple payment records exist for the exact same billing month & year,
+    // consolidate so a single billing month is not double-counted.
+    const monthYearMap = new Map();
+    raw.forEach((p) => {
+      const key = p.month && p.year ? `${p.month}-${p.year}` : (p.receiptNumber || p.id);
+      if (!monthYearMap.has(key)) {
+        monthYearMap.set(key, p);
+      } else {
+        const existing = monthYearMap.get(key);
+        const existingNum = Number((existing.receiptNumber || "").replace(/\D/g, "")) || 0;
+        const currentNum = Number((p.receiptNumber || "").replace(/\D/g, "")) || 0;
+        if (currentNum >= existingNum) {
+          monthYearMap.set(key, p);
+        }
+      }
+    });
+
+    return Array.from(monthYearMap.values());
   }, [payments, canonicalResidentId, canonicalResident, user, cleanPhone]);
 
   // Monthly Charge synchronized

@@ -175,6 +175,14 @@ export default function GarbageSettings() {
     return cycleBills.filter((b) => b.status === "Paid").length;
   }, [cycleBills]);
 
+  const pendingBillsCount = useMemo(() => {
+    return cycleBills.filter(
+      (b) =>
+        (b.status || "").toLowerCase() === "pending" ||
+        (b.status || "").toLowerCase() === "overdue"
+    ).length;
+  }, [cycleBills]);
+
   return (
     <div className="space-y-6 max-w-4xl pb-12">
       {/* Header */}
@@ -221,18 +229,28 @@ export default function GarbageSettings() {
         </div>
 
         {/* Mini KPI Chips */}
-        <div className="grid grid-cols-3 gap-3 w-full md:w-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 w-full md:w-auto">
           <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3 text-center border border-white/10">
             <div className="text-[11px] font-bold text-slate-300">Enrolled</div>
-            <div className="text-lg font-black text-white">{participatingCount} Flats</div>
+            <div className="text-base sm:text-lg font-black text-white">{participatingCount} Flats</div>
           </div>
           <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3 text-center border border-white/10">
             <div className="text-[11px] font-bold text-slate-300">Active Bills</div>
-            <div className="text-lg font-black text-emerald-300">{cycleBills.length}</div>
+            <div className="text-base sm:text-lg font-black text-emerald-300">{cycleBills.length}</div>
           </div>
           <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3 text-center border border-white/10">
-            <div className="text-[11px] font-bold text-slate-300">Paid Dues</div>
-            <div className="text-lg font-black text-teal-300">{paidBillsCount}</div>
+            <div className="text-[11px] font-bold text-slate-300">Paid Bills</div>
+            <div className="text-base sm:text-lg font-black text-teal-300">{paidBillsCount}</div>
+          </div>
+          <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3 text-center border border-white/10">
+            <div className="text-[11px] font-bold text-slate-300">Pending Dues</div>
+            <div
+              className={`text-base sm:text-lg font-black ${
+                pendingBillsCount > 0 ? "text-amber-300" : "text-emerald-300"
+              }`}
+            >
+              {pendingBillsCount}
+            </div>
           </div>
         </div>
       </div>

@@ -5,7 +5,12 @@ import toast from "react-hot-toast";
 import { updateGarbageStatus } from "../../services/residentService";
 import { logActivity } from "../../services/activityLogService";
 import { isGcParticipating } from "../../services/statisticsService";
-import { formatResidentFloor } from "../../services/propertyService";
+import {
+  formatResidentFloor,
+  parseFlatId,
+  normalizePlotNumber,
+  cleanUnitNumber,
+} from "../../services/propertyService";
 import Pagination from "../common/Pagination";
 
 const GC_STATUSES = [
@@ -157,6 +162,15 @@ export default function ResidentsTable({
               chargeDisplay = "₹0";
             }
 
+            const parsed = parseFlatId(resident.flat, resident.plotNumber, resident.floor);
+            const plotDisplay = parsed.plotNumber || normalizePlotNumber(resident.plotNumber) || resident.flat || "—";
+            const unitDisplay = cleanUnitNumber(
+              resident.unitNumber !== undefined && resident.unitNumber !== null && resident.unitNumber !== ""
+                ? resident.unitNumber
+                : parsed.unitNumber,
+              plotDisplay
+            );
+
             return (
               <tr
                 key={resident.id}
@@ -165,16 +179,16 @@ export default function ResidentsTable({
                 <td className="p-4 font-semibold">
                   <button
                     onClick={() => onViewDetails && onViewDetails(resident)}
-                    className="font-bold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer text-left block"
-                    title="Click to view complete resident details"
+                    className="font-bold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer text-left block whitespace-nowrap"
+                    title={`Click to view resident details (${resident.flat || plotDisplay})`}
                   >
-                    {resident.flat || resident.plotNumber || "—"}
+                    {plotDisplay}
                   </button>
-                  {resident.unitNumber && resident.flat?.includes("-") && (
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      Unit {resident.unitNumber}
+                  {unitDisplay ? (
+                    <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/80 font-mono whitespace-nowrap">
+                      Unit {unitDisplay}
                     </span>
-                  )}
+                  ) : null}
                 </td>
 
                 <td className="p-4">

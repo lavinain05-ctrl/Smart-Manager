@@ -284,13 +284,15 @@ service cloud.firestore {
     match /notifications/{id} {
       allow read: if isSignedIn() && (
         isAdmin() ||
+        isCommittee() ||
         resource.data.userId == request.auth.uid ||
         resource.data.userId == "all" ||
+        resource.data.userId == "admin" ||
         resource.data.userId == getUserRole()
       );
       allow create: if isSignedIn();
-      allow update: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow update: if isSignedIn() && (isAdmin() || isCommittee() || resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin() || isCommittee() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     // ============================
@@ -299,8 +301,13 @@ service cloud.firestore {
 
     match /profileUpdateRequests/{id} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.residentId == request.auth.uid;
-      allow update, delete: if isAdmin() || isCommittee();
+      allow create: if isSignedIn() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.residentId == request.auth.uid ||
+        isAdmin() ||
+        isCommittee()
+      );
+      allow update, delete: if isAdmin() || isCommittee() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     // ============================

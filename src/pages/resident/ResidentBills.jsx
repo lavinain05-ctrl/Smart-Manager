@@ -5,6 +5,7 @@ import { useBills } from "../../context/BillContext";
 import { useBilling } from "../../context/BillingContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useResidents } from "../../context/ResidentContext";
+import { useSettings } from "../../context/SettingsContext";
 import { getDisplayStatus } from "../../utils/billStatus";
 import { deleteBill } from "../../services/billService";
 import { FaFileInvoiceDollar, FaInfoCircle } from "react-icons/fa";

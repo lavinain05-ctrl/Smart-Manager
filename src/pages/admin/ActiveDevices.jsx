@@ -160,12 +160,8 @@ export default function ActiveDevices() {
 
   const otherSessionsCount = sessions.filter((s) => !s.isCurrentDevice).length;
   const currentSession = sessions.find((s) => s.isCurrentDevice);
-  const currentDeviceModel = currentSession
-    ? (currentSession.customName ||
-       currentSession.deviceName ||
-       currentSession.model ||
-       parseDeviceModel(currentSession.userAgent, currentSession.screen, currentSession.os, currentSession.device) ||
-       `${currentSession.os} • ${currentSession.browser}`)
+  const currentDeviceLabel = currentSession
+    ? (currentSession.customName || `${currentSession.os || "Device"} • ${currentSession.browser || "Browser"}`)
     : "Current Browser";
 
   return (
@@ -240,10 +236,10 @@ export default function ActiveDevices() {
           </div>
           <div className="min-w-0">
             <p className="text-xs text-gray-500 font-medium">This Device</p>
-            <p className="text-sm font-bold text-gray-900 truncate" title={currentDeviceModel}>
-              {currentDeviceModel}
+            <p className="text-sm font-bold text-gray-900 truncate" title={currentDeviceLabel}>
+              {currentDeviceLabel}
             </p>
-            {currentSession && (
+            {currentSession && currentSession.customName && (
               <p className="text-[11px] text-gray-500 truncate">
                 {currentSession.os} • {currentSession.browser}
               </p>
@@ -291,14 +287,8 @@ export default function ActiveDevices() {
               const isTerminating = actionLoadingId === session.id;
               const isEditing = editingSessionId === session.id;
 
-              // Parse real hardware device model if not already saved
-              const hardwareModel =
-                session.deviceName ||
-                session.model ||
-                parseDeviceModel(session.userAgent, session.screen, session.os, session.device);
-
-              const displayName = session.customName || hardwareModel || `${session.os || "Device"} • ${session.browser || "Browser"}`;
-              const browserLabel = `${session.os || "Device"} • ${session.browser || "Browser"}`;
+              const defaultLabel = `${session.os || "Device"} • ${session.browser || "Browser"}`;
+              const displayName = session.customName || defaultLabel;
 
               return (
                 <div
@@ -356,7 +346,7 @@ export default function ActiveDevices() {
                               type="button"
                               onClick={() => {
                                 setEditingSessionId(session.id);
-                                setEditDeviceName(session.customName || displayName);
+                                setEditDeviceName(session.customName || "");
                               }}
                               className="text-gray-400 hover:text-emerald-600 text-xs transition p-1 rounded hover:bg-gray-100"
                               title="Rename this device"
@@ -386,20 +376,17 @@ export default function ActiveDevices() {
                         )}
                       </div>
 
-                      {/* Technical & Hardware Details */}
+                      {/* Technical Details */}
                       <div className="flex items-center gap-x-4 gap-y-1 text-xs text-gray-500 flex-wrap">
-                        <span className="font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
-                          {browserLabel}
-                        </span>
-                        {session.customName && hardwareModel && (
-                          <span className="text-gray-600">
-                            Hardware: <strong className="font-semibold text-gray-700">{hardwareModel}</strong>
+                        {session.customName && (
+                          <span className="font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                            {defaultLabel}
                           </span>
                         )}
                         {session.screen && session.screen !== "Unknown" && (
                           <span>Screen: {session.screen}</span>
                         )}
-                        <span>Type: {session.device || "Desktop"}</span>
+                        <span>Device Type: {session.device || "Desktop"}</span>
                         <span>Logged in: {formatTime(session.createdAt)}</span>
                         <span>Last active: {formatTime(session.lastActiveAt)}</span>
                       </div>

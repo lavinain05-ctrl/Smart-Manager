@@ -1211,12 +1211,14 @@ export function GarbageProvider({ children }) {
       updatedAccountSnap.docs.map((d) => d.data().residentId)
     );
 
-    // Standardize existing accounts if charge is 0
+    // Sync existing accounts with resident's individual charge (or fallback to default)
     for (const d of updatedAccountSnap.docs) {
       const a = d.data();
-      if (!a.monthlyCharge || Number(a.monthlyCharge) <= 0) {
+      const resident = residentMapById[a.residentId];
+      const targetCharge = Number(resident?.charge) > 0 ? Number(resident.charge) : effectiveStandardFee;
+      if (!a.monthlyCharge || Number(a.monthlyCharge) <= 0 || (Number(resident?.charge) > 0 && Number(a.monthlyCharge) !== Number(resident.charge))) {
         try {
-          await updateAccountSvc(d.id, { monthlyCharge: effectiveStandardFee });
+          await updateAccountSvc(d.id, { monthlyCharge: targetCharge });
           chargesSynced++;
         } catch (e) {
           console.warn("[Reconcile] Could not update account charge:", e);

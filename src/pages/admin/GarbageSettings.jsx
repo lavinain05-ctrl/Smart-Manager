@@ -221,10 +221,10 @@ export default function GarbageSettings() {
             </span>
           </div>
           <h2 className="text-xl font-black">
-            Unified Society Rate: ₹{form.defaultCharge || 80} / Month
+            Default Base Rate: ₹{form.defaultCharge || 80} / Month
           </h2>
           <p className="text-slate-300 text-xs sm:text-sm">
-            Society: <strong>{settings?.societyName || "D BLOCK RWA INDRAPRASTHA"}</strong> • Active Period: <strong>{selectedMonth} {selectedYear}</strong>
+            Individual resident rates (e.g. ₹100, ₹80) are strictly respected across billing. Society: <strong>{settings?.societyName || "D BLOCK RWA INDRAPRASTHA"}</strong>
           </p>
         </div>
 
@@ -275,7 +275,7 @@ export default function GarbageSettings() {
         <div className="space-y-6">
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-1.5">
-              Default Monthly Charge (₹)
+              Default Base Monthly Charge (₹)
             </label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">
@@ -293,7 +293,7 @@ export default function GarbageSettings() {
               />
             </div>
             <p className="text-xs text-slate-400 mt-1.5">
-              Standard monthly fee applied to all door-to-door garbage collection accounts and monthly bills.
+              Base fallback fee used only when a resident account does not have a custom charge specified. Individual rates set on resident accounts (e.g. ₹100, ₹80) take full precedence.
             </p>
           </div>
 
@@ -388,7 +388,7 @@ export default function GarbageSettings() {
               Comprehensive Data Reconciliation
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Scans all resident accounts, door-to-door registrations, and monthly payment records. Reconciles all charges to ₹{form.defaultCharge || 80}, links unassigned flats, and eliminates discrepancies.
+              Scans all resident accounts, door-to-door registrations, and monthly payment records. Reconciles data while strictly preserving each resident's individual rate, links unassigned flats, and eliminates discrepancies.
             </p>
           </div>
           <button
@@ -408,10 +408,10 @@ export default function GarbageSettings() {
             <FaCheckCircle className="text-emerald-600 text-base mt-0.5 shrink-0" />
             <div>
               <div className="text-xs font-bold text-emerald-900">
-                Society & Garbage Settings Unified
+                Society & Billing Rules Synchronized
               </div>
               <div className="text-[11px] text-emerald-700 mt-0.5">
-                Standard rate locked at ₹{form.defaultCharge || 80}/month across all modules.
+                Individual resident charges respected; default base fallback set at ₹{form.defaultCharge || 80}/month.
               </div>
             </div>
           </div>
@@ -423,7 +423,7 @@ export default function GarbageSettings() {
                 Resident Accounts Reconciled
               </div>
               <div className="text-[11px] text-emerald-700 mt-0.5">
-                {participatingCount} participating flats synchronized with active status.
+                {participatingCount} participating flats synchronized with active status and their individual rates.
               </div>
             </div>
           </div>
@@ -480,7 +480,7 @@ export default function GarbageSettings() {
               </div>
             )}
             <div>
-              • Standard Fee: ₹{syncReport.effectiveFee || form.defaultCharge || 80} | Participating Residents: {syncReport.totalParticipating || participatingCount}
+              • Default Base Fee: ₹{syncReport.effectiveFee || form.defaultCharge || 80} | Participating Flats: {syncReport.totalParticipating || participatingCount} (Individual resident charges preserved)
             </div>
             <div>
               • Accounts Enrolled: {syncReport.accountsCreated || 0} | Charges Standardized: {syncReport.chargesSynced || 0}

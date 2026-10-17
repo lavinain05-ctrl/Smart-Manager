@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaBell,
@@ -64,9 +64,21 @@ export default function RecentUpdatesCard({
   const [showAll, setShowAll] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
+  // Deduplicate notifications with identical title & cycle message
+  const uniqueNotifications = useMemo(() => {
+    const seen = new Set();
+    return (notifications || []).filter((n) => {
+      const cleanMsg = (n.message || "").replace(/REC-\d+/g, "").trim();
+      const key = `${n.type || ""}_${n.title || ""}_${cleanMsg}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [notifications]);
+
   const limit = maxItems !== undefined ? maxItems : initialLimit;
-  const hasMore = notifications.length > limit;
-  const displayed = showAll ? notifications : notifications.slice(0, limit);
+  const hasMore = uniqueNotifications.length > limit;
+  const displayed = showAll ? uniqueNotifications : uniqueNotifications.slice(0, limit);
 
   function formatTime(timestamp) {
     if (!timestamp) return "";
@@ -90,7 +102,7 @@ export default function RecentUpdatesCard({
   }
 
   // If there are no notifications, show a very slim placeholder or null
-  if (!notifications || notifications.length === 0) {
+  if (!uniqueNotifications || uniqueNotifications.length === 0) {
     return null;
   }
 
@@ -215,7 +227,7 @@ export default function RecentUpdatesCard({
           {hasMore && (
             <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-850/20 flex items-center justify-between text-xs">
               <span className="text-[11px] text-slate-400 font-medium">
-                {showAll ? `Showing all ${notifications.length}` : `Showing 2 of ${notifications.length} updates`}
+                {showAll ? `Showing all ${uniqueNotifications.length}` : `Showing ${displayed.length} of ${uniqueNotifications.length} updates`}
               </span>
               <button
                 type="button"
@@ -225,7 +237,7 @@ export default function RecentUpdatesCard({
                 {showAll ? (
                   <>Show Less <FaChevronUp className="text-[8px]" /></>
                 ) : (
-                  <>View All ({notifications.length}) <FaChevronDown className="text-[8px]" /></>
+                  <>View All ({uniqueNotifications.length}) <FaChevronDown className="text-[8px]" /></>
                 )}
               </button>
             </div>

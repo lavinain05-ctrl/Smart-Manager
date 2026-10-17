@@ -179,7 +179,7 @@ export default function ResidentBills() {
         periodLabel: "",
       }));
 
-    return [...enrichedBills, ...synthBills, ...unbilledCycleBills]
+    const combined = [...enrichedBills, ...synthBills, ...unbilledCycleBills]
       .filter((b) => !isPriorToCollectionStart(b.month, b.year) && !isPriorToResidentBillingStart(canonicalResident, b.month, b.year))
       .filter((b) => {
         // Collection of a month starts at end of month (after the 30th) or starting of next month.
@@ -192,12 +192,27 @@ export default function ResidentBills() {
           return false;
         }
         return true;
-      })
-      .sort((a, b) => {
-        const yearDiff = Number(b.year) - Number(a.year);
-        if (yearDiff !== 0) return yearDiff;
-        return MONTH_NAMES.indexOf(b.month) - MONTH_NAMES.indexOf(a.month);
       });
+
+    // Deduplicate so each billing cycle (month-year) appears at most once
+    const uniqueMap = new Map();
+    combined.forEach((b) => {
+      const key = `${b.month}-${b.year}`;
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, b);
+      } else {
+        const existing = uniqueMap.get(key);
+        if (b.status === "Paid" || b.displayStatus === "Paid") {
+          uniqueMap.set(key, b);
+        }
+      }
+    });
+
+    return Array.from(uniqueMap.values()).sort((a, b) => {
+      const yearDiff = Number(b.year) - Number(a.year);
+      if (yearDiff !== 0) return yearDiff;
+      return MONTH_NAMES.indexOf(b.month) - MONTH_NAMES.indexOf(a.month);
+    });
   }, [bills, payments, canonicalResidentId, user, canonicalResident, monthFilter, statusFilter]);
 
   return (

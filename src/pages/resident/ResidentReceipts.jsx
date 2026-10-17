@@ -79,11 +79,13 @@ export default function ResidentReceipts() {
       });
   }, [payments, canonicalResidentId, resident, user, cleanPhone]);
 
-  // Deduplicate by receiptNumber to present clean consolidated receipt cards
+  // Deduplicate by billing cycle (or receiptNumber) to present clean consolidated receipt cards
   const displayReceipts = useMemo(() => {
     const seen = new Set();
     return myPayments.filter((p) => {
-      const key = p.receiptNumber || p.id;
+      const cycleKey = `${p.month || ""}_${p.year || ""}`;
+      const recKey = p.receiptNumber || p.id;
+      const key = cycleKey !== "_" ? cycleKey : recKey;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

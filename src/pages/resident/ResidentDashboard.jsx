@@ -155,9 +155,9 @@ export default function ResidentDashboard() {
 
   const canonicalResidentId = resident?.id || user?.residentId || user?.uid;
 
-  // GC-related data
+  // GC-related data (deduplicated by billing month & year to prevent double-counting)
   const myPayments = useMemo(() => {
-    return payments.filter((p) => {
+    const raw = payments.filter((p) => {
       if (p.residentId === canonicalResidentId || p.residentId === user?.residentId || p.residentId === user?.uid) {
         return true;
       }
@@ -178,6 +178,25 @@ export default function ResidentDashboard() {
       }
       return false;
     });
+
+    // Deduplicate: If multiple payment records exist for the exact same billing month & year,
+    // consolidate so a single billing month is not counted twice in Receipts and Total Paid.
+    const monthYearMap = new Map();
+    raw.forEach((p) => {
+      const key = `${p.month || "Unknown"}-${p.year || "Unknown"}`;
+      if (!monthYearMap.has(key)) {
+        monthYearMap.set(key, p);
+      } else {
+        const existing = monthYearMap.get(key);
+        const existingNum = Number((existing.receiptNumber || "").replace(/\D/g, "")) || 0;
+        const currentNum = Number((p.receiptNumber || "").replace(/\D/g, "")) || 0;
+        if (currentNum >= existingNum) {
+          monthYearMap.set(key, p);
+        }
+      }
+    });
+
+    return Array.from(monthYearMap.values());
   }, [payments, user, canonicalResidentId, resident, cleanPhone]);
 
   const isParticipating = isGcParticipating(resident) || myPayments.length > 0;
@@ -197,7 +216,7 @@ export default function ResidentDashboard() {
 
   const myBills = useMemo(() => {
     if (!isParticipating) return [];
-    return bills
+    const filtered = bills
       .filter(
         (b) =>
           (b.residentId === canonicalResidentId ||
@@ -231,6 +250,22 @@ export default function ResidentDashboard() {
         }
         return true;
       });
+
+    // Deduplicate bills by month and year so each billing cycle has at most 1 bill
+    const seenBillMonths = new Map();
+    filtered.forEach((b) => {
+      const key = `${b.month}-${b.year}`;
+      if (!seenBillMonths.has(key)) {
+        seenBillMonths.set(key, b);
+      } else {
+        const existing = seenBillMonths.get(key);
+        if (b.status === "Paid" || b.displayStatus === "Paid") {
+          seenBillMonths.set(key, b);
+        }
+      }
+    });
+
+    return Array.from(seenBillMonths.values());
   }, [bills, user, isParticipating, canonicalResidentId, resident, myPayments]);
 
   const currentBill = useMemo(() => {

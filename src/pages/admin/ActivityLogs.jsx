@@ -24,6 +24,11 @@ import {
   FaReceipt,
   FaChevronRight,
   FaDesktop,
+  FaRoute,
+  FaCompass,
+  FaHourglassHalf,
+  FaArrowRight,
+  FaMapMarkerAlt,
 } from "react-icons/fa";
 
 import {
@@ -34,6 +39,10 @@ import {
   subscribeLoginHistory,
   ensureActiveSessionLogged,
 } from "../../services/loginTrackerService";
+import {
+  subscribeAllUserJourneys,
+  formatDuration,
+} from "../../services/userJourneyService";
 import PortalScreenInspectorModal from "../../components/common/PortalScreenInspectorModal";
 import { useAuth } from "../../context/AuthContext";
 import { usePayments } from "../../context/PaymentContext";
@@ -136,9 +145,10 @@ export function formatIdentifier(val) {
 }
 
 export default function ActivityLogs() {
-  const [activeTab, setActiveTab] = useState("logins"); // "logins" | "updates" | "userWork"
+  const [activeTab, setActiveTab] = useState("logins"); // "logins" | "updates" | "userWork" | "journeys"
   const [logs, setLogs] = useState([]);
   const [logins, setLogins] = useState([]);
+  const [journeys, setJourneys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [specialPayments, setSpecialPayments] = useState([]);
   const [search, setSearch] = useState("");
@@ -148,7 +158,7 @@ export default function ActivityLogs() {
   const [dateFilter, setDateFilter] = useState("all"); // "today" | "7d" | "30d" | "all"
   const [selectedUserDrilldown, setSelectedUserDrilldown] = useState(null);
   const [selectedLoginSession, setSelectedLoginSession] = useState(null);
-  const [loginModalTab, setLoginModalTab] = useState("all"); // "all" | "session"
+  const [loginModalTab, setLoginModalTab] = useState("all"); // "all" | "session" | "journey"
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [inspectorTargetUser, setInspectorTargetUser] = useState(null);
 
@@ -168,6 +178,7 @@ export default function ActivityLogs() {
     if (!user || user.role !== "admin") {
       setLogs([]);
       setLogins([]);
+      setJourneys([]);
       setLoading(false);
       return;
     }
@@ -187,6 +198,10 @@ export default function ActivityLogs() {
       setLoading(false);
     }, 300);
 
+    const unsubJourneys = subscribeAllUserJourneys((data) => {
+      setJourneys(data || []);
+    }, 200);
+
     const unsubSpecial = subscribeAllSpecialPayments((list) => {
       setSpecialPayments(list || []);
     });
@@ -195,6 +210,7 @@ export default function ActivityLogs() {
       clearTimeout(safetyTimer);
       unsubLogs();
       unsubLogins();
+      unsubJourneys();
       unsubSpecial();
     };
   }, [user]);
@@ -249,6 +265,27 @@ export default function ActivityLogs() {
       return true;
     });
   }, [logins, search, filterPortal, filterStatus, dateFilter]);
+
+  // Filtered User Journeys
+  const filteredJourneys = useMemo(() => {
+    return journeys.filter((j) => {
+      if (filterPortal !== "all" && j.portal !== filterPortal) return false;
+      if (search) {
+        const s = search.toLowerCase();
+        const cleanId = formatIdentifier(j.identifier).toLowerCase();
+        return (
+          j.name?.toLowerCase().includes(s) ||
+          cleanId.includes(s) ||
+          j.flat?.toLowerCase().includes(s) ||
+          j.portal?.toLowerCase().includes(s) ||
+          j.currentPage?.title?.toLowerCase().includes(s) ||
+          j.currentPage?.path?.toLowerCase().includes(s) ||
+          (j.pages || []).some((p) => p.title?.toLowerCase().includes(s))
+        );
+      }
+      return true;
+    });
+  }, [journeys, search, filterPortal]);
 
   // Filtered Activity Updates
   const filteredUpdates = useMemo(() => {
@@ -620,6 +657,25 @@ export default function ActivityLogs() {
     };
   }, [selectedLoginSession, userWorkSummary, payments, specialPayments, residents, logs]);
 
+  // Memoized user journey for the currently inspected session
+  const selectedSessionJourney = useMemo(() => {
+    if (!selectedLoginSession) return null;
+    if (selectedLoginSession.sessionId) {
+      const bySess = journeys.find((j) => j.sessionId === selectedLoginSession.sessionId);
+      if (bySess) return bySess;
+    }
+    if (selectedLoginSession.uid) {
+      const byUid = journeys.find((j) => j.uid === selectedLoginSession.uid);
+      if (byUid) return byUid;
+    }
+    const cleanId = cleanUserIdentifier(selectedLoginSession.identifier);
+    if (cleanId) {
+      const byId = journeys.find((j) => j.identifier === cleanId);
+      if (byId) return byId;
+    }
+    return null;
+  }, [selectedLoginSession, journeys]);
+
   // Summary Metrics
   const metrics = useMemo(() => {
     const todayLogins = logins.filter((l) => isToday(l.createdAt, l.clientTimestamp));
@@ -900,6 +956,18 @@ export default function ActivityLogs() {
           <FaUserTie className={activeTab === "userWork" ? "text-amber-400" : "text-gray-400"} />
           Work Done by User ({userWorkSummary.length})
         </button>
+
+        <button
+          onClick={() => setActiveTab("journeys")}
+          className={`px-5 py-3 rounded-xl font-semibold text-sm transition flex items-center gap-2 ${
+            activeTab === "journeys"
+              ? "bg-slate-900 text-white shadow-md"
+              : "bg-white text-gray-600 hover:bg-gray-100"
+          }`}
+        >
+          <FaRoute className={activeTab === "journeys" ? "text-emerald-400" : "text-gray-400"} />
+          Page Journeys & Dwell Time ({journeys.length})
+        </button>
       </div>
 
       {/* Search & Dynamic Filters Bar */}
@@ -913,6 +981,8 @@ export default function ActivityLogs() {
                 ? "Search by user name, mobile, device, browser, portal..."
                 : activeTab === "updates"
                 ? "Search by action, performer, flat, resident, category..."
+                : activeTab === "journeys"
+                ? "Search by user name, flat, mobile, active page title..."
                 : "Search by staff name, role, portal..."
             }
             value={search}
@@ -921,8 +991,8 @@ export default function ActivityLogs() {
           />
         </div>
 
-        {/* Portal Filter (Logins & Updates tab) */}
-        {(activeTab === "logins" || activeTab === "updates") && (
+        {/* Portal Filter (Logins, Updates & Journeys tab) */}
+        {(activeTab === "logins" || activeTab === "updates" || activeTab === "journeys") && (
           <div className="flex items-center gap-2">
             <FaFilter className="text-gray-400 text-sm hidden sm:inline" />
             <select
@@ -1036,6 +1106,30 @@ export default function ActivityLogs() {
                                   </span>
                                 )}
                               </p>
+                              {(() => {
+                                const rowJourney =
+                                  (item.sessionId ? journeys.find((j) => j.sessionId === item.sessionId) : null) ||
+                                  (item.uid ? journeys.find((j) => j.uid === item.uid) : null);
+                                if (!rowJourney || (!rowJourney.pages?.length && !rowJourney.currentPage)) return null;
+                                return (
+                                  <div className="mt-1 flex items-center gap-1.5">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedLoginSession(item);
+                                        setLoginModalTab("journey");
+                                      }}
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200 transition"
+                                      title="Click to view full page-by-page dwell time timeline"
+                                    >
+                                      <FaRoute className="text-[10px] text-emerald-600" />
+                                      <span>{(rowJourney.pages?.length || 0) + (rowJourney.currentPage ? 1 : 0)} pages</span>
+                                      <span>•</span>
+                                      <span>{formatDuration(rowJourney.totalDurationSeconds || 0)}</span>
+                                    </button>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
                         </td>
@@ -1093,19 +1187,33 @@ export default function ActivityLogs() {
 
                         {/* Action 1: Work Details Button */}
                         <td className="p-4 text-center">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedLoginSession(item);
-                              setLoginModalTab("all");
-                            }}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 group-hover:bg-emerald-600 text-slate-700 group-hover:text-white font-semibold text-xs transition shadow-sm"
-                            title="Click to view full session details & work"
-                          >
-                            <FaEye className="text-xs" />
-                            <span>View Work</span>
-                            <FaChevronRight className="text-[10px]" />
-                          </button>
+                          <div className="flex flex-col items-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedLoginSession(item);
+                                setLoginModalTab("all");
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 group-hover:bg-emerald-600 text-slate-700 group-hover:text-white font-semibold text-xs transition shadow-sm"
+                              title="Click to view full session details & work"
+                            >
+                              <FaEye className="text-xs" />
+                              <span>View Work</span>
+                              <FaChevronRight className="text-[10px]" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedLoginSession(item);
+                                setLoginModalTab("journey");
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 transition"
+                              title="Inspect step-by-step page dwell times"
+                            >
+                              <FaRoute className="text-[10px]" />
+                              <span>Page Journey</span>
+                            </button>
+                          </div>
                         </td>
 
                         {/* Action 2: Live Portal Screen Inspector */}
@@ -1318,6 +1426,130 @@ export default function ActivityLogs() {
         </div>
       )}
 
+      {/* ========================================================= */}
+      {/* TAB 4: REAL-TIME USER JOURNEYS & DWELL TIME               */}
+      {/* ========================================================= */}
+      {activeTab === "journeys" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex-wrap gap-3">
+            <div>
+              <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                <FaRoute className="text-emerald-600" /> Live User Page Journeys & Clickstream
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Real-time tracking of which pages residents, collectors, and committee members open and how much time they spend on each screen.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                {filteredJourneys.length} Active Journeys
+              </span>
+            </div>
+          </div>
+
+          {filteredJourneys.length === 0 ? (
+            <div className="bg-white rounded-2xl p-16 text-center text-gray-500 border border-slate-100 shadow-sm">
+              <FaRoute className="text-6xl text-gray-200 mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-gray-700">No User Journeys Recorded Yet</h3>
+              <p className="text-sm mt-1 max-w-md mx-auto">
+                As residents and staff browse the portal, their navigation history and time spent on every page will appear here automatically in real time.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredJourneys.map((j) => {
+                const totalPages = (j.pages?.length || 0) + (j.currentPage ? 1 : 0);
+                const isOnline = Boolean(j.currentPage);
+                return (
+                  <div
+                    key={j.id}
+                    onClick={() => {
+                      setSelectedLoginSession(j);
+                      setLoginModalTab("journey");
+                    }}
+                    className="bg-white rounded-2xl border border-gray-200 hover:border-emerald-400 p-4 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col justify-between group"
+                  >
+                    <div>
+                      {/* Card Header */}
+                      <div className="flex items-start justify-between gap-3 pb-3 border-b border-gray-100">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-sm shrink-0 border border-slate-200">
+                            {j.name ? j.name.charAt(0).toUpperCase() : <FaUser />}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-sm text-slate-800 truncate group-hover:text-emerald-700 transition">
+                              {j.name || "User"}
+                            </h4>
+                            <p className="text-xs text-gray-500 truncate">
+                              📞 {formatIdentifier(j.identifier)} {j.flat ? `• Flat: ${j.flat}` : ""}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border shrink-0 ${getPortalBadge(j.portal)}`}>
+                          {j.portal || "Portal"}
+                        </span>
+                      </div>
+
+                      {/* Current Active Page */}
+                      <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <div className="flex items-center justify-between text-[11px] text-gray-500 mb-1">
+                          <span className="font-bold uppercase tracking-wider">
+                            {isOnline ? "🟢 Active Page:" : "⚪ Last Page:"}
+                          </span>
+                          <span className="font-semibold text-emerald-700">
+                            {j.currentPage ? "In progress" : formatDuration(j.totalDurationSeconds || 0)}
+                          </span>
+                        </div>
+                        <p className="font-bold text-sm text-slate-800 truncate">
+                          {j.currentPage?.title || (j.pages && j.pages[j.pages.length - 1]?.title) || "Portal"}
+                        </p>
+                        <p className="text-[11px] font-mono text-gray-400 truncate mt-0.5">
+                          {j.currentPage?.path || (j.pages && j.pages[j.pages.length - 1]?.path) || "/"}
+                        </p>
+                      </div>
+
+                      {/* Journey Metrics */}
+                      <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                        <div className="bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">Pages</p>
+                          <p className="font-bold text-sm text-slate-800 mt-0.5">{totalPages}</p>
+                        </div>
+                        <div className="bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">Total Time</p>
+                          <p className="font-bold text-sm text-emerald-700 mt-0.5">{formatDuration(j.totalDurationSeconds || 0)}</p>
+                        </div>
+                        <div className="bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">Device</p>
+                          <p className="font-semibold text-xs text-slate-700 mt-0.5 truncate">{j.os || j.device || "Desktop"}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-gray-400">
+                        {timeAgo(j.lastActiveAt, j.lastActiveTimestamp)}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedLoginSession(j);
+                          setLoginModalTab("journey");
+                        }}
+                        className="font-bold text-emerald-600 hover:text-emerald-800 transition flex items-center gap-1"
+                      >
+                        <FaRoute className="text-[11px]" /> View Timeline ➔
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Drill-down Modal for Individual User Actions */}
       {selectedUserDrilldown && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -1479,12 +1711,12 @@ export default function ActivityLogs() {
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-gray-200 px-6 bg-white">
+            <div className="flex border-b border-gray-200 px-6 bg-white overflow-x-auto">
               <button
                 onClick={() => setLoginModalTab("all")}
-                className={`py-3 px-4 font-semibold text-xs border-b-2 transition flex items-center gap-2 ${
+                className={`py-3 px-4 font-semibold text-xs border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
                   loginModalTab === "all"
-                    ? "border-emerald-600 text-emerald-700"
+                    ? "border-emerald-600 text-emerald-700 font-bold"
                     : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
@@ -1492,10 +1724,21 @@ export default function ActivityLogs() {
               </button>
 
               <button
+                onClick={() => setLoginModalTab("journey")}
+                className={`py-3 px-4 font-semibold text-xs border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
+                  loginModalTab === "journey"
+                    ? "border-emerald-600 text-emerald-700 font-bold"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <FaRoute /> Page Journey & Time Tracking ({(selectedSessionJourney?.pages?.length || 0) + (selectedSessionJourney?.currentPage ? 1 : 0)})
+              </button>
+
+              <button
                 onClick={() => setLoginModalTab("session")}
-                className={`py-3 px-4 font-semibold text-xs border-b-2 transition flex items-center gap-2 ${
+                className={`py-3 px-4 font-semibold text-xs border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
                   loginModalTab === "session"
-                    ? "border-emerald-600 text-emerald-700"
+                    ? "border-emerald-600 text-emerald-700 font-bold"
                     : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
@@ -1547,11 +1790,198 @@ export default function ActivityLogs() {
                       </div>
                     </div>
                   ) : (
-                    <div className="py-12 text-center text-gray-500 border border-dashed border-gray-200 rounded-2xl p-6 bg-slate-50/50">
+                    <div className="py-10 text-center text-gray-500 border border-dashed border-gray-200 rounded-2xl p-6 bg-slate-50/50">
                       <FaUserTie className="text-5xl text-gray-300 mx-auto mb-3" />
-                      <h4 className="font-bold text-base text-gray-700">No Operations Recorded Yet</h4>
+                      <h4 className="font-bold text-base text-gray-700">No Financial Operations Recorded Yet</h4>
                       <p className="text-xs text-gray-500 max-w-md mx-auto mt-1">
-                        This user has logged into the {selectedLoginSession.portal || "Portal"}. Any payment collections, receipts issued, or resident additions done by this user will appear here in real time.
+                        This user logged into the {selectedLoginSession.portal || "Portal"}. Any payment collections, receipts issued, or resident additions done by this user will appear here in real time.
+                      </p>
+                      {selectedSessionJourney && (selectedSessionJourney.pages?.length > 0 || selectedSessionJourney.currentPage) && (
+                        <div className="mt-5 p-3.5 bg-emerald-50/90 border border-emerald-200 rounded-xl max-w-md mx-auto flex items-center justify-between gap-3 text-left">
+                          <div>
+                            <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                              <FaRoute className="text-emerald-600" />
+                              <span>Browsing Trail Detected</span>
+                            </p>
+                            <p className="text-[11px] text-emerald-600 mt-0.5">
+                              {(selectedSessionJourney.pages?.length || 0) + (selectedSessionJourney.currentPage ? 1 : 0)} pages visited • Total time: {formatDuration(selectedSessionJourney.totalDurationSeconds || 0)}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setLoginModalTab("journey")}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shrink-0 transition shadow-sm"
+                          >
+                            View Journey ➔
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {loginModalTab === "journey" && (
+                <div className="space-y-5">
+                  {selectedSessionJourney && (selectedSessionJourney.pages?.length > 0 || selectedSessionJourney.currentPage) ? (
+                    <>
+                      {/* Summary Metrics Bar */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-slate-50 p-3 rounded-xl border border-gray-100 text-center">
+                          <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Total Time Spent</p>
+                          <p className="font-bold text-base text-emerald-700 mt-1 flex items-center justify-center gap-1">
+                            <FaHourglassHalf className="text-xs" />
+                            {formatDuration(selectedSessionJourney.totalDurationSeconds || 0)}
+                          </p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-gray-100 text-center">
+                          <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Pages Visited</p>
+                          <p className="font-bold text-base text-blue-700 mt-1">
+                            {(selectedSessionJourney.pages?.length || 0) + (selectedSessionJourney.currentPage ? 1 : 0)} pages
+                          </p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-gray-100 text-center">
+                          <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Avg Time / Page</p>
+                          <p className="font-bold text-base text-indigo-700 mt-1">
+                            {formatDuration(
+                              (selectedSessionJourney.totalDurationSeconds || 0) /
+                                Math.max(1, (selectedSessionJourney.pages?.length || 0) + (selectedSessionJourney.currentPage ? 1 : 0))
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-gray-100 text-center">
+                          <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Live Status</p>
+                          <p className="font-bold text-xs mt-1.5 flex items-center justify-center gap-1.5">
+                            {selectedSessionJourney.currentPage ? (
+                              <span className="text-emerald-600 flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                Online
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">Completed</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Currently Active Page (if online) */}
+                      {selectedSessionJourney.currentPage && (
+                        <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl flex items-center justify-between gap-4 shadow-sm animate-fadeIn">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-base shrink-0 shadow-sm animate-pulse">
+                              <FaCompass />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md">
+                                  Current Active Screen
+                                </span>
+                                <span className="text-xs text-emerald-600 font-medium">
+                                  Opened {formatDate(selectedSessionJourney.currentPage.enteredAt)}
+                                </span>
+                              </div>
+                              <h4 className="font-bold text-sm text-slate-800 mt-0.5 truncate">
+                                {selectedSessionJourney.currentPage.title}
+                              </h4>
+                              <p className="text-xs text-slate-500 font-mono truncate">
+                                {selectedSessionJourney.currentPage.path}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                              Viewing Now
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step-by-Step Chronological Journey Timeline */}
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1.5">
+                            <FaRoute className="text-emerald-600" />
+                            <span>Chronological Browsing Path & Dwell Times ({selectedSessionJourney.pages?.length || 0} Steps)</span>
+                          </h4>
+                          <span className="text-xs text-gray-400 font-medium">
+                            Step-by-step navigation trail
+                          </span>
+                        </div>
+
+                        {selectedSessionJourney.pages && selectedSessionJourney.pages.length > 0 ? (
+                          <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
+                            {selectedSessionJourney.pages.map((p, pIdx) => {
+                              const isLongStay = p.durationSeconds >= 60;
+                              const isQuickLook = p.durationSeconds <= 10;
+                              return (
+                                <div key={pIdx} className="relative group">
+                                  {/* Timeline marker */}
+                                  <div className="absolute -left-6 top-3 w-5 h-5 rounded-full bg-white border-2 border-emerald-500 text-emerald-600 flex items-center justify-center text-[10px] font-bold shadow-sm group-hover:scale-110 transition">
+                                    {pIdx + 1}
+                                  </div>
+
+                                  <div className="bg-white border border-gray-200 rounded-xl p-3.5 hover:border-emerald-300 hover:shadow-sm transition">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <h5 className="font-bold text-sm text-slate-800">
+                                            {p.title}
+                                          </h5>
+                                          <span className="text-[11px] font-mono text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                            {p.path}
+                                          </span>
+                                        </div>
+
+                                        <p className="text-xs text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
+                                          <span>📅 Entered: {formatDate(p.enteredAt)}</span>
+                                          {p.leftAt && <span>➔ Left: {formatDate(p.leftAt)}</span>}
+                                        </p>
+                                      </div>
+
+                                      {/* Dwell Time Badge */}
+                                      <div className="shrink-0 flex items-center gap-2">
+                                        <div className={`px-3 py-1 rounded-xl text-xs font-bold border flex items-center gap-1.5 shadow-2xs ${
+                                          isLongStay
+                                            ? "bg-purple-50 text-purple-700 border-purple-200"
+                                            : isQuickLook
+                                            ? "bg-slate-100 text-slate-600 border-slate-200"
+                                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                        }`}>
+                                          <FaHourglassHalf className="text-[10px]" />
+                                          <span>Stayed: {formatDuration(p.durationSeconds)}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Next step indicator */}
+                                    {pIdx < selectedSessionJourney.pages.length - 1 && (
+                                      <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
+                                        <FaArrowRight className="text-[10px] text-emerald-500" />
+                                        <span>Next navigated to: <strong className="text-slate-700">{selectedSessionJourney.pages[pIdx + 1].title}</strong></span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-gray-500">
+                            User is currently on the first page ({selectedSessionJourney.currentPage?.title}). Stay duration will be calculated once they navigate or complete the session.
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="py-12 text-center text-gray-500 border border-dashed border-gray-200 rounded-2xl p-6 bg-slate-50/50">
+                      <FaRoute className="text-5xl text-gray-300 mx-auto mb-3" />
+                      <h4 className="font-bold text-base text-gray-700">No Page Journey Recorded Yet</h4>
+                      <p className="text-xs text-gray-500 max-w-md mx-auto mt-1">
+                        When this user browses between pages (Dashboard, Bills, Receipts, Complaints, Profile, etc.), each page visit and exact dwell time (seconds/minutes) will automatically appear here.
                       </p>
                     </div>
                   )}

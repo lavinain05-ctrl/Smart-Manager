@@ -8,6 +8,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { getHomeRouteForRole } from "../services/authService";
+import { usePageJourneyTracker } from "../hooks/usePageJourneyTracker";
 
 // Safe dynamic lazy import that automatically purges caches and refreshes
 // when a deployment updates chunk hashes, eliminating "Failed to fetch dynamically imported module"
@@ -174,6 +175,9 @@ function AppContent() {
   const { user, isImpersonating, impersonatedDeviceMode } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Automatic Page Navigation & Dwell Time Tracking for all active users
+  usePageJourneyTracker(user, isImpersonating);
 
   useEffect(() => {
     sessionStorage.setItem("rwa_session_active", "true");

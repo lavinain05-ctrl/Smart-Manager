@@ -8,6 +8,7 @@ import {
   limit,
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
+import { getOrCreateSessionId } from "./sessionService";
 
 const loginsRef = collection(db, "portalLogins");
 
@@ -114,8 +115,10 @@ export async function recordLoginEvent({
     const deviceInfo = getClientDeviceInfo();
     const resolvedPortal = portal || getPortalFromRole(role);
     const sanitizedId = cleanUserIdentifier(identifier);
+    const sessionId = getOrCreateSessionId();
 
     await addDoc(loginsRef, {
+      sessionId,
       uid: uid || "",
       name: name || "User",
       identifier: sanitizedId || "",

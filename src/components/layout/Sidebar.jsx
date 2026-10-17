@@ -124,16 +124,18 @@ export default function Sidebar({ onClose }) {
 
         <Link
           to="/admin/dashboard"
-          onClick={onClose}
+          onClick={() => {
+            if (onClose && typeof window !== "undefined" && window.innerWidth < 1024) onClose();
+          }}
           title="Go to Dashboard"
-          className="flex items-center gap-3 group cursor-pointer hover:opacity-90 transition"
+          className="flex items-center gap-3 group cursor-pointer hover:opacity-90 transition min-w-0"
         >
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center text-xl shadow-lg shadow-emerald-500/30 group-hover:scale-105 transition-transform">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center text-xl shadow-lg shadow-emerald-500/30 group-hover:scale-105 transition-transform shrink-0">
             <FaBuilding />
           </div>
 
-          <div>
-            <h1 className="text-sm font-bold tracking-tight leading-snug group-hover:text-emerald-300 transition-colors">
+          <div className="min-w-0">
+            <h1 className="text-sm font-bold tracking-tight leading-snug group-hover:text-emerald-300 transition-colors truncate">
               D BLOCK RWA INDRAPRASTHA
             </h1>
             <p className="text-[10px] text-emerald-400 font-medium tracking-wider uppercase">
@@ -142,11 +144,14 @@ export default function Sidebar({ onClose }) {
           </div>
         </Link>
 
+        {/* Close Sidebar Button (Visible on all devices) */}
         <button
           onClick={onClose}
-          className="lg:hidden text-xl text-slate-400 hover:text-white transition"
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700/70 transition cursor-pointer active:scale-95 shrink-0"
+          title="Close Sidebar"
+          aria-label="Close Sidebar"
         >
-          <FaTimes />
+          <FaTimes className="text-base" />
         </button>
 
       </div>
@@ -177,7 +182,7 @@ export default function Sidebar({ onClose }) {
                   to={item.path}
                   onClick={() => {
                     if (hasDot) markPathRead(item.path);
-                    if (onClose) onClose();
+                    if (onClose && typeof window !== "undefined" && window.innerWidth < 1024) onClose();
                   }}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-4 py-2.5 rounded-lg mb-0.5 text-[13px] font-medium transition-all duration-200 group relative ${

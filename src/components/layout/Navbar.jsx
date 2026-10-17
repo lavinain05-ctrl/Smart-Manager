@@ -51,7 +51,7 @@ const pageTitles = {
   "/admin/garbage/settings": { title: "Garbage Settings", subtitle: "Configure garbage collection" },
 };
 
-export default function Navbar({ onToggleSidebar }) {
+export default function Navbar({ onToggleSidebar, sidebarOpen }) {
   const location = useLocation();
   const { darkMode, toggleTheme } = useTheme();
   const { user } = useAuth();
@@ -70,8 +70,9 @@ export default function Navbar({ onToggleSidebar }) {
       <div className="flex items-center gap-2.5 sm:gap-4 min-w-0 flex-1 mr-2">
         <button
           onClick={onToggleSidebar}
-          className="lg:hidden p-1.5 rounded-lg text-xl sm:text-2xl text-gray-600 hover:text-emerald-600 hover:bg-gray-100 transition shrink-0"
-          aria-label="Toggle navigation menu"
+          className="p-2 rounded-xl text-lg sm:text-xl text-slate-700 hover:text-emerald-700 hover:bg-slate-100 border border-slate-200/80 transition shrink-0 cursor-pointer active:scale-95 shadow-2xs"
+          title={sidebarOpen ? "Close Sidebar" : "Open Sidebar"}
+          aria-label={sidebarOpen ? "Close Sidebar" : "Open Sidebar"}
         >
           <FaBars />
         </button>

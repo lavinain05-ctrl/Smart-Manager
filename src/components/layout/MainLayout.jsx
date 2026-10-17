@@ -18,33 +18,62 @@ function LayoutFallback() {
 }
 
 export default function MainLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("rwa_admin_sidebar_open");
+      if (stored !== null) return stored === "true";
+      return window.innerWidth >= 1024;
+    }
+    return true;
+  });
+
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("rwa_admin_sidebar_open", String(next));
+      }
+      return next;
+    });
+  };
+
+  const closeSidebar = () => {
+    setSidebarOpen(false);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("rwa_admin_sidebar_open", "false");
+    }
+  };
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">
 
-      {/* Mobile Overlay */}
+      {/* Mobile Overlay (Only on screens < 1024px when sidebar is open) */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-2xs transition-opacity"
+          onClick={closeSidebar}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar Wrapper */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 lg:relative lg:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-y-0 left-0 z-50 transform transition-all duration-300 ease-in-out lg:relative lg:translate-x-0 shrink-0 ${
+          sidebarOpen
+            ? "translate-x-0 lg:w-72"
+            : "-translate-x-full lg:w-0 lg:overflow-hidden lg:opacity-0 lg:pointer-events-none"
         }`}
       >
-        <Sidebar onClose={() => setSidebarOpen(false)} />
+        <Sidebar onClose={closeSidebar} />
       </div>
 
       {/* Main Area */}
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden transition-all duration-300">
 
         {/* Navbar */}
-        <Navbar onToggleSidebar={() => setSidebarOpen(true)} />
+        <Navbar
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={toggleSidebar}
+        />
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-8">

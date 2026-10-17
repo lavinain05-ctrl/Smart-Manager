@@ -29,6 +29,9 @@ import {
   FaExternalLinkAlt,
   FaExchangeAlt,
   FaInfoCircle,
+  FaBolt,
+  FaUserCheck,
+  FaClipboardList,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -96,7 +99,9 @@ export default function RegistrationRequests() {
   const [charge, setCharge] = useState("");
   const [rejectReason, setRejectReason] = useState("");
 
-  // Canonical Property override state for approval
+  // Canonical Property override & edit state for approval
+  const [approveName, setApproveName] = useState("");
+  const [approveFatherHusbandName, setApproveFatherHusbandName] = useState("");
   const [approveBlockId, setApproveBlockId] = useState("");
   const [approveBlock, setApproveBlock] = useState("");
   const [approvePlot, setApprovePlot] = useState("");
@@ -145,9 +150,106 @@ export default function RegistrationRequests() {
     };
   }, [user]);
 
-  const pendingCount = allRequests.filter((r) => r.status === "pending").length;
+  const resetApproveState = () => {
+    setApproveModal(null);
+    setApproveName("");
+    setApproveFatherHusbandName("");
+    setCharge("");
+    setApproveBlockId("");
+    setApproveBlock("");
+    setApprovePlot("");
+    setApproveFloor("Ground Floor");
+    setApproveUnit("");
+    setApprovePersonType("OWNER");
+    setApproveGarbageParticipation("participating");
+    setApproveFlat("");
+  };
+
+  const openApproveModal = (req) => {
+    setApproveModal(req);
+    setApproveName(req.name || "");
+    setApproveFatherHusbandName(req.fatherHusbandName || "");
+    setCharge(
+      req.preAddedRecord?.charge
+        ? String(req.preAddedRecord.charge)
+        : settings?.monthlyCharge
+        ? String(settings.monthlyCharge)
+        : "200"
+    );
+    const matched = blocks.find((b) => b.id === req.blockId || b.name === req.block);
+    setApproveBlockId(matched?.id || req.blockId || "");
+    setApproveBlock(matched?.name || req.block || "");
+    const parsed = parseFlatId(req.flat, req.plotNumber, req.floor);
+    const plotDisplay = parsed.plotNumber || normalizePlotNumber(req.plotNumber) || (req.flat || "—");
+    const unitDisplay = cleanUnitNumber(
+      req.unitNumber !== undefined && req.unitNumber !== null && req.unitNumber !== ""
+        ? req.unitNumber
+        : parsed.unitNumber,
+      plotDisplay
+    );
+    const fullFlatCode = generateFlatId({
+      plotNumber: plotDisplay !== "—" ? plotDisplay : "",
+      floor: req.floor,
+      unitNumber: unitDisplay,
+      flat: req.flat,
+    });
+    setApprovePlot(plotDisplay !== "—" ? plotDisplay : normalizePlotNumber(req.plotNumber || ""));
+    setApproveFloor(req.floor || "Ground Floor");
+    setApproveUnit(unitDisplay || "");
+    setApprovePersonType(req.personType || "OWNER");
+    setApproveGarbageParticipation(req.garbageParticipation || "participating");
+    setApproveFlat(fullFlatCode);
+  };
+
+  const applyResidentPresets = () => {
+    if (!approveModal) return;
+    setApproveName(approveModal.name || "");
+    setApproveFatherHusbandName(approveModal.fatherHusbandName || "");
+    const matched = blocks.find((b) => b.id === approveModal.blockId || b.name === approveModal.block);
+    setApproveBlockId(matched?.id || approveModal.blockId || "");
+    setApproveBlock(matched?.name || approveModal.block || "");
+    const parsed = parseFlatId(approveModal.flat, approveModal.plotNumber, approveModal.floor);
+    const pNum = parsed.plotNumber || normalizePlotNumber(approveModal.plotNumber) || (approveModal.flat || "");
+    setApprovePlot(pNum);
+    setApproveFloor(approveModal.floor || "Ground Floor");
+    setApproveUnit(cleanUnitNumber(approveModal.unitNumber !== undefined ? approveModal.unitNumber : parsed.unitNumber, pNum));
+    setApprovePersonType(approveModal.personType || "OWNER");
+    setApproveGarbageParticipation(approveModal.garbageParticipation || "participating");
+    toast.success("Applied self-submitted resident values to form");
+  };
+
+  const applyCollectorPresets = () => {
+    if (!approveModal?.preAddedRecord) return;
+    const rec = approveModal.preAddedRecord;
+    setApproveName(rec.owner || "");
+    const matched = blocks.find((b) => b.id === rec.blockId || b.name === rec.block);
+    setApproveBlockId(matched?.id || rec.blockId || "");
+    setApproveBlock(matched?.name || rec.block || "");
+    const parsed = parseFlatId(rec.flat, rec.plotNumber, rec.floor);
+    const pNum = parsed.plotNumber || normalizePlotNumber(rec.plotNumber || rec.flat || "");
+    setApprovePlot(pNum);
+    setApproveFloor(rec.floor || "Ground Floor");
+    setApproveUnit(cleanUnitNumber(rec.unitNumber !== undefined ? rec.unitNumber : parsed.unitNumber, pNum));
+    setApprovePersonType(rec.personType || "OWNER");
+    if (rec.charge) setCharge(String(rec.charge));
+    if (rec.garbageStatus) {
+      setApproveGarbageParticipation(rec.garbageStatus === "not_participating" ? "not_participating" : "participating");
+    }
+    toast.success("Applied Collector field record values to form");
+  };
+
+  const pendingRequests = useMemo(() => allRequests.filter((r) => r.status === "pending"), [allRequests]);
+  const discrepancyRequests = useMemo(() => allRequests.filter((r) => r.status === "pending" && r.hasPreAddedMismatch), [allRequests]);
+  const autoApprovedRequests = useMemo(() => allRequests.filter((r) => r.status === "approved" && (r.autoApproved || r.approvalType === "collector_pre_verified" || r.approvalType === "admin_pre_verified")), [allRequests]);
+  const manualApprovedRequests = useMemo(() => allRequests.filter((r) => r.status === "approved" && !(r.autoApproved || r.approvalType === "collector_pre_verified" || r.approvalType === "admin_pre_verified")), [allRequests]);
+  const rejectedRequests = useMemo(() => allRequests.filter((r) => r.status === "rejected"), [allRequests]);
+
+  const pendingCount = pendingRequests.length;
+  const discrepancyCount = discrepancyRequests.length;
+  const autoApprovedCount = autoApprovedRequests.length;
+  const manualApprovedCount = manualApprovedRequests.length;
   const approvedCount = allRequests.filter((r) => r.status === "approved").length;
-  const rejectedCount = allRequests.filter((r) => r.status === "rejected").length;
+  const rejectedCount = rejectedRequests.length;
 
   const outdatedRequestsCount = useMemo(() => {
     return allRequests.filter((req) => {
@@ -306,7 +408,28 @@ export default function RegistrationRequests() {
 
   const filtered = useMemo(() => {
     return allRequests.filter((r) => {
-      if (filterStatus !== "all" && r.status !== filterStatus) return false;
+      if (filterStatus === "pending") {
+        if (r.status !== "pending") return false;
+      } else if (filterStatus === "discrepancies") {
+        if (r.status !== "pending" || !r.hasPreAddedMismatch) return false;
+      } else if (filterStatus === "auto_approved") {
+        if (
+          r.status !== "approved" ||
+          !(r.autoApproved || r.approvalType === "collector_pre_verified" || r.approvalType === "admin_pre_verified")
+        )
+          return false;
+      } else if (filterStatus === "manual_approved") {
+        if (
+          r.status !== "approved" ||
+          (r.autoApproved || r.approvalType === "collector_pre_verified" || r.approvalType === "admin_pre_verified")
+        )
+          return false;
+      } else if (filterStatus === "approved") {
+        if (r.status !== "approved") return false;
+      } else if (filterStatus === "rejected") {
+        if (r.status !== "rejected") return false;
+      }
+
       if (search) {
         const s = search.toLowerCase();
         return (
@@ -322,7 +445,8 @@ export default function RegistrationRequests() {
           r.block?.toLowerCase().includes(s) ||
           r.floor?.toLowerCase().includes(s) ||
           r.personType?.toLowerCase().includes(s) ||
-          r.occupation?.toLowerCase().includes(s)
+          r.occupation?.toLowerCase().includes(s) ||
+          r.preAddedBy?.toLowerCase().includes(s)
         );
       }
       return true;
@@ -346,11 +470,16 @@ export default function RegistrationRequests() {
     if (!approveModal) return;
     setLoadingId(approveModal.id);
     try {
+      const finalName = (approveName || approveModal.name || "").trim();
+      const finalFatherHusband = (approveFatherHusbandName || approveModal.fatherHusbandName || "").trim();
+
       await approveRegistration(
         approveModal.id,
         approveModal,
         charge,
         {
+          name: finalName,
+          fatherHusbandName: finalFatherHusband,
           block: approveBlock || approveModal.block,
           blockId: approveBlockId || approveModal.blockId || "",
           plotNumber: approvePlot || approveModal.plotNumber || approveModal.flat,
@@ -358,6 +487,7 @@ export default function RegistrationRequests() {
           unitNumber: approveUnit !== undefined ? approveUnit : (approveModal.unitNumber || ""),
           personType: approvePersonType || approveModal.personType || "OWNER",
           garbageParticipation: approveGarbageParticipation || approveModal.garbageParticipation || "not_participating",
+          targetResidentId: approveModal.mismatchTargetId || null,
           flat: generateFlatId({
             plotNumber: approvePlot || approveModal.plotNumber,
             floor: approveFloor || approveModal.floor,
@@ -384,27 +514,22 @@ export default function RegistrationRequests() {
 
       // Activity Log
       await logActivity({
-        action: `Approved registration for ${approveModal.name}`,
+        action: `Approved registration for ${finalName}`,
         category: "auth",
         performedBy: "admin",
         performedByName: "Admin",
         targetId: approveModal.uid || approveModal.id,
-        targetName: approveModal.name,
-        details: `Plot: ${approvePlot || approveModal.plotNumber || approveModal.flat}, Floor: ${approveFloor || approveModal.floor}, Block: ${approveBlock || approveModal.block}, Role: ${approvePersonType}, Garbage: ${approveGarbageParticipation}, Charge: ₹${charge || 0}`,
+        targetName: finalName,
+        details: `Plot: ${approvePlot || approveModal.plotNumber || approveModal.flat}, Floor: ${approveFloor || approveModal.floor}, Block: ${approveBlock || approveModal.block}, Role: ${approvePersonType}, Garbage: ${approveGarbageParticipation}, Charge: ₹${charge || 0}${approveModal.hasPreAddedMismatch ? " [Collector Mismatch Resolved & Merged]" : ""}`,
       });
 
-      toast.success("Registration approved — resident account created");
+      toast.success(
+        approveModal.hasPreAddedMismatch
+          ? "Discrepancy resolved: resident merged with collector record & approved"
+          : "Registration approved — resident account created"
+      );
       markPathRead("/admin/registrations");
-      setApproveModal(null);
-      setCharge("");
-      setApproveBlockId("");
-      setApproveBlock("");
-      setApprovePlot("");
-      setApproveFloor("Ground Floor");
-      setApproveUnit("");
-      setApprovePersonType("OWNER");
-      setApproveGarbageParticipation("participating");
-      setApproveFlat("");
+      resetApproveState();
     } catch (error) {
       console.error(error);
       toast.error(error.message || "Failed to approve registration");
@@ -486,35 +611,95 @@ export default function RegistrationRequests() {
 
       {/* Stats */}
       {loading ? (
-        <StatCardsSkeleton count={3} className="grid grid-cols-3 gap-4" />
+        <StatCardsSkeleton count={4} className="grid grid-cols-2 md:grid-cols-4 gap-4" />
       ) : (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <button
             onClick={() => setFilterStatus("pending")}
             className={`rounded-2xl shadow-sm p-4 border-l-4 border-yellow-500 text-left transition ${
               filterStatus === "pending" ? "bg-yellow-50 ring-2 ring-yellow-300" : "bg-white hover:bg-gray-50"
             }`}
           >
-            <p className="text-xs text-gray-500">Pending</p>
-            <p className="text-2xl font-bold">{pendingCount}</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-500 font-semibold">Pending Review</p>
+              {discrepancyCount > 0 && (
+                <span className="text-[10px] font-extrabold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300">
+                  {discrepancyCount} Mismatch
+                </span>
+              )}
+            </div>
+            <p className="text-2xl font-bold mt-1 text-slate-900">{pendingCount}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Awaiting verification</p>
           </button>
+
           <button
-            onClick={() => setFilterStatus("approved")}
-            className={`rounded-2xl shadow-sm p-4 border-l-4 border-green-500 text-left transition ${
-              filterStatus === "approved" ? "bg-green-50 ring-2 ring-green-300" : "bg-white hover:bg-gray-50"
+            onClick={() => setFilterStatus("auto_approved")}
+            className={`rounded-2xl shadow-sm p-4 border-l-4 border-emerald-500 text-left transition ${
+              filterStatus === "auto_approved" ? "bg-emerald-50 ring-2 ring-emerald-300" : "bg-white hover:bg-gray-50"
             }`}
           >
-            <p className="text-xs text-gray-500">Approved</p>
-            <p className="text-2xl font-bold">{approvedCount}</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-emerald-800 font-semibold flex items-center gap-1">
+                <FaBolt className="text-emerald-600 text-[10px]" /> Auto-Approved
+              </p>
+              <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                Pre-Verified
+              </span>
+            </div>
+            <p className="text-2xl font-bold mt-1 text-emerald-700">{autoApprovedCount}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Collector field match</p>
           </button>
+
+          <button
+            onClick={() => setFilterStatus("manual_approved")}
+            className={`rounded-2xl shadow-sm p-4 border-l-4 border-blue-500 text-left transition ${
+              filterStatus === "manual_approved" ? "bg-blue-50 ring-2 ring-blue-300" : "bg-white hover:bg-gray-50"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-blue-800 font-semibold">Admin Approved</p>
+              <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                Manual
+              </span>
+            </div>
+            <p className="text-2xl font-bold mt-1 text-blue-700">{manualApprovedCount}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Reviewed by Admin</p>
+          </button>
+
           <button
             onClick={() => setFilterStatus("rejected")}
             className={`rounded-2xl shadow-sm p-4 border-l-4 border-red-500 text-left transition ${
               filterStatus === "rejected" ? "bg-red-50 ring-2 ring-red-300" : "bg-white hover:bg-gray-50"
             }`}
           >
-            <p className="text-xs text-gray-500">Rejected</p>
-            <p className="text-2xl font-bold">{rejectedCount}</p>
+            <p className="text-xs text-gray-500 font-semibold">Rejected</p>
+            <p className="text-2xl font-bold mt-1 text-red-600">{rejectedCount}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Declined requests</p>
+          </button>
+        </div>
+      )}
+
+      {/* Discrepancy Alert Banner when any pending request has collector mismatch */}
+      {discrepancyCount > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-200 text-amber-800 flex items-center justify-center font-bold text-lg shrink-0">
+              <FaExclamationTriangle />
+            </div>
+            <div>
+              <h4 className="font-bold text-amber-900 text-sm">
+                {discrepancyCount} Pending Request{discrepancyCount > 1 ? "s" : ""} With Pre-Added Field Discrepancies
+              </h4>
+              <p className="text-xs text-amber-800">
+                Residents self-registered with details that differ from Collector field records. Review side-by-side differences and adjust details before approving.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setFilterStatus("discrepancies")}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 self-start sm:self-auto transition"
+          >
+            Filter Discrepancies ({discrepancyCount})
           </button>
         </div>
       )}
@@ -525,7 +710,7 @@ export default function RegistrationRequests() {
           <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by name, email, mobile, flat..."
+            placeholder="Search by name, email, mobile, flat, collector..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -536,10 +721,14 @@ export default function RegistrationRequests() {
           onChange={(e) => setFilterStatus(e.target.value)}
           className="border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-medium"
         >
-          <option value="all">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
+          <option value="all">All Requests ({allRequests.length})</option>
+          <option value="pending">Pending Review ({pendingCount})</option>
+          {discrepancyCount > 0 && (
+            <option value="discrepancies">⚠️ With Discrepancies ({discrepancyCount})</option>
+          )}
+          <option value="auto_approved">⚡ Auto-Approved ({autoApprovedCount})</option>
+          <option value="manual_approved">Admin Approved ({manualApprovedCount})</option>
+          <option value="rejected">Rejected ({rejectedCount})</option>
         </select>
       </div>
 
@@ -600,6 +789,23 @@ export default function RegistrationRequests() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-bold text-lg text-slate-900 truncate">{req.name}</h3>
+
+                          {/* Pre-Added Mismatch Badge */}
+                          {req.hasPreAddedMismatch && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                              <FaExclamationTriangle className="text-[10px] text-amber-600" />
+                              Collector Data Mismatch
+                            </span>
+                          )}
+
+                          {/* Auto-Approved Badge */}
+                          {(req.autoApproved || req.approvalType === "collector_pre_verified" || req.approvalType === "admin_pre_verified") && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                              <FaBolt className="text-[10px] text-emerald-600" />
+                              ⚡ Auto-Approved
+                            </span>
+                          )}
+
                           {/* Occupancy Role Badge */}
                           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
                             isTenant
@@ -609,6 +815,7 @@ export default function RegistrationRequests() {
                             <FaKey className="text-[10px]" />
                             {isTenant ? "Tenant (Rented)" : "Property Owner"}
                           </span>
+
                           {/* Garbage Service Badge */}
                           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
                             isGC
@@ -618,6 +825,7 @@ export default function RegistrationRequests() {
                             <FaLeaf className="text-[10px]" />
                             {isGC ? "GC: Participating" : "GC: Opted-Out"}
                           </span>
+
                           {/* Status Badge */}
                           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
                             isPending
@@ -645,24 +853,11 @@ export default function RegistrationRequests() {
                       {isPending ? (
                         <>
                           <button
-                            onClick={() => {
-                              setApproveModal(req);
-                              setCharge(settings?.monthlyCharge ? String(settings.monthlyCharge) : "200");
-                              const matched = blocks.find((b) => b.id === req.blockId || b.name === req.block);
-                              setApproveBlockId(matched?.id || req.blockId || "");
-                              setApproveBlock(matched?.name || req.block || "");
-                              const pNum = plotDisplay !== "—" ? plotDisplay : normalizePlotNumber(req.plotNumber || "");
-                              setApprovePlot(pNum);
-                              setApproveFloor(req.floor || "Ground Floor");
-                              setApproveUnit(unitDisplay || "");
-                              setApprovePersonType(req.personType || "OWNER");
-                              setApproveGarbageParticipation(req.garbageParticipation || "participating");
-                              setApproveFlat(fullFlatCode);
-                            }}
+                            onClick={() => openApproveModal(req)}
                             disabled={loadingId === req.id}
                             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 font-semibold transition text-sm disabled:opacity-50 shadow-sm"
                           >
-                            <FaCheck /> Approve
+                            <FaCheck /> {req.hasPreAddedMismatch ? "Review & Approve" : "Approve"}
                           </button>
                           <button
                             onClick={() => { setRejectModal(req); setRejectReason(""); }}
@@ -673,9 +868,25 @@ export default function RegistrationRequests() {
                           </button>
                         </>
                       ) : isApproved ? (
-                        <span className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 bg-green-100 text-green-700 border border-green-200">
-                          <FaCheckCircle /> Account Created
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 bg-green-100 text-green-700 border border-green-200">
+                            {req.autoApproved ? <FaBolt className="text-emerald-600" /> : <FaCheckCircle />}
+                            {req.autoApproved ? "Auto-Approved" : "Account Created"}
+                          </span>
+                          {(req.linkedResidentId || req.uid) && (
+                            <button
+                              onClick={() => {
+                                const matched = residents.find((r) => r.id === req.linkedResidentId || r.userId === req.uid || r.id === req.uid);
+                                if (matched) setViewingResident(matched);
+                                else toast.info("Resident record active in system");
+                              }}
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition flex items-center gap-1"
+                              title="Inspect Active Resident Profile"
+                            >
+                              <FaExternalLinkAlt className="text-[10px]" /> Profile
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <div className="flex items-center gap-2">
                           <span className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 bg-red-100 text-red-700 border border-red-200">
@@ -693,6 +904,101 @@ export default function RegistrationRequests() {
                       )}
                     </div>
                   </div>
+
+                  {/* Prominent Pre-Added Account Discrepancy Box with Detailed Table */}
+                  {req.hasPreAddedMismatch && (
+                    <div className="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 space-y-3 shadow-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200 pb-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-amber-200 text-amber-900 flex items-center justify-center font-bold text-sm shrink-0">
+                            <FaExclamationTriangle />
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-xs text-amber-950 uppercase tracking-wide">
+                              Collector Field Record Discrepancy Detected
+                            </span>
+                            <p className="text-[11px] text-amber-900 mt-0.5">
+                              This resident was pre-added in the field by <strong className="text-amber-950 underline">{req.preAddedBy || "Collector"}</strong>. Their self-submitted online registration details differ from the field record:
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => openApproveModal(req)}
+                          className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs shrink-0 self-start sm:self-auto"
+                        >
+                          <FaCheck /> Review, Edit & Resolve
+                        </button>
+                      </div>
+
+                      {/* Side-by-Side Discrepancy Comparison Table */}
+                      <div className="overflow-x-auto rounded-xl border border-amber-200 bg-white shadow-xs">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-amber-100/70 text-amber-950 font-bold border-b border-amber-200">
+                            <tr>
+                              <th className="py-2.5 px-3">Field Name</th>
+                              <th className="py-2.5 px-3 text-blue-900">Self-Submitted by Resident</th>
+                              <th className="py-2.5 px-3 text-emerald-900">Pre-Added by Collector ({req.preAddedBy || "Field"})</th>
+                              <th className="py-2.5 px-3 text-right">Review Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-amber-100">
+                            {(req.discrepancies || []).map((disc, dIdx) => (
+                              <tr key={dIdx} className="hover:bg-amber-50/40">
+                                <td className="py-2.5 px-3 font-semibold text-slate-800">{disc.field}</td>
+                                <td className="py-2.5 px-3 font-bold text-blue-700 bg-blue-50/30">{disc.residentValue}</td>
+                                <td className="py-2.5 px-3 font-bold text-emerald-700 bg-emerald-50/30">{disc.preAddedValue}</td>
+                                <td className="py-2.5 px-3 text-right">
+                                  <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
+                                    Mismatch
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <p className="text-[11px] text-amber-900 italic">
+                        💡 Admin has full control to edit Resident Name, Father/Husband Name, Plot, Floor, Unit, Role, and Monthly Charges when clicking <strong>Review & Approve</strong>.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Auto-Approved Attribution Box */}
+                  {(req.autoApproved || req.approvalType === "collector_pre_verified" || req.approvalType === "admin_pre_verified") && (
+                    <div className="rounded-xl border border-emerald-300 bg-emerald-50/80 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-xs">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-8 h-8 rounded-lg bg-emerald-200 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0">
+                          <FaBolt />
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-xs text-emerald-950">
+                              ⚡ Auto-Approved via Pre-Verified Field Record
+                            </span>
+                            <span className="text-[10px] font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
+                              Pre-Verified Clean Match
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-emerald-900 mt-0.5">
+                            Pre-added in field by <strong className="text-emerald-950">{req.preAddedBy || "Collector"}</strong>. Automatically linked and activated upon resident registration.
+                          </p>
+                        </div>
+                      </div>
+                      {(req.linkedResidentId || req.uid) && (
+                        <button
+                          onClick={() => {
+                            const matched = residents.find((r) => r.id === req.linkedResidentId || r.userId === req.uid || r.id === req.uid);
+                            if (matched) setViewingResident(matched);
+                            else toast.info("Resident active");
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition flex items-center gap-1.5 shrink-0 self-start sm:self-auto shadow-xs"
+                        >
+                          <FaExternalLinkAlt className="text-[10px]" /> View Profile
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {/* Section 1: Property & Residence Details (Hierarchy) */}
                   <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5">
@@ -1096,26 +1402,60 @@ export default function RegistrationRequests() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h2 className="text-xl font-bold text-emerald-600 flex items-center gap-2">
-                <FaCheckCircle /> Approve Resident Registration
+                <FaCheckCircle /> {approveModal.hasPreAddedMismatch ? "Resolve Discrepancy & Approve Resident" : "Approve Resident Registration"}
               </h2>
               <button
-                onClick={() => {
-                  setApproveModal(null);
-                  setApproveBlockId("");
-                  setApproveBlock("");
-                  setApprovePlot("");
-                  setApproveFloor("Ground Floor");
-                  setApproveUnit("");
-                  setApprovePersonType("OWNER");
-                  setApproveGarbageParticipation("participating");
-                  setApproveFlat("");
-                }}
+                onClick={resetApproveState}
                 className="text-slate-400 hover:text-slate-600 text-lg p-1"
               >
                 ✕
               </button>
             </div>
             <div className="p-6 space-y-4">
+              {/* Pre-Added Mismatch Discrepancy Resolution Banner */}
+              {approveModal.hasPreAddedMismatch && (
+                <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-amber-900 font-extrabold text-xs">
+                    <FaExclamationTriangle className="text-amber-600 shrink-0 text-sm" />
+                    <span>Pre-Added Account Discrepancy Resolution</span>
+                  </div>
+                  <p className="text-xs text-amber-900">
+                    This resident was pre-added in the field by <strong>{approveModal.preAddedBy || "Collector"}</strong>, but their self-submitted details differ. Choose a 1-click baseline or adjust any field manually below:
+                  </p>
+
+                  {/* Discrepancies breakdown list */}
+                  <div className="space-y-1.5 bg-white border border-amber-200 rounded-lg p-2.5 text-xs">
+                    {(approveModal.discrepancies || []).map((disc, i) => (
+                      <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 py-1 border-b border-slate-100 last:border-b-0">
+                        <span className="font-semibold text-slate-700">{disc.field}:</span>
+                        <div className="flex items-center gap-2 font-mono text-[11px]">
+                          <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded font-bold" title="Resident submitted">Res: {disc.residentValue}</span>
+                          <span className="text-slate-400">vs</span>
+                          <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold" title="Collector field record">Col: {disc.preAddedValue}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={applyResidentPresets}
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                    >
+                      <FaCheck className="text-[10px]" /> Use All Resident Submitted Data
+                    </button>
+                    <button
+                      type="button"
+                      onClick={applyCollectorPresets}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                    >
+                      <FaClipboardList className="text-[10px]" /> Use All Collector Field Data
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Conflict Warnings Notice in Approve Modal */}
               {(() => {
                 const modalWarnings = getDuplicateWarnings(approveModal);
@@ -1138,28 +1478,36 @@ export default function RegistrationRequests() {
                 );
               })()}
 
-              {/* Applicant Profile Summary */}
+              {/* Editable Applicant Name & Father/Husband Section */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                  <FaUser className="text-emerald-600" /> Verify / Edit Resident Identity
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <h3 className="font-bold text-base text-slate-900">{approveModal.name}</h3>
-                    {approveModal.fatherHusbandName && (
-                      <p className="text-xs text-slate-500 font-medium">
-                        Father / Husband: <strong className="text-slate-700">{approveModal.fatherHusbandName}</strong>
-                      </p>
-                    )}
+                    <label className="block mb-1 text-xs font-semibold text-gray-700">Resident Full Name *</label>
+                    <input
+                      type="text"
+                      value={approveName}
+                      onChange={(e) => setApproveName(e.target.value)}
+                      placeholder="e.g. Ramesh Kumar"
+                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-900"
+                    />
                   </div>
-                  <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
-                    (approveModal.personType === "TENANT" || approveModal.personType === "RENTED")
-                      ? "bg-purple-100 text-purple-700 border border-purple-200"
-                      : "bg-blue-100 text-blue-700 border border-blue-200"
-                  }`}>
-                    {(approveModal.personType === "TENANT" || approveModal.personType === "RENTED") ? "Tenant" : "Property Owner"}
-                  </span>
+                  <div>
+                    <label className="block mb-1 text-xs font-semibold text-gray-700">Father / Husband Name</label>
+                    <input
+                      type="text"
+                      value={approveFatherHusbandName}
+                      onChange={(e) => setApproveFatherHusbandName(e.target.value)}
+                      placeholder="e.g. Shri Suresh Kumar"
+                      className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
                 </div>
 
-                {/* Contact & Personal Metadata */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                {/* Contact & Personal Metadata Preview */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs pt-1">
                   <div className="bg-white border rounded-lg p-2">
                     <span className="text-slate-400 text-[10px] block">Mobile (Login ID)</span>
                     <span className="font-bold text-slate-800">{approveModal.mobile || "—"}</span>
@@ -1329,17 +1677,7 @@ export default function RegistrationRequests() {
             </div>
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
               <button
-                onClick={() => {
-                  setApproveModal(null);
-                  setApproveBlockId("");
-                  setApproveBlock("");
-                  setApprovePlot("");
-                  setApproveFloor("Ground Floor");
-                  setApproveUnit("");
-                  setApprovePersonType("OWNER");
-                  setApproveGarbageParticipation("participating");
-                  setApproveFlat("");
-                }}
+                onClick={resetApproveState}
                 className="px-5 py-2.5 rounded-xl border hover:bg-gray-50 font-medium transition"
               >
                 Cancel
@@ -1349,7 +1687,7 @@ export default function RegistrationRequests() {
                 disabled={loadingId === approveModal.id}
                 className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition disabled:bg-gray-400 shadow-sm"
               >
-                {loadingId === approveModal.id ? "Approving..." : "Approve & Create Account"}
+                {loadingId === approveModal.id ? "Approving..." : approveModal.hasPreAddedMismatch ? "Approve & Merge Resident Account" : "Approve & Create Account"}
               </button>
             </div>
           </div>
@@ -1406,31 +1744,7 @@ export default function RegistrationRequests() {
           }}
           onApprove={(req) => {
             setConflictModalData(null);
-            setApproveModal(req);
-            setCharge(settings?.monthlyCharge ? String(settings.monthlyCharge) : "200");
-            const matched = blocks.find((b) => b.id === req.blockId || b.name === req.block);
-            setApproveBlockId(matched?.id || req.blockId || "");
-            setApproveBlock(matched?.name || req.block || "");
-            const parsed = parseFlatId(req.flat, req.plotNumber, req.floor);
-            const plotDisplay = parsed.plotNumber || normalizePlotNumber(req.plotNumber) || (req.flat || "—");
-            const unitDisplay = cleanUnitNumber(
-              req.unitNumber !== undefined && req.unitNumber !== null && req.unitNumber !== ""
-                ? req.unitNumber
-                : parsed.unitNumber,
-              plotDisplay
-            );
-            const fullFlatCode = generateFlatId({
-              plotNumber: plotDisplay !== "—" ? plotDisplay : "",
-              floor: req.floor,
-              unitNumber: unitDisplay,
-              flat: req.flat,
-            });
-            setApprovePlot(plotDisplay !== "—" ? plotDisplay : normalizePlotNumber(req.plotNumber || ""));
-            setApproveFloor(req.floor || "Ground Floor");
-            setApproveUnit(unitDisplay || "");
-            setApprovePersonType(req.personType || "OWNER");
-            setApproveGarbageParticipation(req.garbageParticipation || "participating");
-            setApproveFlat(fullFlatCode);
+            openApproveModal(req);
           }}
           onReject={(req, suggestedReason) => {
             setConflictModalData(null);

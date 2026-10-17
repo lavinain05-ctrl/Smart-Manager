@@ -333,7 +333,13 @@ exports.checkRegistrationAvailability = onCall({ cors: true }, async (request) =
     const resMobSnap = await db.collection("residents").where("mobile", "==", mobile).get();
     const activeRes = resMobSnap.docs.find((d) => (d.data().status || "").toLowerCase() === "active");
     if (activeRes) {
-      return { available: false, reason: "mobile_taken" };
+      const rData = activeRes.data();
+      // If resident already has an active portal login account, then mobile is genuinely taken
+      if (rData.userId || rData.uid || rData.hasPortalAccess) {
+        return { available: false, reason: "mobile_taken" };
+      }
+      // If pre-added by collector/admin without portal account, allow registration to claim it
+      return { available: true, isPreAdded: true, residentId: activeRes.id };
     }
   } catch (resErr) {
     console.warn("residents mobile check error:", resErr.message);
@@ -353,6 +359,11 @@ exports.checkRegistrationAvailability = onCall({ cors: true }, async (request) =
     });
 
     if (activeResident) {
+      const aData = activeResident.data();
+      // Allow if pre-added resident without portal account is claiming this flat
+      if (!aData.userId && !aData.uid && !aData.hasPortalAccess) {
+        return { available: true, isPreAdded: true, residentId: activeResident.id };
+      }
       return { available: false, reason: "flat_occupied" };
     }
   } catch (e) {

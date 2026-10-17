@@ -241,7 +241,7 @@ export default function Register() {
     try {
       setLoading(true);
 
-      await submitRegistration({
+      const regResult = await submitRegistration({
         name: name.trim(),
         fatherHusbandName: fatherHusbandName.trim(),
         plotNumber: resolvedPlot,
@@ -266,8 +266,23 @@ export default function Register() {
         garbageParticipation,
       });
 
-      toast.success("Registration submitted! Waiting for admin approval.");
-      navigate("/pending-approval", { replace: true });
+      if (regResult?.autoApproved) {
+        toast.success(
+          `🎉 Auto-Approved! Your profile was pre-verified by ${regResult.preAddedBy || "Collector"}. Welcome!`,
+          { duration: 5000 }
+        );
+        navigate("/resident/dashboard", { replace: true });
+      } else {
+        if (regResult?.hasPreAddedMismatch) {
+          toast(
+            "Registration submitted! Some details differed from field records, so your account is pending quick Admin confirmation.",
+            { icon: "ℹ️", duration: 6000 }
+          );
+        } else {
+          toast.success("Registration submitted! Waiting for admin approval.");
+        }
+        navigate("/pending-approval", { replace: true });
+      }
     } catch (error) {
       console.error("[Registration] Error:", error.code || "", error.message);
       toast.error(error.message || "Registration failed");

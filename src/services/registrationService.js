@@ -232,10 +232,30 @@ export async function submitRegistration({
     unitNumber: normalizedUnit,
   });
 
+  // --- Check if this resident was pre-added by Collector or Admin in the field ---
+  let preAddedResident = null;
+  try {
+    const resQ = query(
+      collection(db, "residents"),
+      where("mobile", "==", normalizedMobile)
+    );
+    const resSnap = await getDocs(resQ);
+    if (!resSnap.empty) {
+      const candidate = { id: resSnap.docs[0].id, ...resSnap.docs[0].data() };
+      // Only treat as pre-added claim if they don't already have an active linked portal login account
+      if (!candidate.userId && !candidate.uid && (candidate.status || "").toLowerCase() !== "inactive") {
+        preAddedResident = candidate;
+      }
+    }
+  } catch (chkErr) {
+    console.warn("[Registration] Pre-added check error:", chkErr);
+  }
+
   // --- Step 7: Check availability via Cloud Function (with graceful Spark fallback) ---
   const availability = await checkAvailability(normalizedMobile, blockId, canonicalFlatId, normalizedFloorObj.label);
 
-  if (!availability.available) {
+  // If Cloud Function flagged flat_occupied or mobile_taken, but this is the SAME pre-added resident claiming their account, allow it!
+  if (!availability.available && !preAddedResident) {
     throw new Error(getAvailabilityErrorMessage(availability.reason));
   }
 
@@ -248,6 +268,80 @@ export async function submitRegistration({
   // --- Step 8b: Validate garbage participation choice (compulsory) ---
   if (!garbageParticipation || (garbageParticipation !== "participating" && garbageParticipation !== "not_participating")) {
     throw new Error("Please select your choice for the Garbage Collection Service.");
+  }
+
+  // Evaluate discrepancy vs clean match if a pre-added record was found
+  let isCleanMatch = false;
+  const discrepancies = [];
+
+  if (preAddedResident) {
+    const preFlat = (preAddedResident.flat || preAddedResident.flatNumber || "").trim().toUpperCase();
+    const subFlat = canonicalFlatId.trim().toUpperCase();
+    const prePlot = normalizePlotNumber(preAddedResident.plotNumber || preAddedResident.flat || "");
+    const subPlot = normalizedPlot;
+
+    const preFloorObj = normalizeFloor(preAddedResident.floor || "");
+    const subFloorCode = normalizedFloorObj.code;
+
+    const preBlock = (preAddedResident.block || "").trim().toUpperCase();
+    const subBlock = (block || "").trim().toUpperCase();
+    const preBlockId = preAddedResident.blockId || "";
+
+    const preName = (preAddedResident.owner || preAddedResident.name || "").trim().toLowerCase();
+    const subName = (name || "").trim().toLowerCase();
+
+    const prePersonType = (preAddedResident.personType || "OWNER").trim().toUpperCase();
+    const subPersonType = (personType || "OWNER").trim().toUpperCase();
+
+    // Check Flat / Property match
+    const flatMatches = preFlat === subFlat || (prePlot === subPlot && preFloorObj.code === subFloorCode);
+
+    // Check Block match
+    const blockMatches = (preBlockId && preBlockId === blockId) || (preBlock && preBlock === subBlock);
+
+    // Check Name match
+    const nameMatches =
+      preName === subName ||
+      (preName && subName && (preName.includes(subName) || subName.includes(preName)));
+
+    // Check Person Type match
+    const personTypeMatches = prePersonType === subPersonType;
+
+    if (!flatMatches) {
+      discrepancies.push({
+        field: "Flat / Property",
+        residentValue: canonicalFlatId,
+        preAddedValue: preAddedResident.flat || preAddedResident.flatNumber || "—",
+      });
+    }
+
+    if (!blockMatches) {
+      discrepancies.push({
+        field: "Block",
+        residentValue: block || "—",
+        preAddedValue: preAddedResident.block || "—",
+      });
+    }
+
+    if (!nameMatches) {
+      discrepancies.push({
+        field: "Resident Name",
+        residentValue: (name || "").trim(),
+        preAddedValue: preAddedResident.owner || preAddedResident.name || "—",
+      });
+    }
+
+    if (!personTypeMatches) {
+      discrepancies.push({
+        field: "Person Type",
+        residentValue: personType || "OWNER",
+        preAddedValue: preAddedResident.personType || "OWNER",
+      });
+    }
+
+    if (flatMatches && blockMatches && nameMatches) {
+      isCleanMatch = true;
+    }
   }
 
   // --- Step 9: Create Firebase Auth account using pseudo-email from Mobile ---
@@ -267,8 +361,216 @@ export async function submitRegistration({
 
   const uid = credential.user.uid;
 
-  // --- Step 10: Write registration request doc ---
+  // --- Step 10: Process Auto-Approval vs Discrepancy Mismatch vs Standard Request ---
   try {
+    if (preAddedResident && isCleanMatch) {
+      // ══════════════════════════════════════════════════════════════════
+      // SCENARIO 1: AUTO-APPROVED (Clean match with Collector/Admin record)
+      // ══════════════════════════════════════════════════════════════════
+      const preAddedBy =
+        preAddedResident.collectorName ||
+        preAddedResident.createdByName ||
+        preAddedResident.addedBy ||
+        (preAddedResident.createdBy === "Collector" ? "Collector" : "Admin");
+      const preAddedRole =
+        preAddedResident.createdBy ||
+        (preAddedResident.collectorId ? "Collector" : "Admin");
+
+      // 1. Link existing resident doc
+      await updateDoc(doc(db, "residents", preAddedResident.id), {
+        userId: uid,
+        uid: uid,
+        email: normalizedEmail || preAddedResident.email || "",
+        status: "Active",
+        updatedAt: serverTimestamp(),
+      });
+
+      // 2. Create official users doc
+      await setDoc(doc(db, "users", uid), {
+        role: "resident",
+        status: "active",
+        residentId: preAddedResident.id,
+        name: (name || "").trim(),
+        email: normalizedEmail || authEmail,
+        phone: normalizedMobile,
+        mobile: normalizedMobile,
+        propertyId: canonicalPropertyId || preAddedResident.propertyId || "",
+        plotNumber: normalizedPlot,
+        floor: normalizedFloorObj.label,
+        floorCode: normalizedFloorObj.code,
+        unitNumber: normalizedUnit,
+        personType: (personType || preAddedResident.personType || "OWNER").toUpperCase(),
+        flat: canonicalFlatId,
+        flatNumber: canonicalFlatId,
+        block: block || preAddedResident.block || "",
+        blockId: blockId || preAddedResident.blockId || "",
+        autoApproved: true,
+        approvalType:
+          preAddedRole === "Collector" || preAddedResident.collectorId
+            ? "collector_pre_verified"
+            : "admin_pre_verified",
+        preAddedBy,
+        preAddedRole,
+        approvedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      });
+
+      // 3. Create registrationRequests doc marked as approved
+      await setDoc(doc(db, "registrationRequests", uid), {
+        uid,
+        name: (name || "").trim(),
+        fatherHusbandName: (fatherHusbandName || "").trim(),
+        email: normalizedEmail,
+        mobile: normalizedMobile,
+        alternateMobile: alternateMobile || "",
+        propertyId: canonicalPropertyId || preAddedResident.propertyId || "",
+        plotNumber: normalizedPlot,
+        floor: normalizedFloorObj.label,
+        floorCode: normalizedFloorObj.code,
+        unitNumber: normalizedUnit,
+        personType: (personType || preAddedResident.personType || "OWNER").toUpperCase(),
+        flat: canonicalFlatId,
+        flatNumber: canonicalFlatId,
+        block: block || preAddedResident.block || "",
+        blockId: blockId || preAddedResident.blockId || "",
+        dob: dob || "",
+        gender: gender || "",
+        occupation: (occupation || "").trim(),
+        emergencyContact: emergencyContact || "",
+        garbageParticipation:
+          garbageParticipation || preAddedResident.garbageStatus || "participating",
+        status: "approved",
+        autoApproved: true,
+        approvalType:
+          preAddedRole === "Collector" || preAddedResident.collectorId
+            ? "collector_pre_verified"
+            : "admin_pre_verified",
+        preAddedBy,
+        preAddedRole,
+        preAddedDate: preAddedResident.createdAt || "",
+        linkedResidentId: preAddedResident.id,
+        approvedAt: serverTimestamp(),
+        registeredAt: serverTimestamp(),
+      });
+
+      // 4. Mobile Auth Lookup
+      await writeAuthLookup(
+        normalizedMobile,
+        authEmail,
+        uid,
+        normalizedEmail,
+        canonicalFlatId,
+        (name || "").trim()
+      );
+
+      // 5. Notify Admin of instant auto-approval
+      try {
+        await notifyAdmin({
+          title: "⚡ Resident Auto-Approved (Pre-Verified)",
+          message: `${(name || "").trim()} (Flat ${canonicalFlatId}) was automatically approved and linked to resident pre-added by ${preAddedBy}.`,
+          type: "registration",
+          link: "/admin/registrations",
+        });
+      } catch {}
+
+      return { uid, autoApproved: true, preAddedBy };
+    }
+
+    if (preAddedResident && !isCleanMatch) {
+      // ══════════════════════════════════════════════════════════════════
+      // SCENARIO 2: DISCREPANCY MISMATCH (Pre-added record exists, but data differs)
+      // ══════════════════════════════════════════════════════════════════
+      const preAddedBy =
+        preAddedResident.collectorName ||
+        preAddedResident.createdByName ||
+        preAddedResident.addedBy ||
+        (preAddedResident.createdBy === "Collector" ? "Collector" : "Admin");
+      const preAddedRole =
+        preAddedResident.createdBy ||
+        (preAddedResident.collectorId ? "Collector" : "Admin");
+
+      await setDoc(doc(db, "registrationRequests", uid), {
+        uid,
+        name: (name || "").trim(),
+        fatherHusbandName: (fatherHusbandName || "").trim(),
+        email: normalizedEmail,
+        mobile: normalizedMobile,
+        alternateMobile: alternateMobile || "",
+        propertyId: canonicalPropertyId,
+        plotNumber: normalizedPlot,
+        floor: normalizedFloorObj.label,
+        floorCode: normalizedFloorObj.code,
+        unitNumber: normalizedUnit,
+        personType: (personType || "OWNER").toUpperCase(),
+        flat: canonicalFlatId,
+        flatNumber: canonicalFlatId,
+        block: block || "",
+        blockId: blockId || "",
+        dob: dob || "",
+        gender: gender || "",
+        occupation: (occupation || "").trim(),
+        emergencyContact: emergencyContact || "",
+        garbageParticipation: garbageParticipation || "not_participating",
+        status: "pending",
+        hasPreAddedMismatch: true,
+        mismatchTargetId: preAddedResident.id,
+        preAddedBy,
+        preAddedRole,
+        preAddedRecord: {
+          id: preAddedResident.id,
+          owner: preAddedResident.owner || preAddedResident.name || "",
+          flat: preAddedResident.flat || preAddedResident.flatNumber || "",
+          block: preAddedResident.block || "",
+          blockId: preAddedResident.blockId || "",
+          mobile: preAddedResident.mobile || "",
+          personType: preAddedResident.personType || "OWNER",
+          charge: preAddedResident.charge || 0,
+          garbageStatus: preAddedResident.garbageStatus || "participating",
+          collectorName: preAddedResident.collectorName || "",
+          createdAt: preAddedResident.createdAt || "",
+        },
+        discrepancies,
+        registeredAt: serverTimestamp(),
+      });
+
+      // Write users doc with pending status
+      await setDoc(doc(db, "users", uid), {
+        role: "pending_registration",
+        status: "pending",
+        name: (name || "").trim(),
+        email: normalizedEmail || authEmail,
+        phone: normalizedMobile,
+        mobile: normalizedMobile,
+        flat: canonicalFlatId,
+        block: block || "",
+        registeredAt: serverTimestamp(),
+      });
+
+      await writeAuthLookup(
+        normalizedMobile,
+        authEmail,
+        uid,
+        normalizedEmail,
+        canonicalFlatId,
+        (name || "").trim()
+      );
+
+      // Notify Admin with discrepancy alert
+      try {
+        await notifyAdmin({
+          title: "⚠️ Registration Discrepancy (Review Required)",
+          message: `${(name || "").trim()} registered for Flat ${canonicalFlatId}, but details differ from field record by ${preAddedBy}. Review & resolution required.`,
+          type: "registration",
+          link: "/admin/registrations",
+        });
+      } catch {}
+
+      return { uid, autoApproved: false, hasPreAddedMismatch: true, preAddedBy };
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // SCENARIO 3: NORMAL NEW REGISTRATION (No pre-added record found)
+    // ══════════════════════════════════════════════════════════════════
     await setDoc(doc(db, "registrationRequests", uid), {
       uid,
       name: (name || "").trim(),
@@ -276,14 +578,12 @@ export async function submitRegistration({
       email: normalizedEmail,
       mobile: normalizedMobile,
       alternateMobile: alternateMobile || "",
-      // Canonical Property Identity fields
       propertyId: canonicalPropertyId,
       plotNumber: normalizedPlot,
       floor: normalizedFloorObj.label,
       floorCode: normalizedFloorObj.code,
       unitNumber: normalizedUnit,
       personType: (personType || "OWNER").toUpperCase(),
-      // Standardized Flat ID (Plot-FloorCode-Flat)
       flat: canonicalFlatId,
       flatNumber: canonicalFlatId,
       block: block || "",
@@ -297,24 +597,38 @@ export async function submitRegistration({
       registeredAt: serverTimestamp(),
     });
 
-    // --- Step 11: Write mobile→auth email lookup for login ---
-    await writeAuthLookup(normalizedMobile, authEmail, uid, normalizedEmail);
+    await setDoc(doc(db, "users", uid), {
+      role: "pending_registration",
+      status: "pending",
+      name: (name || "").trim(),
+      email: normalizedEmail || authEmail,
+      phone: normalizedMobile,
+      mobile: normalizedMobile,
+      flat: canonicalFlatId,
+      block: block || "",
+      registeredAt: serverTimestamp(),
+    });
 
-    // --- Step 12: Active Notification for Admin ---
+    await writeAuthLookup(
+      normalizedMobile,
+      authEmail,
+      uid,
+      normalizedEmail,
+      canonicalFlatId,
+      (name || "").trim()
+    );
+
     try {
       await notifyAdmin({
         title: "New Resident Registration 👤",
-        message: `${name?.trim() || "New resident"} has submitted a registration for Flat ${canonicalFlatId || "—"} (${block || "—"}).`,
+        message: `${(name || "").trim()} has submitted a registration for Flat ${canonicalFlatId || "—"} (${block || "—"}).`,
         type: "registration",
         link: "/admin/registrations",
       });
-    } catch (notifErr) {
-      console.warn("[Registration] Admin notification warning:", notifErr.message);
-    }
+    } catch {}
 
-    return uid;
+    return { uid, autoApproved: false, hasPreAddedMismatch: false };
   } catch (firestoreError) {
-    // Firestore write failed — clean up orphaned auth account
     console.error("[Registration] Firestore write failed:", firestoreError.message);
     try {
       await credential.user.delete();
@@ -544,12 +858,15 @@ export async function approveRegistration(requestId, request, charge, overrides 
     channel: "registration_approval",
   };
 
+  const targetResidentId = overrides.targetResidentId || request.mismatchTargetId || null;
+  const finalResidentDocId = targetResidentId || uid;
+
   const batch = writeBatch(db);
 
   // Create official users/{uid} doc
   batch.set(doc(db, "users", uid), {
     role: "resident",
-    name: request.name || "",
+    name: overrides.name || request.name || "",
     email: (request.email || "").trim() || authEmail,
     phone: cleanMobile,
     mobile: cleanMobile,
@@ -563,14 +880,16 @@ export async function approveRegistration(requestId, request, charge, overrides 
     flatNumber: finalDisplayFlat,
     block: finalBlock,
     blockId: finalBlockId,
-    residentId: uid,
+    residentId: finalResidentDocId,
     status: "active",
     accessProvenance: provenance,
     approvedAt: serverTimestamp(),
   });
 
-  // Create official residents/{uid} doc
-  batch.set(doc(db, "residents", uid), {
+  // Create or merge official residents/{finalResidentDocId} doc
+  const residentPayload = {
+    userId: uid,
+    uid: uid,
     propertyId: canonicalPropertyId,
     plotNumber: finalPlot,
     floor: finalFloorObj.label,
@@ -579,30 +898,39 @@ export async function approveRegistration(requestId, request, charge, overrides 
     personType: finalPersonType,
     flat: finalDisplayFlat,
     flatNumber: finalDisplayFlat,
-    owner: request.name || "",
+    owner: overrides.name || request.name || "",
     mobile: cleanMobile,
     block: finalBlock,
     blockId: finalBlockId,
-    charge: charge ? Number(charge) : 0,
+    charge: charge ? Number(charge) : (request.preAddedRecord?.charge || 0),
     email: (request.email || "").trim(),
-    fatherHusbandName: request.fatherHusbandName || "",
-    alternateMobile: request.alternateMobile || "",
+    fatherHusbandName: overrides.fatherHusbandName || request.fatherHusbandName || "",
+    alternateMobile: overrides.alternateMobile || request.alternateMobile || "",
     dob: request.dob || "",
     gender: request.gender || "",
     occupation: request.occupation || "",
     emergencyContact: request.emergencyContact || "",
-    familyMembers: [],
     status: "Active",
     garbageStatus: gcStatus,
     garbageParticipation: gcChoice,
-    garbageJoinedAt: gcStatus === "participating" ? serverTimestamp() : null,
-    garbageJoinedMonth: gcStatus === "participating" ? new Date().toLocaleString("default", { month: "long" }) : null,
-    garbageJoinedYear: gcStatus === "participating" ? new Date().getFullYear() : null,
-    createdAt: request.createdAt || serverTimestamp(),
-    remarks: "",
     accessProvenance: provenance,
     approvedAt: serverTimestamp(),
-  });
+    updatedAt: serverTimestamp(),
+  };
+
+  if (!targetResidentId) {
+    residentPayload.familyMembers = [];
+    residentPayload.createdAt = request.createdAt || serverTimestamp();
+    residentPayload.remarks = "";
+  }
+
+  if (gcStatus === "participating") {
+    residentPayload.garbageJoinedAt = serverTimestamp();
+    residentPayload.garbageJoinedMonth = new Date().toLocaleString("default", { month: "long" });
+    residentPayload.garbageJoinedYear = new Date().getFullYear();
+  }
+
+  batch.set(doc(db, "residents", finalResidentDocId), residentPayload, { merge: true });
 
   // Mark request as approved and synchronize overridden details
   batch.update(doc(db, "registrationRequests", requestId), {
@@ -618,6 +946,8 @@ export async function approveRegistration(requestId, request, charge, overrides 
     blockId: finalBlockId,
     personType: finalPersonType,
     approvedBy: provenance,
+    linkedResidentId: finalResidentDocId,
+    resolvedByAdmin: Boolean(targetResidentId),
     approvedAt: serverTimestamp(),
   });
 

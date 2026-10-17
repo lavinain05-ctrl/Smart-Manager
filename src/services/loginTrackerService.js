@@ -52,12 +52,107 @@ export function getClientDeviceInfo() {
       ? `${screen.width}x${screen.height}`
       : "Unknown";
 
+  const model = parseDeviceModel(ua, screenResolution, os, device);
+  let customName = "";
+  if (typeof window !== "undefined" && window.localStorage) {
+    customName = localStorage.getItem("rwa_device_custom_name") || "";
+  }
+
   return {
     browser,
     os,
     device,
     screen: screenResolution,
+    model,
+    deviceName: customName || model,
   };
+}
+
+/**
+ * Intelligent hardware device and model parser
+ * Extracts exact phone / computer model from User-Agent and screen resolution
+ */
+export function parseDeviceModel(ua = "", screenRes = "", os = "", device = "") {
+  if (!ua) {
+    if (os === "Windows") return "Windows PC / Laptop";
+    if (os === "iOS") return "Apple iPhone";
+    if (os === "Android") return "Android Mobile";
+    if (os === "macOS") return "Apple MacBook / Mac";
+    return device ? `${device} Device` : "Personal Computer";
+  }
+
+  // 1. Android devices: format is "... Android [version]; [Model] Build/..."
+  if (/Android/i.test(ua)) {
+    const match = ua.match(/Android\s+[\d.]+;\s*([^;)]+)/i);
+    if (match && match[1]) {
+      let raw = match[1].trim();
+      raw = raw.split(/\s*Build\//i)[0].trim();
+      raw = raw.replace(/;\s*wv/i, "").trim();
+
+      if (/^SM-[A-Z0-9]+/i.test(raw)) {
+        return `Samsung Galaxy (${raw})`;
+      }
+      if (/Pixel/i.test(raw)) {
+        return `Google ${raw}`;
+      }
+      if (/^CPH|^PGAM|^PEX/i.test(raw)) {
+        return `OnePlus / Oppo (${raw})`;
+      }
+      if (/^RMX/i.test(raw)) {
+        return `Realme (${raw})`;
+      }
+      if (/^M2|^Redmi|^Xiaomi|^POCO/i.test(raw)) {
+        return `Xiaomi / Redmi (${raw})`;
+      }
+      if (/^V2|^vivo/i.test(raw)) {
+        return `Vivo (${raw})`;
+      }
+      if (/^moto/i.test(raw)) {
+        return `Motorola (${raw})`;
+      }
+      if (raw && raw !== "K" && raw.length > 1) {
+        return raw;
+      }
+    }
+    return "Android Smartphone";
+  }
+
+  // 2. Apple iOS devices (iPhone & iPad)
+  if (/iPhone/i.test(ua)) {
+    if (screenRes) {
+      if (screenRes.includes("393x852") || screenRes.includes("390x844")) return "Apple iPhone 14 / 15 / 16";
+      if (screenRes.includes("430x932") || screenRes.includes("428x926")) return "Apple iPhone Pro Max / Plus";
+      if (screenRes.includes("375x812")) return "Apple iPhone X / 11 Pro / 12 Mini";
+      if (screenRes.includes("414x896")) return "Apple iPhone 11 / XR / XS Max";
+    }
+    return "Apple iPhone";
+  }
+
+  if (/iPad/i.test(ua)) {
+    return "Apple iPad";
+  }
+
+  // 3. Apple Mac
+  if (/Macintosh|Mac OS X/i.test(ua)) {
+    return "Apple MacBook / Mac";
+  }
+
+  // 4. Windows
+  if (/Windows/i.test(ua)) {
+    return "Windows Laptop / PC";
+  }
+
+  // 5. Chromebook
+  if (/CrOS/i.test(ua)) {
+    return "Google Chromebook";
+  }
+
+  // 6. Linux
+  if (/Linux/i.test(ua)) {
+    return "Linux Workstation";
+  }
+
+  return `${os || "Computer"} (${device || "Desktop"})`;
 }
 
 /**
@@ -130,6 +225,8 @@ export async function recordLoginEvent({
       os: deviceInfo.os,
       browser: deviceInfo.browser,
       screen: deviceInfo.screen,
+      model: deviceInfo.model,
+      deviceName: deviceInfo.deviceName,
       createdAt: serverTimestamp(),
       clientTimestamp: new Date().toISOString(),
       ...extra,

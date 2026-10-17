@@ -89,6 +89,8 @@ export async function initDeviceSession(user) {
           os: deviceInfo.os,         // "Windows" | "macOS" | "Android" | "iOS" | "Linux"
           browser: deviceInfo.browser, // "Chrome" | "Edge" | "Firefox" | "Safari"
           screen: deviceInfo.screen,
+          model: deviceInfo.model || "",
+          deviceName: deviceInfo.deviceName || "",
           userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
           isActive: true,
           revokedReason: "",
@@ -355,5 +357,24 @@ export async function terminateAllOtherSessions(
     await Promise.all(updates);
   } catch (error) {
     console.warn("[SessionService] Failed to terminate other sessions:", error.message);
+  }
+}
+
+/**
+ * Update friendly device name / custom label for a session
+ */
+export async function updateSessionDeviceName(sessionId, deviceName) {
+  if (!sessionId || !deviceName?.trim()) return;
+  const docRef = doc(db, "activeSessions", sessionId);
+  await updateDoc(docRef, {
+    deviceName: deviceName.trim(),
+    customName: deviceName.trim(),
+  });
+
+  if (typeof window !== "undefined" && window.localStorage) {
+    const currentId = localStorage.getItem("rwa_active_session_id");
+    if (currentId === sessionId) {
+      localStorage.setItem("rwa_device_custom_name", deviceName.trim());
+    }
   }
 }

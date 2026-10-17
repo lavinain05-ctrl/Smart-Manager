@@ -39,6 +39,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useResidents } from "../../context/ResidentContext";
 import { useGarbage } from "../../context/GarbageContext";
 import { usePayments } from "../../context/PaymentContext";
+import { useBills } from "../../context/BillContext";
 import {
   isPriorToCollectionStart,
   isPriorToResidentBillingStart,

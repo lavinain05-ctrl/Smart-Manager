@@ -13,6 +13,7 @@ import { useGarbage } from "../../context/GarbageContext";
 import { collectResidentPayment } from "../../utils/collectPayment";
 import { isGcParticipating } from "../../services/statisticsService";
 import { formatResidentFloor } from "../../services/propertyService";
+import { sortResidentsByPlotAndFloor } from "../../utils/propertySorting";
 
 import MonthSelector from "../../components/common/MonthSelector";
 
@@ -71,7 +72,7 @@ export default function Collections() {
   }
 
   const filteredResidents = useMemo(() => {
-    return (residents || []).filter((resident) => {
+    const filtered = (residents || []).filter((resident) => {
       const isParticipating = isGcParticipating(resident);
       const paid = isPaid(resident.id);
 
@@ -86,6 +87,7 @@ export default function Collections() {
       const mobile = (resident.mobile || resident.phone || "").toLowerCase();
       return flat.includes(q) || owner.includes(q) || mobile.includes(q);
     });
+    return sortResidentsByPlotAndFloor(filtered);
   }, [residents, search, filterType, payments, garbageBills, bills, selectedMonth, selectedYear]);
 
   async function handleCollect(paymentData) {

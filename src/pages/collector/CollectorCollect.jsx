@@ -40,6 +40,7 @@ import {
 import { generateSpecialCollectionReceipt } from "../../utils/specialCollectionReceiptGenerator";
 import { printPaymentReceipt } from "../../utils/printReceiptHelper";
 import { formatResidentFloor } from "../../services/propertyService";
+import { sortResidentsByPlotAndFloor } from "../../utils/propertySorting";
 import PrinterQuickAction from "../../components/common/PrinterQuickAction";
 
 export default function CollectorCollect() {
@@ -362,7 +363,7 @@ export default function CollectorCollect() {
   }, [residents, payments, settings?.monthlyCharge, selectedMonth, selectedYear]);
 
   const filteredGarbageResidents = useMemo(() => {
-    return residents.filter((resident) => {
+    const filtered = residents.filter((resident) => {
       const query = garbageSearch.toLowerCase();
       const matchesQuery =
         (resident.flat || "").toLowerCase().includes(query) ||
@@ -383,6 +384,7 @@ export default function CollectorCollect() {
       if (garbageFilter === "pending") return participating && !paid;
       return true;
     });
+    return sortResidentsByPlotAndFloor(filtered);
   }, [
     residents,
     garbageSearch,
@@ -486,26 +488,24 @@ export default function CollectorCollect() {
 
   // Filtered residents for Special Collections
   const filteredSpecialResidents = useMemo(() => {
-    return residents
-      .slice()
-      .sort((a, b) => (a.flatNumber || "").localeCompare(b.flatNumber || ""))
-      .filter((resident) => {
-        const query = specialSearch.toLowerCase();
-        const matchesQuery =
-          (resident.flatNumber || "").toLowerCase().includes(query) ||
-          (resident.flat || "").toLowerCase().includes(query) ||
-          (resident.name || "").toLowerCase().includes(query) ||
-          (resident.owner || "").toLowerCase().includes(query) ||
-          (resident.floor || "").toLowerCase().includes(query) ||
-          (resident.block || "").toLowerCase().includes(query) ||
-          (resident.mobile || resident.phone || "").includes(query);
-        if (!matchesQuery) return false;
+    const filtered = residents.filter((resident) => {
+      const query = specialSearch.toLowerCase();
+      const matchesQuery =
+        (resident.flatNumber || "").toLowerCase().includes(query) ||
+        (resident.flat || "").toLowerCase().includes(query) ||
+        (resident.name || "").toLowerCase().includes(query) ||
+        (resident.owner || "").toLowerCase().includes(query) ||
+        (resident.floor || "").toLowerCase().includes(query) ||
+        (resident.block || "").toLowerCase().includes(query) ||
+        (resident.mobile || resident.phone || "").includes(query);
+      if (!matchesQuery) return false;
 
-        const contribution = getResidentContribution(resident);
-        if (specialFilter === "contributed") return Boolean(contribution);
-        if (specialFilter === "pending") return !contribution;
-        return true;
-      });
+      const contribution = getResidentContribution(resident);
+      if (specialFilter === "contributed") return Boolean(contribution);
+      if (specialFilter === "pending") return !contribution;
+      return true;
+    });
+    return sortResidentsByPlotAndFloor(filtered);
   }, [residents, specialSearch, specialFilter, currentCampaignPayments]);
 
   // Open Collect Modal for a resident

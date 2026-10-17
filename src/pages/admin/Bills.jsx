@@ -20,6 +20,7 @@ import { isGcParticipating } from "../../services/statisticsService";
 import { syncBlockWiseMonthlyBills } from "../../utils/reportSyncService";
 import { generateBlockWiseMonthlyBillsPDF } from "../../utils/printReportHelper";
 import { isPriorToCollectionStart, formatDueDate } from "../../utils/billingCycle";
+import { sortResidentsByPlotAndFloor } from "../../utils/propertySorting";
 
 import MonthSelector from "../../components/common/MonthSelector";
 import BillSummaryCards from "../../components/bills/BillSummaryCards";
@@ -137,7 +138,7 @@ export default function Bills() {
   }, [bills, residents, payments, selectedMonth, selectedYear]);
 
   const filteredBills = useMemo(() => {
-    return monthlyBills.filter((bill) => {
+    const filtered = monthlyBills.filter((bill) => {
       const searchMatch = `${bill.flat || ""} ${bill.residentName || ""} ${bill.block || ""}`
         .toLowerCase()
         .includes(search.toLowerCase());
@@ -147,6 +148,7 @@ export default function Bills() {
         blockFilter === "All" ? true : bill.block === blockFilter;
       return searchMatch && statusMatch && blockMatch;
     });
+    return sortResidentsByPlotAndFloor(filtered);
   }, [monthlyBills, search, statusFilter, blockFilter]);
 
   async function handleCollectPayment(paymentData) {

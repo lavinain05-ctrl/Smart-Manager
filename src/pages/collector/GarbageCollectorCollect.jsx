@@ -22,6 +22,7 @@ import { useBilling } from "../../context/BillingContext";
 import { collectResidentPayment } from "../../utils/collectPayment";
 import { isPriorToResidentBillingStart } from "../../utils/billingCycle";
 import { printPaymentReceipt } from "../../utils/printReceiptHelper";
+import { sortResidentsByPlotAndFloor } from "../../utils/propertySorting";
 import PrinterQuickAction from "../../components/common/PrinterQuickAction";
 
 export default function GarbageCollectorCollect() {
@@ -81,7 +82,7 @@ export default function GarbageCollectorCollect() {
 
   // Assigned and filtered accounts
   const filteredAccounts = useMemo(() => {
-    return garbageAccounts
+    const filtered = garbageAccounts
       .filter((a) => a.collectorId === user?.uid || !a.collectorId)
       .filter((a) => {
         const query = search.toLowerCase();
@@ -100,6 +101,7 @@ export default function GarbageCollectorCollect() {
         if (filter === "pending") return !isNotPart && !paid;
         return true;
       });
+    return sortResidentsByPlotAndFloor(filtered);
   }, [garbageAccounts, residents, user, search, filter, payments, garbageBills, selectedMonth, selectedYear]);
 
   // Counts for filter badges

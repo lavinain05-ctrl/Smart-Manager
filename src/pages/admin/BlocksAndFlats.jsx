@@ -23,6 +23,7 @@ import { useBilling } from "../../context/BillingContext";
 import { useGarbage } from "../../context/GarbageContext";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { isGcParticipating } from "../../services/statisticsService";
+import { sortResidentsByPlotAndFloor } from "../../utils/propertySorting";
 
 const FLAT_STATUSES = [
   { value: "occupied", label: "Occupied", color: "bg-green-100 text-green-700" },
@@ -363,9 +364,9 @@ export default function BlocksAndFlats() {
       ) : (
         <div className="space-y-4">
           {filteredBlocks.map((block) => {
-            const blockFlats = flats
-              .filter((f) => f.blockId === block.id)
-              .sort((a, b) => (a.flatNumber || "").localeCompare(b.flatNumber || "", undefined, { numeric: true }));
+            const blockFlats = sortResidentsByPlotAndFloor(
+              flats.filter((f) => f.blockId === block.id)
+            );
 
             const isExpanded = expandedBlock === block.id;
             const stats = getBlockStats(block.id);

@@ -7,15 +7,13 @@
 import { isGcParticipating } from "../services/statisticsService";
 import { formatDueDate } from "./billingCycle";
 import { parseDueDate } from "./billStatus";
+import { compareResidentsByPlotAndFloor } from "./propertySorting";
 
 /**
- * Natural alphanumeric sort for flat numbers (e.g., "1", "2", "10", "101", "102A")
+ * Natural 3-tier ascending sort for flat numbers and resident properties (Plot -> Floor -> Unit)
  */
 export function compareFlatNumbers(aFlat = "", bFlat = "") {
-  return String(aFlat).localeCompare(String(bFlat), undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
+  return compareResidentsByPlotAndFloor({ flat: aFlat }, { flat: bFlat });
 }
 
 /**
@@ -239,7 +237,7 @@ export function syncBlockWiseResidents({
     .sort((a, b) => compareBlockNames(a.blockName, b.blockName));
 
   blocksArray.forEach((b) => {
-    b.residents.sort((a, b) => compareFlatNumbers(a.flat, b.flat));
+    b.residents.sort((a, b) => compareResidentsByPlotAndFloor(a, b));
     b.collectionRate = b.expectedAmount > 0
       ? Math.round((b.collectedAmount / b.expectedAmount) * 100)
       : (b.paidCount > 0 ? 100 : 0);
@@ -541,7 +539,7 @@ export function syncBlockWiseMonthlyBills({
     .sort((a, b) => compareBlockNames(a.blockName, b.blockName));
 
   blocksArray.forEach((b) => {
-    b.bills.sort((a, b) => compareFlatNumbers(a.flat, b.flat));
+    b.bills.sort((a, b) => compareResidentsByPlotAndFloor(a, b));
     b.collectionRate = b.totalBilledAmount > 0
       ? Math.round((b.totalCollectedAmount / b.totalBilledAmount) * 100)
       : (b.paidBillsCount > 0 ? 100 : 0);

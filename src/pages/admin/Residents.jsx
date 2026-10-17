@@ -35,6 +35,7 @@ import { subscribeSettings } from "../../services/settingsService";
 import { syncBlockWiseResidents } from "../../utils/reportSyncService";
 import { generateBlockWiseResidentsPDF } from "../../utils/printReportHelper";
 import { synchronizeAllSocietyData } from "../../utils/propertyMigration";
+import { sortResidentsByPlotAndFloor } from "../../utils/propertySorting";
 
 import { useResidents } from "../../context/ResidentContext";
 import { usePayments } from "../../context/PaymentContext";
@@ -427,7 +428,7 @@ export default function Residents() {
 
   // ─── Filter + Search Logic ───
   const filteredResidents = useMemo(() => {
-    return residents.filter((resident) => {
+    const filtered = residents.filter((resident) => {
       // 1. Search
       const value = search.toLowerCase();
       if (value) {
@@ -504,6 +505,7 @@ export default function Residents() {
 
       return true;
     });
+    return sortResidentsByPlotAndFloor(filtered);
   }, [residents, search, filters, gcMonthlyStats]);
 
   function handleExportPdf() {

@@ -24,6 +24,11 @@ import {
   FaBriefcase,
   FaAmbulance,
   FaSyncAlt,
+  FaChevronDown,
+  FaChevronUp,
+  FaExternalLinkAlt,
+  FaExchangeAlt,
+  FaInfoCircle,
 } from "react-icons/fa";
 
 import toast from "react-hot-toast";
@@ -41,6 +46,12 @@ import { useBlockFlat } from "../../context/BlockFlatContext";
 import { useSettings } from "../../context/SettingsContext";
 import { useAuth } from "../../context/AuthContext";
 import { useNotifications } from "../../context/NotificationContext";
+import { usePayments } from "../../context/PaymentContext";
+import { useBills } from "../../context/BillContext";
+import { useGarbage } from "../../context/GarbageContext";
+import DuplicateConflictModal from "../../components/residents/DuplicateConflictModal";
+import ResidentDetailsModal from "../../components/residents/ResidentDetailsModal";
+import { normalizeMobile, isRealEmail } from "../../services/authService";
 import Pagination from "../../components/common/Pagination";
 import { TableLoadingSkeleton, StatCardsSkeleton } from "../../components/common/TableLoadingSkeleton";
 import {
@@ -97,12 +108,18 @@ export default function RegistrationRequests() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [migratingFlatIds, setMigratingFlatIds] = useState(false);
+  const [expandedConflicts, setExpandedConflicts] = useState({});
+  const [conflictModalData, setConflictModalData] = useState(null);
+  const [viewingResident, setViewingResident] = useState(null);
 
   const { residents } = useResidents();
   const { blocks } = useBlockFlat();
   const { settings } = useSettings();
   const { user } = useAuth();
   const { markPathRead, notifications, markRead } = useNotifications();
+  const { payments } = usePayments();
+  const { bills } = useBills();
+  const { garbageBills } = useGarbage();
 
   useEffect(() => {
     markPathRead("/admin/registrations");
@@ -160,6 +177,7 @@ export default function RegistrationRequests() {
 
   // Canonical Property duplicate & occupancy detection
   function getDuplicateWarnings(req) {
+    if (!req) return [];
     const warnings = [];
     const reqUid = req.uid || req.id;
     const reqPlot = normalizePlotNumber(req.plotNumber || req.flat || "");
@@ -168,8 +186,8 @@ export default function RegistrationRequests() {
     const reqPersonType = (req.personType || "OWNER").toUpperCase();
     const reqBlock = (req.block || "").trim().toLowerCase();
 
+    // 1. Property duplicate / occupancy check
     if (reqPlot) {
-      // Find residents in same block, plot, and floor
       const samePropertyResidents = residents.filter(
         (r) =>
           r.id !== reqUid &&
@@ -186,42 +204,100 @@ export default function RegistrationRequests() {
         );
 
         if (reqPersonType === "OWNER" && existingOwner) {
-          warnings.push(
-            `Property Block ${req.block}, Plot ${reqPlot}, ${reqFloorObj.label}${reqUnit ? `, Unit ${reqUnit}` : ""} already has a registered Owner (${existingOwner.owner || existingOwner.name}). Multiple owners require review.`
-          );
+          const wObj = {
+            id: `prop-owner-${existingOwner.id || existingOwner.uid}`,
+            type: "property_owner",
+            severity: "critical",
+            title: "Property Owner Already Registered",
+            matchedField: "Property & Role",
+            matchedValue: `Block ${req.block || "—"}, Plot ${reqPlot}, ${reqFloorObj.label}${reqUnit ? `, Unit ${reqUnit}` : ""}`,
+            message: `Property Block ${req.block || "—"}, Plot ${reqPlot}, ${reqFloorObj.label}${reqUnit ? `, Unit ${reqUnit}` : ""} already has a registered Owner (${existingOwner.owner || existingOwner.name}). Multiple owners require review.`,
+            advice: `An owner (${existingOwner.owner || existingOwner.name}) is already registered for this property unit. If this applicant is a tenant, switch their role to Tenant before approving. If co-owner, verify title documents.`,
+            matchedResident: existingOwner,
+            toString() { return this.message; },
+          };
+          warnings.push(wObj);
         } else if ((reqPersonType === "TENANT" || reqPersonType === "RENTED") && existingOwner) {
-          warnings.push(
-            `ℹ️ Note: Existing Owner on this property is ${existingOwner.owner || existingOwner.name}. Approving will register this applicant as Rented.`
-          );
+          const wObj = {
+            id: `prop-tenant-${existingOwner.id || existingOwner.uid}`,
+            type: "property_tenant",
+            severity: "info",
+            title: "Existing Property Owner Note",
+            matchedField: "Property Owner",
+            matchedValue: existingOwner.owner || existingOwner.name,
+            message: `ℹ️ Note: Existing Owner on this property is ${existingOwner.owner || existingOwner.name}. Approving will register this applicant as Rented.`,
+            advice: `The property owner on record is ${existingOwner.owner || existingOwner.name}. Approving this request will enroll the applicant as a tenant under this property.`,
+            matchedResident: existingOwner,
+            toString() { return this.message; },
+          };
+          warnings.push(wObj);
         } else {
-          warnings.push(
-            `Property Block ${req.block}, Plot ${reqPlot}, ${reqFloorObj.label}${reqUnit ? `, Unit ${reqUnit}` : ""} already occupied by ${samePropertyResidents[0].owner || samePropertyResidents[0].name}.`
-          );
+          const matchedOccupant = samePropertyResidents[0];
+          const wObj = {
+            id: `prop-occupied-${matchedOccupant.id || matchedOccupant.uid}`,
+            type: "property_occupied",
+            severity: "warning",
+            title: "Property Already Occupied",
+            matchedField: "Property & Floor",
+            matchedValue: `Block ${req.block || "—"}, Plot ${reqPlot}, ${reqFloorObj.label}${reqUnit ? `, Unit ${reqUnit}` : ""}`,
+            message: `Property Block ${req.block || "—"}, Plot ${reqPlot}, ${reqFloorObj.label}${reqUnit ? `, Unit ${reqUnit}` : ""} already occupied by ${matchedOccupant.owner || matchedOccupant.name}.`,
+            advice: `Another resident (${matchedOccupant.owner || matchedOccupant.name}) is registered for this exact floor/unit. Confirm whether they are co-living or replacing the resident.`,
+            matchedResident: matchedOccupant,
+            toString() { return this.message; },
+          };
+          warnings.push(wObj);
         }
       }
     }
 
-    // Mobile duplicate check
-    const reqMobile = (req.mobile || "").trim();
-    if (reqMobile) {
-      const dupMobile = residents.find(
-        (r) => r.id !== reqUid && (r.mobile || "").trim() === reqMobile
-      );
+    // 2. Mobile duplicate check (normalized 10-digit mobile check)
+    const rawReqMobile = (req.mobile || "").trim();
+    const cleanReqMobile = normalizeMobile(rawReqMobile);
+    if (cleanReqMobile) {
+      const dupMobile = residents.find((r) => {
+        if (r.id === reqUid) return false;
+        const rMob = normalizeMobile(r.mobile || "");
+        return rMob && rMob === cleanReqMobile;
+      });
       if (dupMobile) {
-        warnings.push(`Mobile ${req.mobile} already belongs to ${dupMobile.owner || dupMobile.name || "another resident"}`);
+        const wObj = {
+          id: `mobile-${dupMobile.id || dupMobile.uid}`,
+          type: "mobile",
+          severity: "critical",
+          title: "Duplicate Mobile (Login ID Collision)",
+          matchedField: "Registered Mobile",
+          matchedValue: req.mobile,
+          message: `Mobile ${req.mobile} already belongs to ${dupMobile.owner || dupMobile.name || "another resident"}`,
+          advice: `Mobile number is used as the unique Login ID for resident portal accounts. Approving with this mobile will collide with ${dupMobile.owner || dupMobile.name}'s active account. Verify applicant's dedicated phone number or adjust it before approval.`,
+          matchedResident: dupMobile,
+          toString() { return this.message; },
+        };
+        warnings.push(wObj);
       }
     }
 
-    // Email duplicate check
+    // 3. Email duplicate check
     const reqEmail = (req.email || "").trim().toLowerCase();
-    if (reqEmail) {
-      const dupEmail = residents.find(
-        (r) =>
-          r.id !== reqUid &&
-          (r.email || "").trim().toLowerCase() === reqEmail
-      );
+    if (reqEmail && isRealEmail(reqEmail)) {
+      const dupEmail = residents.find((r) => {
+        if (r.id === reqUid) return false;
+        const rMail = (r.email || "").trim().toLowerCase();
+        return rMail && isRealEmail(rMail) && rMail === reqEmail;
+      });
       if (dupEmail) {
-        warnings.push(`Email ${req.email} already belongs to ${dupEmail.owner || dupEmail.name || "another resident"}`);
+        const wObj = {
+          id: `email-${dupEmail.id || dupEmail.uid}`,
+          type: "email",
+          severity: "warning",
+          title: "Duplicate Email Address",
+          matchedField: "Email Address",
+          matchedValue: req.email,
+          message: `Email ${req.email} already belongs to ${dupEmail.owner || dupEmail.name || "another resident"}`,
+          advice: `This email address is already linked to ${dupEmail.owner || dupEmail.name}. Verify if they belong to the same household or update email address.`,
+          matchedResident: dupEmail,
+          toString() { return this.message; },
+        };
+        warnings.push(wObj);
       }
     }
 
@@ -725,17 +801,261 @@ export default function RegistrationRequests() {
                     </div>
                   </div>
 
-                  {/* Duplicate Warnings */}
-                  {warnings.length > 0 && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-                      <p className="text-xs font-bold text-amber-700 flex items-center gap-1 mb-1">
-                        <FaExclamationTriangle /> Duplicate Property / Identity Warnings
-                      </p>
-                      {warnings.map((w, i) => (
-                        <p key={i} className="text-xs text-amber-600">• {w}</p>
-                      ))}
+                  {/* Duplicate Warnings & Conflict Inspector */}
+                  {warnings.length > 0 && (() => {
+                    const isExpanded = !!expandedConflicts[req.id];
+                    const hasCritical = warnings.some((w) => w.severity === "critical");
+
+                    return (
+                      <div
+                        className={`rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs ${
+                          hasCritical
+                            ? "bg-rose-50/80 border-rose-300 ring-1 ring-rose-200/70"
+                            : "bg-amber-50/90 border-amber-300 ring-1 ring-amber-200/70"
+                        }`}
+                      >
+                        {/* Interactive Clickable Header */}
+                        <div
+                          onClick={() =>
+                            setExpandedConflicts((prev) => ({
+                              ...prev,
+                              [req.id]: !prev[req.id],
+                            }))
+                          }
+                          className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer hover:bg-black/[0.03] transition select-none"
+                          title="Click to view conflict details"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold ${
+                                hasCritical
+                                  ? "bg-rose-200 text-rose-800"
+                                  : "bg-amber-200 text-amber-800"
+                              }`}
+                            >
+                              <FaExclamationTriangle />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className={`text-xs font-bold ${
+                                    hasCritical ? "text-rose-900" : "text-amber-900"
+                                  }`}
+                                >
+                                  Duplicate Property / Identity Warnings
+                                </span>
+                                <span
+                                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                    hasCritical
+                                      ? "bg-rose-200 text-rose-900 border border-rose-300"
+                                      : "bg-amber-200 text-amber-900 border border-amber-300"
+                                  }`}
+                                >
+                                  {warnings.length} {warnings.length === 1 ? "Conflict Detected" : "Conflicts Detected"}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 font-medium">
+                                Click to inspect matched resident & view side-by-side comparison
+                              </p>
+                            </div>
+                          </div>
+
+                          <div
+                            className="flex items-center gap-2 self-end sm:self-auto shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setConflictModalData({ request: req, conflicts: warnings })
+                              }
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs transition flex items-center gap-1.5 ${
+                                hasCritical
+                                  ? "bg-rose-600 hover:bg-rose-700 text-white"
+                                  : "bg-amber-600 hover:bg-amber-700 text-white"
+                              }`}
+                            >
+                              <FaExchangeAlt className="text-[10px]" />
+                              <span>Compare in Modal</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedConflicts((prev) => ({
+                                  ...prev,
+                                  [req.id]: !prev[req.id],
+                                }))
+                              }
+                              className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-slate-600 text-xs border border-slate-200 transition"
+                              title={isExpanded ? "Collapse Details" : "Expand Details"}
+                            >
+                              {isExpanded ? <FaChevronUp /> : <FaChevronDown />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Summary Warning Items */}
+                        <div className="px-3.5 pb-3 space-y-1.5 border-t border-black/5 pt-2">
+                          {warnings.map((w, idx) => (
+                            <div
+                              key={w.id || idx}
+                              className="flex items-start justify-between gap-2 text-xs"
+                            >
+                              <div className="flex items-start gap-1.5 min-w-0">
+                                <span
+                                  className={`mt-0.5 shrink-0 ${
+                                    w.severity === "critical"
+                                      ? "text-rose-600"
+                                      : "text-amber-600"
+                                  }`}
+                                >
+                                  {w.type === "mobile" ? (
+                                    <FaPhone className="text-[11px]" />
+                                  ) : w.type === "email" ? (
+                                    <FaEnvelope className="text-[11px]" />
+                                  ) : (
+                                    <FaBuilding className="text-[11px]" />
+                                  )}
+                                </span>
+                                <span
+                                  className={`font-semibold ${
+                                    w.severity === "critical"
+                                      ? "text-rose-800"
+                                      : "text-amber-800"
+                                  }`}
+                                >
+                                  • {w.message}
+                                </span>
+                              </div>
+                              {w.matchedResident && (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingResident(w.matchedResident)}
+                                  className="text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline shrink-0 flex items-center gap-1 bg-white/80 px-2 py-0.5 rounded-md border border-blue-200 transition"
+                                  title={`Inspect ${w.matchedResident.owner || w.matchedResident.name}'s profile`}
+                                >
+                                  <span>Inspect Profile</span>
+                                  <FaExternalLinkAlt className="text-[9px]" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Inline Expanded Conflict Inspector */}
+                        {isExpanded && (
+                          <div className="p-3.5 bg-white border-t border-slate-200 space-y-3 animate-fadeIn">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                              {/* Applicant Summary */}
+                              <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-3 space-y-2">
+                                <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                                  <span className="font-extrabold text-amber-900 flex items-center gap-1.5">
+                                    <FaUser className="text-amber-700" /> Incoming Applicant: {req.name}
+                                  </span>
+                                  <span className="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-bold">
+                                    Pending
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                                  <div>
+                                    <span className="text-slate-400">Mobile:</span>{" "}
+                                    <strong className="text-slate-800 font-mono block">
+                                      {req.mobile || "—"}
+                                    </strong>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400">Email:</span>{" "}
+                                    <strong className="text-slate-800 truncate block">
+                                      {req.email || "—"}
+                                    </strong>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400">Property:</span>{" "}
+                                    <strong className="text-slate-800 block">
+                                      Plot {req.plotNumber || req.flat || "—"}, {req.floor || "—"}
+                                    </strong>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400">Role:</span>{" "}
+                                    <strong className="text-slate-800 block">
+                                      {req.personType || "OWNER"}
+                                    </strong>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Matched Resident(s) Summary */}
+                              {warnings[0]?.matchedResident && (
+                                <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-3 space-y-2">
+                                  <div className="flex items-center justify-between border-b border-blue-200 pb-2">
+                                    <span className="font-extrabold text-blue-900 flex items-center gap-1.5">
+                                      <FaCheckCircle className="text-blue-700" /> Existing Resident: {warnings[0].matchedResident.owner || warnings[0].matchedResident.name}
+                                    </span>
+                                    <span className="text-[10px] bg-blue-200 text-blue-900 px-2 py-0.5 rounded-full font-bold">
+                                      Active Resident
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                                  <div>
+                                    <span className="text-slate-400">Mobile:</span>{" "}
+                                    <strong className="text-slate-800 font-mono block">
+                                      {warnings[0].matchedResident.mobile || "—"}
+                                    </strong>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400">Email:</span>{" "}
+                                    <strong className="text-slate-800 truncate block">
+                                      {warnings[0].matchedResident.email || "—"}
+                                    </strong>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400">Flat:</span>{" "}
+                                    <strong className="text-slate-800 block">
+                                      {warnings[0].matchedResident.flat || "—"}
+                                    </strong>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400">Role:</span>{" "}
+                                    <strong className="text-slate-800 block">
+                                      {warnings[0].matchedResident.personType || "OWNER"}
+                                    </strong>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Inline Action Bar */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                            <span className="text-[11px] text-slate-500 italic">
+                              💡 {warnings[0]?.advice || "Review records carefully before approving or rejecting."}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              {warnings[0]?.matchedResident && (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingResident(warnings[0].matchedResident)}
+                                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs"
+                                >
+                                  <FaExternalLinkAlt className="text-[10px]" />
+                                  <span>Inspect Full Profile of {warnings[0].matchedResident.owner || warnings[0].matchedResident.name}</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setConflictModalData({ request: req, conflicts: warnings })}
+                                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition flex items-center gap-1"
+                              >
+                                <FaExchangeAlt className="text-[10px]" />
+                                <span>Side-by-Side Comparison</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  );
+                })()}
 
                   {/* Rejection Reason */}
                   {req.rejectionReason && (
@@ -796,6 +1116,28 @@ export default function RegistrationRequests() {
               </button>
             </div>
             <div className="p-6 space-y-4">
+              {/* Conflict Warnings Notice in Approve Modal */}
+              {(() => {
+                const modalWarnings = getDuplicateWarnings(approveModal);
+                if (modalWarnings.length === 0) return null;
+                return (
+                  <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 space-y-1.5">
+                    <div className="flex items-center gap-2 text-amber-900 font-extrabold text-xs">
+                      <FaExclamationTriangle className="text-amber-600 shrink-0" />
+                      <span>Warning: This applicant has {modalWarnings.length} identity/property collision(s)</span>
+                    </div>
+                    {modalWarnings.map((w, idx) => (
+                      <p key={idx} className="text-xs text-amber-800 font-medium pl-5">
+                        • {w.message}
+                      </p>
+                    ))}
+                    <p className="text-[11px] text-amber-700 font-semibold pl-5 pt-0.5">
+                      Ensure you verify or update Plot, Floor, Unit, or Role below before confirming approval.
+                    </p>
+                  </div>
+                );
+              })()}
+
               {/* Applicant Profile Summary */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between gap-2">
@@ -1050,6 +1392,63 @@ export default function RegistrationRequests() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Duplicate Conflict Comparison Modal */}
+      {conflictModalData && (
+        <DuplicateConflictModal
+          isOpen={!!conflictModalData}
+          onClose={() => setConflictModalData(null)}
+          request={conflictModalData.request}
+          conflicts={conflictModalData.conflicts}
+          onViewResidentProfile={(resident) => {
+            setViewingResident(resident);
+          }}
+          onApprove={(req) => {
+            setConflictModalData(null);
+            setApproveModal(req);
+            setCharge(settings?.monthlyCharge ? String(settings.monthlyCharge) : "200");
+            const matched = blocks.find((b) => b.id === req.blockId || b.name === req.block);
+            setApproveBlockId(matched?.id || req.blockId || "");
+            setApproveBlock(matched?.name || req.block || "");
+            const parsed = parseFlatId(req.flat, req.plotNumber, req.floor);
+            const plotDisplay = parsed.plotNumber || normalizePlotNumber(req.plotNumber) || (req.flat || "—");
+            const unitDisplay = cleanUnitNumber(
+              req.unitNumber !== undefined && req.unitNumber !== null && req.unitNumber !== ""
+                ? req.unitNumber
+                : parsed.unitNumber,
+              plotDisplay
+            );
+            const fullFlatCode = generateFlatId({
+              plotNumber: plotDisplay !== "—" ? plotDisplay : "",
+              floor: req.floor,
+              unitNumber: unitDisplay,
+              flat: req.flat,
+            });
+            setApprovePlot(plotDisplay !== "—" ? plotDisplay : normalizePlotNumber(req.plotNumber || ""));
+            setApproveFloor(req.floor || "Ground Floor");
+            setApproveUnit(unitDisplay || "");
+            setApprovePersonType(req.personType || "OWNER");
+            setApproveGarbageParticipation(req.garbageParticipation || "participating");
+            setApproveFlat(fullFlatCode);
+          }}
+          onReject={(req, suggestedReason) => {
+            setConflictModalData(null);
+            setRejectModal(req);
+            setRejectReason(suggestedReason || "Identity or property conflict detected during verification.");
+          }}
+        />
+      )}
+
+      {/* Full Conflicting Resident Profile Modal */}
+      {viewingResident && (
+        <ResidentDetailsModal
+          resident={viewingResident}
+          onClose={() => setViewingResident(null)}
+          payments={payments}
+          bills={bills}
+          garbageBills={garbageBills}
+        />
       )}
     </div>
   );

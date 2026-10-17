@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import { useAuth } from "./AuthContext";
+import { usePayments } from "./PaymentContext";
 
 import {
   subscribeNotifications,
@@ -33,6 +34,7 @@ const NotificationContext = createContext();
 
 export function NotificationProvider({ children }) {
   const { user } = useAuth();
+  const { payments = [], loading: paymentsLoading } = usePayments();
   const [rawNotifications, setRawNotifications] = useState([]);
   const [phonePermission, setPhonePermission] = useState(() => getNotificationPermission());
   const isFirstLoadRef = useRef(true);
@@ -298,6 +300,60 @@ export function NotificationProvider({ children }) {
       });
     }
 
+    // For residents/family: suppress and permanently purge reversed/obsolete payment confirmation notifications
+    if ((user?.role === "resident" || user?.role === "family") && !paymentsLoading) {
+      list = list.filter((notif) => {
+        const titleLower = (notif.title || "").toLowerCase();
+        const isPayNotif =
+          notif.type === "payment" ||
+          titleLower.includes("payment confirmed") ||
+          titleLower.includes("fee payment confirmed") ||
+          titleLower.includes("garbage fee payment") ||
+          titleLower.includes("fee paid");
+
+        if (!isPayNotif) return true;
+
+        const combinedText = `${notif.title || ""} ${notif.message || ""}`;
+        const receiptMatch = combinedText.match(/REC-[A-Za-z0-9]+/i);
+        const extractedReceipt = receiptMatch ? receiptMatch[0].toUpperCase() : null;
+
+        let extractedMonth = null;
+        for (const m of MONTH_NAMES) {
+          if (new RegExp(`\\b${m}\\b`, "i").test(combinedText)) {
+            extractedMonth = m;
+            break;
+          }
+        }
+        const yearMatch = combinedText.match(/\b(20\d\d)\b/);
+        const extractedYear = yearMatch ? Number(yearMatch[1]) : null;
+
+        let hasActivePayment = false;
+        if (extractedReceipt) {
+          hasActivePayment = payments.some(
+            (p) => (p.receiptNumber || "").toUpperCase() === extractedReceipt
+          );
+        } else if (extractedMonth) {
+          hasActivePayment = payments.some(
+            (p) =>
+              (p.month || "").toLowerCase() === extractedMonth.toLowerCase() &&
+              (!extractedYear || Number(p.year) === extractedYear)
+          );
+        } else {
+          hasActivePayment = true;
+        }
+
+        if (!hasActivePayment) {
+          // Payment was reversed: delete obsolete notification from Firestore
+          if (notif.id) {
+            deleteNotification(notif.id).catch(() => {});
+          }
+          return false;
+        }
+
+        return true;
+      });
+    }
+
     const seen = new Set();
     const deduplicated = [];
     for (const notif of list) {
@@ -312,7 +368,7 @@ export function NotificationProvider({ children }) {
       }
     }
     return deduplicated;
-  }, [rawNotifications, localReadIds, user?.role]);
+  }, [rawNotifications, localReadIds, user?.role, payments, paymentsLoading]);
 
   const unreadCount = useMemo(() => {
     return notifications.filter((n) => !n.read).length;

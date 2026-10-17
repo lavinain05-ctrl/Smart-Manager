@@ -5,8 +5,8 @@ import { useBills } from "../../context/BillContext";
 import { useBilling } from "../../context/BillingContext";
 import { usePayments } from "../../context/PaymentContext";
 import { useResidents } from "../../context/ResidentContext";
-import { useSettings } from "../../context/SettingsContext";
 import { getDisplayStatus } from "../../utils/billStatus";
+import { deleteBill } from "../../services/billService";
 import { FaFileInvoiceDollar, FaInfoCircle } from "react-icons/fa";
 import GarbageModuleTabs from "../../components/resident/GarbageModuleTabs";
 import {
@@ -185,6 +185,9 @@ export default function ResidentBills() {
         // Do not show pending in that month; only show pending after the last date (30th) of that month.
         const isPaid = b.status === "Paid" || b.status === "paid" || b.status === "Exempted" || b.displayStatus === "Paid" || b.isAdvance;
         if (!isPaid && !hasMonthCollectionStarted(b.month, b.year)) {
+          if (b.id && !b.id.startsWith("synth-") && !b.paymentId) {
+            deleteBill(b.id).catch(() => {});
+          }
           return false;
         }
         return true;

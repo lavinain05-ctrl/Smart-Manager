@@ -39,8 +39,15 @@ import { useAuth } from "../../context/AuthContext";
 import { useResidents } from "../../context/ResidentContext";
 import { useGarbage } from "../../context/GarbageContext";
 import { usePayments } from "../../context/PaymentContext";
-import { useBills } from "../../context/BillContext";
-import { isPriorToCollectionStart, isPriorToResidentBillingStart, formatDueDate, getResidentPendingBillingCycles, getActiveCollectionPeriod } from "../../utils/billingCycle";
+import {
+  isPriorToCollectionStart,
+  isPriorToResidentBillingStart,
+  formatDueDate,
+  getResidentPendingBillingCycles,
+  getActiveCollectionPeriod,
+  hasMonthCollectionStarted,
+} from "../../utils/billingCycle";
+import { deleteBill } from "../../services/billService";
 import { useBilling } from "../../context/BillingContext";
 import { useNotices } from "../../context/NoticeContext";
 import { useComplaints } from "../../context/ComplaintContext";
@@ -189,15 +196,41 @@ export default function ResidentDashboard() {
 
   const myBills = useMemo(() => {
     if (!isParticipating) return [];
-    return bills.filter(
-      (b) =>
-        (b.residentId === canonicalResidentId ||
-          b.residentId === resident?.id ||
-          b.residentId === user?.residentId ||
-          b.residentId === user?.uid) &&
-        !isPriorToResidentBillingStart(resident, b.month, b.year)
-    );
-  }, [bills, user, isParticipating, canonicalResidentId, resident]);
+    return bills
+      .filter(
+        (b) =>
+          (b.residentId === canonicalResidentId ||
+            b.residentId === resident?.id ||
+            b.residentId === user?.residentId ||
+            b.residentId === user?.uid) &&
+          !isPriorToResidentBillingStart(resident, b.month, b.year) &&
+          !isPriorToCollectionStart(b.month, b.year)
+      )
+      .filter((b) => {
+        const matchPayment = myPayments.find(
+          (p) =>
+            (p.billId && p.billId === b.id) ||
+            (p.receiptNumber && p.receiptNumber === b.paymentId) ||
+            (p.month === b.month && Number(p.year) === Number(b.year))
+        );
+        const isPaid =
+          b.status === "Paid" ||
+          b.status === "paid" ||
+          b.status === "Exempted" ||
+          b.displayStatus === "Paid" ||
+          b.isAdvance ||
+          Boolean(matchPayment);
+
+        if (!isPaid && !hasMonthCollectionStarted(b.month, b.year)) {
+          // If a pending bill document exists for a month that hasn't started collection, clean it up
+          if (b.id && !b.paymentId) {
+            deleteBill(b.id).catch(() => {});
+          }
+          return false;
+        }
+        return true;
+      });
+  }, [bills, user, isParticipating, canonicalResidentId, resident, myPayments]);
 
   const currentBill = useMemo(() => {
     if (!isParticipating) return null;

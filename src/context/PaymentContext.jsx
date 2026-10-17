@@ -19,7 +19,7 @@ import {
   addPaymentAudit,
 } from "../services/paymentService";
 
-import { updateBill } from "../services/billService";
+import { updateBill, deleteBill } from "../services/billService";
 import { doc, getDoc, getDocs, query, where, collection, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase/firebase";
 import { isGcParticipating } from "../services/statisticsService";
@@ -27,7 +27,7 @@ import { isGcParticipating } from "../services/statisticsService";
 import { useBilling } from "./BillingContext";
 import { useAuth } from "./AuthContext";
 import { logActivity } from "../services/activityLogService";
-import { formatDueDate } from "../utils/billingCycle";
+import { formatDueDate, hasMonthCollectionStarted } from "../utils/billingCycle";
 
 const PaymentContext = createContext();
 
@@ -514,20 +514,31 @@ export function PaymentProvider({ children }) {
       );
 
       if (matchingBill) {
-        await updateBill(matchingBill.id, {
-          status: "Pending",
-          paymentDate: "",
-          paymentMethod: null,
-          paymentId: "",
-          paymentTime: null,
-          collectorId: null,
-          collectorName: null,
-          receiptNumber: null,
-          transactionId: null,
-        });
+        if (!hasMonthCollectionStarted(payment.month, payment.year)) {
+          // If the month collection has not started yet (e.g. October mistakenly collected in mid-October),
+          // this bill was created prematurely only because of the accidental collection.
+          // Delete it so it doesn't linger as a phantom pending bill.
+          try {
+            await deleteBill(matchingBill.id);
+          } catch (delBillErr) {
+            console.warn("Could not delete premature bill:", delBillErr);
+          }
+        } else {
+          await updateBill(matchingBill.id, {
+            status: "Pending",
+            paymentDate: "",
+            paymentMethod: null,
+            paymentId: "",
+            paymentTime: null,
+            collectorId: null,
+            collectorName: null,
+            receiptNumber: null,
+            transactionId: null,
+          });
+        }
       }
 
-      // Also reset matching garbageBills if exists
+      // Also reset/clean matching garbageBills if exists
       try {
         const gBillQuery = query(
           collection(db, "garbageBills"),
@@ -537,21 +548,72 @@ export function PaymentProvider({ children }) {
         );
         const gSnap = await getDocs(gBillQuery);
         if (!gSnap.empty) {
-          await Promise.all(
-            gSnap.docs.map((gDoc) =>
-              updateDoc(doc(db, "garbageBills", gDoc.id), {
-                status: "Pending",
-                paidAmount: 0,
-                paymentDate: "",
-                paymentMethod: "",
-                collectedById: "",
-                updatedAt: serverTimestamp(),
-              })
-            )
-          );
+          if (!hasMonthCollectionStarted(payment.month, payment.year)) {
+            await Promise.all(
+              gSnap.docs.map((gDoc) => deleteDoc(doc(db, "garbageBills", gDoc.id)))
+            );
+          } else {
+            await Promise.all(
+              gSnap.docs.map((gDoc) =>
+                updateDoc(doc(db, "garbageBills", gDoc.id), {
+                  status: "Pending",
+                  paidAmount: 0,
+                  paymentDate: "",
+                  paymentMethod: "",
+                  collectedById: "",
+                  updatedAt: serverTimestamp(),
+                })
+              )
+            );
+          }
         }
       } catch (gErr) {
         console.warn("Could not sync garbageBills reversal:", gErr.message);
+      }
+
+      // 4. Remove payment confirmation notifications for this reversed payment from Firestore
+      try {
+        const notifCol = collection(db, "notifications");
+        const targetIds = new Set([payment.residentId, payment.userId].filter(Boolean));
+        if (payment.residentId) {
+          try {
+            const resSnap = await getDoc(doc(db, "residents", payment.residentId));
+            if (resSnap.exists()) {
+              const resData = resSnap.data();
+              if (resData.userId) targetIds.add(resData.userId);
+              if (resData.uid) targetIds.add(resData.uid);
+            }
+          } catch {}
+        }
+        for (const uid of Array.from(targetIds)) {
+          const nQ = query(notifCol, where("userId", "==", uid));
+          const nSnap = await getDocs(nQ);
+          for (const nDoc of nSnap.docs) {
+            const data = nDoc.data();
+            const title = (data.title || "").toLowerCase();
+            const msg = (data.message || "").toLowerCase();
+            const rNum = (payment.receiptNumber || "").toLowerCase();
+            const periodStr = `${payment.month} ${payment.year}`.toLowerCase();
+
+            const isPayNotif =
+              data.type === "payment" ||
+              title.includes("payment") ||
+              title.includes("fee paid");
+            const matchesReceipt =
+              rNum && (msg.includes(rNum) || title.includes(rNum));
+            const matchesPeriod =
+              periodStr && (title.includes(periodStr) || msg.includes(periodStr));
+
+            if (isPayNotif && (matchesReceipt || matchesPeriod)) {
+              console.log(
+                `[reversePayment] Deleting reversed payment notification: ${nDoc.id}`
+              );
+              await deleteDoc(doc(db, "notifications", nDoc.id));
+            }
+          }
+        }
+      } catch (notifErr) {
+        console.warn("Could not clean up notifications on payment reversal:", notifErr);
       }
 
       toast.success("Payment reversed successfully.");
